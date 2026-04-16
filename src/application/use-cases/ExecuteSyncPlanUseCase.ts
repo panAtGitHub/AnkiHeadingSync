@@ -18,14 +18,20 @@ export class ExecuteSyncPlanUseCase {
     const modelDetailsCache = new Map<string, Awaited<ReturnType<AnkiGateway["getModelDetails"]>>>();
     const timestamp = this.now();
 
-    for (const deckName of scanAndPlanResult.plan.toCreateDecks) {
-      await this.ankiGateway.ensureDeckExists(deckName);
+    for (const card of scanAndPlanResult.cards) {
+      const modelDetails = await this.getModelDetails(modelDetailsCache, card.noteModel);
+      this.noteFieldMappingService.map(card, modelDetails, scanAndPlanResult.noteFieldMappings);
     }
 
     const syncCards = [
       ...scanAndPlanResult.plan.toAdd,
       ...scanAndPlanResult.plan.toUpdate.map((entry) => entry.card),
     ];
+
+    for (const deckName of scanAndPlanResult.plan.toCreateDecks) {
+      await this.ankiGateway.ensureDeckExists(deckName);
+    }
+
     const uploadedMedia = await this.uploadMedia(syncCards);
 
     for (const card of scanAndPlanResult.plan.toAdd) {
@@ -33,7 +39,7 @@ export class ExecuteSyncPlanUseCase {
       const noteId = await this.ankiGateway.addNote({
         deckName: card.deck,
         modelName: card.noteModel,
-        fields: this.noteFieldMappingService.map(card, modelDetails),
+        fields: this.noteFieldMappingService.map(card, modelDetails, scanAndPlanResult.noteFieldMappings),
         tags: card.tags,
       });
 
@@ -52,7 +58,7 @@ export class ExecuteSyncPlanUseCase {
       await this.ankiGateway.updateNote({
         noteId: entry.noteId,
         deckName: entry.card.deck,
-        fields: this.noteFieldMappingService.map(entry.card, modelDetails),
+        fields: this.noteFieldMappingService.map(entry.card, modelDetails, scanAndPlanResult.noteFieldMappings),
       });
 
       syncRegistry.recordSync({

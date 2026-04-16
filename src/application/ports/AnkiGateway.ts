@@ -16,6 +16,7 @@ export interface UpdateAnkiNoteInput {
 
 export interface AnkiGateway {
   ensureDeckExists(deckName: string): Promise<void>;
+  listNoteModels(): Promise<string[]>;
   getModelDetails(modelName: string): Promise<NoteModelDetails>;
   addNote(input: AddAnkiNoteInput): Promise<number>;
   updateNote(input: UpdateAnkiNoteInput): Promise<void>;

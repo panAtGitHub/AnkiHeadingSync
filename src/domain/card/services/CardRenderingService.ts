@@ -56,24 +56,12 @@ export class CardRenderingService {
       ? `<p><a class="anki-heading-sync-backlink" href="${escapeHtml(context.resourceResolver.createBacklink(draft.source))}">Open in Obsidian</a></p>`
       : "";
 
-    const renderedFields: RenderedFields =
-      draft.type === "basic"
-        ? {
-            kind: "basic",
-            values: {
-              front: headingResult.html,
-              back: bodyResult.html + backlinkHtml,
-            },
-          }
-        : {
-            kind: "cloze",
-            values: {
-              text: bodyResult.html,
-              extra: headingResult.html + backlinkHtml,
-            },
-          };
+    const renderedFields: RenderedFields = {
+      title: headingResult.html,
+      body: bodyResult.html + backlinkHtml,
+    };
 
-    const fields = { ...renderedFields.values };
+    const fields = { ...renderedFields };
     const contentHash = createContentHash(
       hashString(
         JSON.stringify({

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { createNoteFieldMappingKey } from "@/application/config/NoteModelFieldMapping";
 import type { AnkiGateway } from "@/application/ports/AnkiGateway";
 import type { SyncRegistryRepository } from "@/application/ports/SyncRegistryRepository";
 import type { Card } from "@/domain/card/entities/Card";
@@ -31,15 +32,21 @@ class FakeAnkiGateway implements AnkiGateway {
   public addedNotes: Array<{ deckName: string; modelName: string; fields: Record<string, string> }> = [];
   public updatedNotes: Array<{ noteId: number; deckName: string; fields: Record<string, string> }> = [];
   public storedMedia: string[] = [];
+  public modelDetailsByName: Record<string, { fieldNames: string[]; isCloze: boolean }> = {
+    Basic: { fieldNames: ["Front", "Back"], isCloze: false },
+    Cloze: { fieldNames: ["Text", "Extra"], isCloze: true },
+  };
 
   async ensureDeckExists(deckName: string): Promise<void> {
     this.ensuredDecks.push(deckName);
   }
 
+  async listNoteModels(): Promise<string[]> {
+    return Object.keys(this.modelDetailsByName);
+  }
+
   async getModelDetails(modelName: string) {
-    return modelName === "Cloze"
-      ? { fieldNames: ["Text", "Extra"], isCloze: true }
-      : { fieldNames: ["Front", "Back"], isCloze: false };
+    return this.modelDetailsByName[modelName] ?? { fieldNames: ["Front", "Back"], isCloze: false };
   }
 
   async addNote(input: { deckName: string; modelName: string; fields: Record<string, string> }): Promise<number> {
@@ -75,19 +82,36 @@ function createCard(overrides: Partial<Card> = {}): Card {
     noteModel: createNoteModelName("Basic"),
     tags: [],
     renderedFields: {
-      kind: "basic",
-      values: {
-        front: "Prompt",
-        back: "Answer",
-      },
+      title: "Prompt",
+      body: "Answer",
     },
     fields: {
-      front: "Prompt",
-      back: "Answer",
+      title: "Prompt",
+      body: "Answer",
     },
     contentHash: createContentHash("hash-1"),
     media: [],
     ...overrides,
+  };
+}
+
+function createMappings() {
+  return {
+    [createNoteFieldMappingKey("basic", "Basic")]: {
+      cardType: "basic" as const,
+      modelName: "Basic",
+      loadedFieldNames: ["Front", "Back"],
+      titleField: "Front",
+      bodyField: "Back",
+      loadedAt: 1,
+    },
+    [createNoteFieldMappingKey("cloze", "Cloze")]: {
+      cardType: "cloze" as const,
+      modelName: "Cloze",
+      loadedFieldNames: ["Text", "Extra"],
+      mainField: "Text",
+      loadedAt: 1,
+    },
   };
 }
 
@@ -110,6 +134,7 @@ describe("ExecuteSyncPlanUseCase", () => {
     const useCase = new ExecuteSyncPlanUseCase(ankiGateway, repository, undefined, () => 1234);
     const result: ScanAndPlanResult = {
       cards: [createCard()],
+      noteFieldMappings: createMappings(),
       registry: new SyncRegistry([
         {
           cardKey: createCardKey("orphan-card"),
@@ -147,5 +172,54 @@ describe("ExecuteSyncPlanUseCase", () => {
     expect(ankiGateway.updatedNotes).toHaveLength(0);
     expect(repository.savedRegistry?.get(createCardKey("orphan-card"))?.orphan).toBe(true);
     expect(repository.savedRegistry?.get(createCardKey("orphan-card"))?.noteId).toBe(42);
+  });
+
+  it("blocks sync when a selected note type has no saved mapping", async () => {
+    const ankiGateway = new FakeAnkiGateway();
+    const repository = new InMemorySyncRegistryRepository();
+    const useCase = new ExecuteSyncPlanUseCase(ankiGateway, repository, undefined, () => 1234);
+
+    await expect(
+      useCase.execute({
+        cards: [createCard()],
+        noteFieldMappings: {},
+        registry: new SyncRegistry(),
+        plan: {
+          toCreateDecks: [createDeckName("Deck")],
+          toAdd: [createCard()],
+          toUpdate: [],
+          toMarkOrphan: [],
+        },
+        scopedFilePaths: ["notes/current.md"],
+      }),
+    ).rejects.toThrow("Open plugin settings and read fields from Anki first");
+
+    expect(ankiGateway.ensuredDecks).toHaveLength(0);
+    expect(ankiGateway.addedNotes).toHaveLength(0);
+  });
+
+  it("blocks sync when a saved mapping becomes stale", async () => {
+    const ankiGateway = new FakeAnkiGateway();
+    ankiGateway.modelDetailsByName.Basic = { fieldNames: ["Front", "Body"], isCloze: false };
+    const repository = new InMemorySyncRegistryRepository();
+    const useCase = new ExecuteSyncPlanUseCase(ankiGateway, repository, undefined, () => 1234);
+
+    await expect(
+      useCase.execute({
+        cards: [createCard()],
+        noteFieldMappings: createMappings(),
+        registry: new SyncRegistry(),
+        plan: {
+          toCreateDecks: [createDeckName("Deck")],
+          toAdd: [createCard()],
+          toUpdate: [],
+          toMarkOrphan: [],
+        },
+        scopedFilePaths: ["notes/current.md"],
+      }),
+    ).rejects.toThrow("is stale because these fields no longer exist in Anki");
+
+    expect(ankiGateway.ensuredDecks).toHaveLength(0);
+    expect(ankiGateway.addedNotes).toHaveLength(0);
   });
 });

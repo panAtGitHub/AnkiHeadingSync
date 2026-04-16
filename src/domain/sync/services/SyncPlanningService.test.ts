@@ -28,15 +28,12 @@ function createCard(overrides: Partial<Card> = {}): Card {
     noteModel: createNoteModelName("Basic"),
     tags: [],
     renderedFields: {
-      kind: "basic",
-      values: {
-        front: "Prompt",
-        back: "Answer",
-      },
+      title: "Prompt",
+      body: "Answer",
     },
     fields: {
-      front: "Prompt",
-      back: "Answer",
+      title: "Prompt",
+      body: "Answer",
     },
     contentHash: createContentHash("hash-a"),
     media: [],

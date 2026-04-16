@@ -1,22 +1,9 @@
 export type CardType = "basic" | "cloze";
 
-export interface BasicRenderedFields {
-  kind: "basic";
-  values: {
-    front: string;
-    back: string;
-  };
+export interface RenderedFields {
+  title: string;
+  body: string;
 }
-
-export interface ClozeRenderedFields {
-  kind: "cloze";
-  values: {
-    text: string;
-    extra: string;
-  };
-}
-
-export type RenderedFields = BasicRenderedFields | ClozeRenderedFields;
 
 export interface MediaAsset {
   kind: "image" | "audio";

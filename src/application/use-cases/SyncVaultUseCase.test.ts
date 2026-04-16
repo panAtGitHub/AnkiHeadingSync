@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { createNoteFieldMappingKey } from "@/application/config/NoteModelFieldMapping";
 import { DEFAULT_SETTINGS, type PluginSettings } from "@/application/config/PluginSettings";
 import type { AnkiGateway } from "@/application/ports/AnkiGateway";
 import type { PluginDataStore } from "@/application/ports/PluginDataStore";
@@ -74,6 +75,10 @@ class FakeAnkiGateway implements AnkiGateway {
     this.ensureDeckCalls.push(deckName);
   }
 
+  async listNoteModels(): Promise<string[]> {
+    return ["Basic", "Cloze"];
+  }
+
   async getModelDetails(modelName: string) {
     return modelName === "Cloze"
       ? { fieldNames: ["Text", "Extra"], isCloze: true }
@@ -96,6 +101,23 @@ function createSettings(overrides: Partial<PluginSettings> = {}): PluginSettings
   return {
     ...DEFAULT_SETTINGS,
     addObsidianBacklink: false,
+    noteFieldMappings: {
+      [createNoteFieldMappingKey("basic", "Basic")]: {
+        cardType: "basic",
+        modelName: "Basic",
+        loadedFieldNames: ["Front", "Back"],
+        titleField: "Front",
+        bodyField: "Back",
+        loadedAt: 1,
+      },
+      [createNoteFieldMappingKey("cloze", "Cloze")]: {
+        cardType: "cloze",
+        modelName: "Cloze",
+        loadedFieldNames: ["Text", "Extra"],
+        mainField: "Text",
+        loadedAt: 1,
+      },
+    },
     ...overrides,
   };
 }

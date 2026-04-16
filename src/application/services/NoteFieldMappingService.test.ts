@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { createNoteFieldMappingKey } from "@/application/config/NoteModelFieldMapping";
 import type { Card } from "@/domain/card/entities/Card";
 import { createCardKey } from "@/domain/card/value-objects/CardKey";
 import { createContentHash } from "@/domain/card/value-objects/ContentHash";
@@ -27,15 +28,12 @@ function createCard(overrides: Partial<Card>): Card {
     noteModel: createNoteModelName("Basic"),
     tags: [],
     renderedFields: {
-      kind: "basic",
-      values: {
-        front: "Prompt",
-        back: "Answer",
-      },
+      title: "Prompt",
+      body: "Answer",
     },
     fields: {
-      front: "Prompt",
-      back: "Answer",
+      title: "Prompt",
+      body: "Answer",
     },
     contentHash: createContentHash("hash"),
     media: [],
@@ -44,68 +42,110 @@ function createCard(overrides: Partial<Card>): Card {
 }
 
 describe("NoteFieldMappingService", () => {
-  it("maps basic semantic fields onto a basic model", () => {
+  it("maps a basic card using a saved title/body mapping", () => {
     const service = new NoteFieldMappingService();
-    const fields = service.map(createCard({}), {
-      fieldNames: ["Front", "Back"],
-      isCloze: false,
-    });
+    const card = createCard({});
+    const fields = service.map(
+      card,
+      {
+        fieldNames: ["Title", "Body"],
+        isCloze: false,
+      },
+      {
+        [createNoteFieldMappingKey("basic", "Basic")]: {
+          cardType: "basic",
+          modelName: "Basic",
+          loadedFieldNames: ["Title", "Body"],
+          titleField: "Title",
+          bodyField: "Body",
+          loadedAt: 1,
+        },
+      },
+    );
 
-    expect(fields).toEqual({ Front: "Prompt", Back: "Answer" });
+    expect(fields).toEqual({ Title: "Prompt", Body: "Answer" });
   });
 
-  it("maps cloze semantic fields onto text and extra fields", () => {
+  it("maps a cloze card into the configured main field using title and body fragments", () => {
     const service = new NoteFieldMappingService();
     const fields = service.map(
       createCard({
         type: "cloze",
         noteModel: createNoteModelName("Cloze"),
         renderedFields: {
-          kind: "cloze",
-          values: {
-            text: "{{c1::answer}}",
-            extra: "Context",
-          },
+          title: "Context",
+          body: "{{c1::answer}}",
         },
         fields: {
-          text: "{{c1::answer}}",
-          extra: "Context",
+          title: "Context",
+          body: "{{c1::answer}}",
         },
       }),
       {
         fieldNames: ["Text", "Extra"],
         isCloze: true,
       },
+      {
+        [createNoteFieldMappingKey("cloze", "Cloze")]: {
+          cardType: "cloze",
+          modelName: "Cloze",
+          loadedFieldNames: ["Text", "Extra"],
+          mainField: "Text",
+          loadedAt: 1,
+        },
+      },
     );
 
-    expect(fields).toEqual({ Text: "{{c1::answer}}", Extra: "Context" });
+    expect(fields).toEqual({ Text: "Context<br><br>{{c1::answer}}" });
   });
 
-  it("rejects a non-cloze model for a cloze card", () => {
+  it("throws when a mapping is missing", () => {
+    const service = new NoteFieldMappingService();
+
+    expect(() =>
+      service.map(createCard({}), { fieldNames: ["Front", "Back"], isCloze: false }, {}),
+    ).toThrow("Open plugin settings and read fields from Anki first");
+  });
+
+  it("throws when a saved mapping is stale", () => {
     const service = new NoteFieldMappingService();
 
     expect(() =>
       service.map(
-        createCard({
-          type: "cloze",
-          noteModel: createNoteModelName("WrongModel"),
-          renderedFields: {
-            kind: "cloze",
-            values: {
-              text: "{{c1::answer}}",
-              extra: "Context",
-            },
-          },
-          fields: {
-            text: "{{c1::answer}}",
-            extra: "Context",
-          },
-        }),
+        createCard({}),
+        { fieldNames: ["Front", "Body"], isCloze: false },
         {
-          fieldNames: ["Front", "Back"],
-          isCloze: false,
+          [createNoteFieldMappingKey("basic", "Basic")]: {
+            cardType: "basic",
+            modelName: "Basic",
+            loadedFieldNames: ["Front", "Back"],
+            titleField: "Front",
+            bodyField: "Back",
+            loadedAt: 1,
+          },
         },
       ),
-    ).toThrow("must target a cloze-compatible note model");
+    ).toThrow("is stale because these fields no longer exist in Anki");
+  });
+
+  it("throws when a basic mapping reuses the same field for title and body", () => {
+    const service = new NoteFieldMappingService();
+
+    expect(() =>
+      service.map(
+        createCard({}),
+        { fieldNames: ["Front", "Back"], isCloze: false },
+        {
+          [createNoteFieldMappingKey("basic", "Basic")]: {
+            cardType: "basic",
+            modelName: "Basic",
+            loadedFieldNames: ["Front", "Back"],
+            titleField: "Front",
+            bodyField: "Front",
+            loadedAt: 1,
+          },
+        },
+      ),
+    ).toThrow('must use different title and body fields');
   });
 });

@@ -22,6 +22,10 @@ export class AnkiConnectGateway implements AnkiGateway {
     await this.invoke("createDeck", { deck: deckName });
   }
 
+  async listNoteModels(): Promise<string[]> {
+    return this.invoke<string[]>("modelNames", {});
+  }
+
   async getModelDetails(modelName: string): Promise<NoteModelDetails> {
     const fieldNames = await this.invoke<string[]>("modelFieldNames", { modelName });
     let isCloze = modelName.toLowerCase().includes("cloze");

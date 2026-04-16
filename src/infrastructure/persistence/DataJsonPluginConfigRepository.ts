@@ -24,6 +24,7 @@ export class DataJsonPluginConfigRepository implements PluginConfigRepository {
     const mergedSettings: PluginSettings = {
       ...DEFAULT_SETTINGS,
       ...snapshot.settings,
+      noteFieldMappings: snapshot.settings?.noteFieldMappings ?? DEFAULT_SETTINGS.noteFieldMappings,
       includeFolders: snapshot.settings?.includeFolders ?? DEFAULT_SETTINGS.includeFolders,
       excludeFolders: snapshot.settings?.excludeFolders ?? DEFAULT_SETTINGS.excludeFolders,
     };

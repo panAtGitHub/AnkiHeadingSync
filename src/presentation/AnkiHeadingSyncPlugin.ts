@@ -1,6 +1,7 @@
 import { Plugin } from "obsidian";
 
 import { DEFAULT_SETTINGS, type PluginSettings } from "@/application/config/PluginSettings";
+import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
 import { ScanAndPlanSyncUseCase } from "@/application/use-cases/ScanAndPlanSyncUseCase";
 import { ExecuteSyncPlanUseCase } from "@/application/use-cases/ExecuteSyncPlanUseCase";
 import { SyncCurrentFileUseCase } from "@/application/use-cases/SyncCurrentFileUseCase";
@@ -18,6 +19,7 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
   settings: PluginSettings = DEFAULT_SETTINGS;
 
   private readonly noticeService = new NoticeService();
+  private readonly ankiGateway = new AnkiConnectGateway(() => this.settings.ankiConnectUrl);
 
   private syncCurrentFileUseCase?: SyncCurrentFileUseCase;
   private syncVaultUseCase?: SyncVaultUseCase;
@@ -28,7 +30,6 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
     this.pluginConfigRepository = new DataJsonPluginConfigRepository(pluginDataStore);
     const syncRegistryRepository = new DataJsonSyncRegistryRepository(pluginDataStore);
     const vaultGateway = new ObsidianVaultGateway(this.app);
-    const ankiGateway = new AnkiConnectGateway(() => this.settings.ankiConnectUrl);
 
     try {
       this.settings = await this.pluginConfigRepository.load();
@@ -39,7 +40,7 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
     }
 
     const scanAndPlanSyncUseCase = new ScanAndPlanSyncUseCase(vaultGateway, syncRegistryRepository);
-    const executeSyncPlanUseCase = new ExecuteSyncPlanUseCase(ankiGateway, syncRegistryRepository);
+  const executeSyncPlanUseCase = new ExecuteSyncPlanUseCase(this.ankiGateway, syncRegistryRepository);
     this.syncCurrentFileUseCase = new SyncCurrentFileUseCase(scanAndPlanSyncUseCase, executeSyncPlanUseCase);
     this.syncVaultUseCase = new SyncVaultUseCase(scanAndPlanSyncUseCase, executeSyncPlanUseCase);
 
@@ -63,6 +64,14 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
     } catch (error) {
       this.noticeService.error(error instanceof Error ? error.message : "Failed to save plugin settings.");
     }
+  }
+
+  async listNoteModels(): Promise<string[]> {
+    return this.ankiGateway.listNoteModels();
+  }
+
+  async getNoteModelDetails(modelName: string): Promise<NoteModelDetails> {
+    return this.ankiGateway.getModelDetails(modelName);
   }
 
   async runSyncCurrentFile(): Promise<void> {

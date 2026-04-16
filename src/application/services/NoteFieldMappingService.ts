@@ -1,46 +1,127 @@
 import type { Card } from "@/domain/card/entities/Card";
+import { createNoteFieldMappingKey, type NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
 
 export class NoteFieldMappingService {
-  map(card: Card, noteModelDetails: NoteModelDetails): Record<string, string> {
+  map(
+    card: Card,
+    noteModelDetails: NoteModelDetails,
+    noteFieldMappings: Record<string, NoteModelFieldMapping>,
+  ): Record<string, string> {
+    const mapping = this.getRequiredMapping(card, noteFieldMappings);
+    this.validateMapping(mapping, noteModelDetails);
+
     if (card.type === "basic") {
-      return this.mapBasic(card, noteModelDetails.fieldNames);
+      return this.mapBasic(card, mapping);
     }
 
-    return this.mapCloze(card, noteModelDetails);
+    return this.mapCloze(card, noteModelDetails, mapping);
   }
 
-  private mapBasic(card: Card, fieldNames: string[]): Record<string, string> {
-    const frontFieldName = findFieldName(fieldNames, ["Front"]) ?? fieldNames[0];
-    const backFieldName = findFieldName(fieldNames, ["Back"]) ?? fieldNames[1];
+  suggest(cardType: Card["type"], modelName: string, fieldNames: string[], loadedAt = Date.now()): NoteModelFieldMapping {
+    return cardType === "basic"
+      ? {
+          cardType,
+          modelName,
+          loadedFieldNames: [...fieldNames],
+          titleField: findFieldName(fieldNames, ["Front", "Title"]) ?? fieldNames[0],
+          bodyField:
+            findFieldName(fieldNames, ["Back", "Body", "Answer"]) ??
+            fieldNames.find((fieldName) => fieldName !== (findFieldName(fieldNames, ["Front", "Title"]) ?? fieldNames[0])),
+          loadedAt,
+        }
+      : {
+          cardType,
+          modelName,
+          loadedFieldNames: [...fieldNames],
+          mainField: findFieldName(fieldNames, ["Text", "Body", "Content"]) ?? fieldNames[0],
+          loadedAt,
+        };
+  }
 
-    if (!frontFieldName || !backFieldName) {
-      throw new Error(`Basic note model ${card.noteModel} must expose at least two fields.`);
+  validateMapping(mapping: NoteModelFieldMapping, noteModelDetails: NoteModelDetails): void {
+    const availableFields = new Set(noteModelDetails.fieldNames);
+
+    if (mapping.cardType === "basic") {
+      if (!mapping.titleField || !mapping.bodyField) {
+        throw new Error(
+          `Saved field mapping for basic note type "${mapping.modelName}" is incomplete. Open plugin settings and save both title and body fields.`,
+        );
+      }
+
+      if (mapping.titleField === mapping.bodyField) {
+        throw new Error(`Basic note type "${mapping.modelName}" must use different title and body fields.`);
+      }
+
+      const missingFields = [mapping.titleField, mapping.bodyField].filter((fieldName) => !availableFields.has(fieldName));
+      if (missingFields.length > 0) {
+        throw new Error(this.createStaleMappingError(mapping.modelName, missingFields));
+      }
+
+      return;
     }
 
-    return {
-      [frontFieldName]: card.fields.front,
-      [backFieldName]: card.fields.back,
-    };
-  }
+    if (!mapping.mainField) {
+      throw new Error(
+        `Saved field mapping for cloze note type "${mapping.modelName}" is incomplete. Open plugin settings and save the main field.`,
+      );
+    }
 
-  private mapCloze(card: Card, noteModelDetails: NoteModelDetails): Record<string, string> {
     if (!noteModelDetails.isCloze) {
-      throw new Error(`Cloze card ${card.key} must target a cloze-compatible note model.`);
+      throw new Error(`Cloze note type "${mapping.modelName}" is not cloze-compatible in Anki.`);
     }
 
-    const textFieldName = findFieldName(noteModelDetails.fieldNames, ["Text"]) ?? noteModelDetails.fieldNames[0];
-    const extraFieldName =
-      findFieldName(noteModelDetails.fieldNames, ["Extra", "Context"]) ?? noteModelDetails.fieldNames[1];
+    if (!availableFields.has(mapping.mainField)) {
+      throw new Error(this.createStaleMappingError(mapping.modelName, [mapping.mainField]));
+    }
+  }
 
-    if (!textFieldName || !extraFieldName) {
-      throw new Error(`Cloze note model ${card.noteModel} must expose text and auxiliary fields.`);
+  private mapBasic(card: Card, mapping: NoteModelFieldMapping): Record<string, string> {
+    const titleFieldName = mapping.titleField;
+    const bodyFieldName = mapping.bodyField;
+
+    if (!titleFieldName || !bodyFieldName) {
+      throw new Error(`Saved field mapping for basic note type "${card.noteModel}" is incomplete.`);
     }
 
     return {
-      [textFieldName]: card.fields.text,
-      [extraFieldName]: card.fields.extra,
+      [titleFieldName]: card.renderedFields.title,
+      [bodyFieldName]: card.renderedFields.body,
     };
+  }
+
+  private mapCloze(card: Card, noteModelDetails: NoteModelDetails, mapping: NoteModelFieldMapping): Record<string, string> {
+    if (!noteModelDetails.isCloze) {
+      throw new Error(`Cloze note type "${card.noteModel}" is not cloze-compatible in Anki.`);
+    }
+
+    if (!mapping.mainField) {
+      throw new Error(`Saved field mapping for cloze note type "${card.noteModel}" is incomplete.`);
+    }
+
+    return {
+      [mapping.mainField]: `${card.renderedFields.title}<br><br>${card.renderedFields.body}`,
+    };
+  }
+
+  private getRequiredMapping(
+    card: Card,
+    noteFieldMappings: Record<string, NoteModelFieldMapping>,
+  ): NoteModelFieldMapping {
+    const mapping = noteFieldMappings[createNoteFieldMappingKey(card.type, card.noteModel)];
+
+    if (!mapping) {
+      throw new Error(
+        `No saved field mapping found for ${card.type === "basic" ? "basic" : "cloze"} note type "${card.noteModel}". Open plugin settings and read fields from Anki first.`,
+      );
+    }
+
+    return mapping;
+  }
+
+  private createStaleMappingError(modelName: string, missingFields: string[]): string {
+    const quotedMissingFields = missingFields.map((fieldName) => `"${fieldName}"`).join(", ");
+    return `Saved field mapping for note type "${modelName}" is stale because these fields no longer exist in Anki: ${quotedMissingFields}. Open plugin settings and read fields from Anki again.`;
   }
 }
 

@@ -64,6 +64,7 @@ export class ScanAndPlanSyncUseCase {
 
     return {
       cards,
+      noteFieldMappings: settings.noteFieldMappings,
       registry,
       plan,
       scopedFilePaths,

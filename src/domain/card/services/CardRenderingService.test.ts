@@ -74,13 +74,14 @@ describe("CardRenderingService", () => {
 
     expect(card.deck).toBe("Default");
     expect(card.noteModel).toBe("Basic");
-    expect(card.renderedFields.kind).toBe("basic");
-    expect(card.fields.front).toContain("Prompt");
-    expect(card.fields.back).toContain("Open in Obsidian");
+    expect(card.renderedFields.title).toContain("Prompt");
+    expect(card.renderedFields.body).toContain("Open in Obsidian");
+    expect(card.fields.title).toContain("Prompt");
+    expect(card.fields.body).toContain("Open in Obsidian");
     expect(card.contentHash).toMatch(/^[0-9a-f]{8}$/);
   });
 
-  it("renders a cloze card with heading in the auxiliary field", () => {
+  it("renders a cloze card as title/body fragments before mapping", () => {
     const service = new CardRenderingService();
     const card = service.render(
       createDraft({
@@ -109,10 +110,9 @@ describe("CardRenderingService", () => {
     );
 
     expect(card.noteModel).toBe("Cloze");
-    expect(card.renderedFields.kind).toBe("cloze");
-    expect(card.fields.text).toContain("{{c1::ubiquitous language}}");
-    expect(card.fields.extra).toContain("Context");
-    expect(card.fields.extra).toContain("Open in Obsidian");
+    expect(card.renderedFields.title).toContain("Context");
+    expect(card.renderedFields.body).toContain("{{c1::ubiquitous language}}");
+    expect(card.renderedFields.body).toContain("Open in Obsidian");
   });
 
   it("preserves markdown fidelity for math, code, links, and media where feasible", () => {
@@ -149,13 +149,13 @@ describe("CardRenderingService", () => {
       },
     );
 
-    expect(card.fields.back).toContain("\\(a+b\\)");
-    expect(card.fields.back).toContain("\\[x^2\\]");
-    expect(card.fields.back).toContain("<code>const value = 1</code>");
-    expect(card.fields.back).toContain("language-ts");
-    expect(card.fields.back).toContain("obsidian://open?vault=Vault&amp;file=Concept");
-    expect(card.fields.back).toContain("<img src=\"diagram.png\" alt=\"diagram.png\">");
-    expect(card.fields.back).toContain("[sound:clip.mp3]");
+    expect(card.fields.body).toContain("\\(a+b\\)");
+    expect(card.fields.body).toContain("\\[x^2\\]");
+    expect(card.fields.body).toContain("<code>const value = 1</code>");
+    expect(card.fields.body).toContain("language-ts");
+    expect(card.fields.body).toContain("obsidian://open?vault=Vault&amp;file=Concept");
+    expect(card.fields.body).toContain("<img src=\"diagram.png\" alt=\"diagram.png\">");
+    expect(card.fields.body).toContain("[sound:clip.mp3]");
     expect(card.media).toHaveLength(2);
   });
 });
