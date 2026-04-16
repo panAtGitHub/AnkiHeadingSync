@@ -1,0 +1,10 @@
+{
+  "id": "anki-heading-sync",
+  "name": "Anki Heading Sync",
+  "version": "1.0.0",
+  "minAppVersion": "1.5.0",
+  "description": "Focused heading-based Obsidian to Anki sync plugin.",
+  "author": "GitHub Copilot",
+  "authorUrl": "https://github.com/github/copilot",
+  "isDesktopOnly": true
+}
