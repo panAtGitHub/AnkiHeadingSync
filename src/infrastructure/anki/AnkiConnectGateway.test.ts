@@ -59,4 +59,32 @@ describe("AnkiConnectGateway", () => {
       isCloze: true,
     });
   });
+
+  it("returns note existence and model summaries", async () => {
+    requestUrlMock.mockResolvedValue({
+      json: {
+        error: null,
+        result: [
+          { noteId: 100, modelName: "Basic", cards: [1] },
+          null,
+          { noteId: 102, modelName: "Cloze", cards: [2] },
+        ],
+      },
+    });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    const summaries = await gateway.getNoteSummaries([100, 101, 102]);
+
+    expect(summaries).toEqual([
+      { noteId: 100, modelName: "Basic" },
+      { noteId: 102, modelName: "Cloze" },
+    ]);
+    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+      action: "notesInfo",
+      version: 6,
+      params: {
+        notes: [100, 101, 102],
+      },
+    });
+  });
 });

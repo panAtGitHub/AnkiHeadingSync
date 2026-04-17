@@ -12,6 +12,7 @@ describe("CardIdentityPolicy", () => {
       blockStartLine: 5,
       bodyStartLine: 6,
       blockEndLine: 8,
+      contentEndLine: 7,
       headingLevel: 4,
       headingText: "Prompt",
     };
@@ -27,6 +28,7 @@ describe("CardIdentityPolicy", () => {
       blockStartLine: 5,
       bodyStartLine: 6,
       blockEndLine: 8,
+      contentEndLine: 7,
       headingLevel: 4,
       headingText: "Prompt",
     };

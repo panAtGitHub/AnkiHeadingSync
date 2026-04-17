@@ -4,4 +4,5 @@ import type { RenderResourceResolver } from "@/domain/card/ports/RenderResourceR
 export interface VaultGateway extends RenderResourceResolver {
   listMarkdownFiles(): Promise<SourceFile[]>;
   getMarkdownFile(path: string): Promise<SourceFile | null>;
+  replaceMarkdownFile(path: string, expectedContent: string, nextContent: string): Promise<void>;
 }

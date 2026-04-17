@@ -58,7 +58,7 @@ export class SyncRegistry {
     const existingForNoteId = this.cardKeysByNoteId.get(record.noteId);
 
     if (existingForNoteId && existingForNoteId !== record.cardKey) {
-      throw new Error(`Note ${record.noteId} is already assigned to another card key.`);
+      this.recordsByCardKey.delete(existingForNoteId);
     }
 
     const previous = this.recordsByCardKey.get(record.cardKey);

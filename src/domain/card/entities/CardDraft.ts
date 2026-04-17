@@ -8,5 +8,6 @@ export interface CardDraft {
   headingLevel: number;
   type: CardType;
   bodyMarkdown: string;
+  embeddedNoteId?: number;
   deckHint?: DeckName;
 }

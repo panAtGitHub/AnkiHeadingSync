@@ -27,6 +27,21 @@ export class ObsidianVaultGateway implements VaultGateway {
     return this.toSourceFile(abstractFile);
   }
 
+  async replaceMarkdownFile(path: string, expectedContent: string, nextContent: string) {
+    const abstractFile = this.app.vault.getAbstractFileByPath(path);
+
+    if (!(abstractFile instanceof TFile) || abstractFile.extension.toLowerCase() !== "md") {
+      throw new Error(`Markdown file not found: ${path}`);
+    }
+
+    const currentContent = await this.app.vault.cachedRead(abstractFile);
+    if (currentContent !== expectedContent) {
+      throw new Error(`Markdown file changed before AHS write-back: ${path}`);
+    }
+
+    await this.app.vault.modify(abstractFile, nextContent);
+  }
+
   resolveWikiLink(rawTarget: string, sourcePath: string) {
     const { alias, linkPath } = parseLinkTarget(rawTarget);
     const destination = this.app.metadataCache.getFirstLinkpathDest(stripSubpath(linkPath), sourcePath);

@@ -11,6 +11,7 @@ export interface Card {
   type: CardType;
   heading: string;
   bodyMarkdown: string;
+  embeddedNoteId?: number;
   deck: DeckName;
   noteModel: NoteModelName;
   tags: string[];

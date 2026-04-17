@@ -40,7 +40,7 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
     }
 
     const scanAndPlanSyncUseCase = new ScanAndPlanSyncUseCase(vaultGateway, syncRegistryRepository);
-  const executeSyncPlanUseCase = new ExecuteSyncPlanUseCase(this.ankiGateway, syncRegistryRepository);
+    const executeSyncPlanUseCase = new ExecuteSyncPlanUseCase(this.ankiGateway, syncRegistryRepository, vaultGateway);
     this.syncCurrentFileUseCase = new SyncCurrentFileUseCase(scanAndPlanSyncUseCase, executeSyncPlanUseCase);
     this.syncVaultUseCase = new SyncVaultUseCase(scanAndPlanSyncUseCase, executeSyncPlanUseCase);
 

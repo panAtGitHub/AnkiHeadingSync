@@ -18,6 +18,7 @@ function createCard(overrides: Partial<Card>): Card {
       blockStartLine: 1,
       bodyStartLine: 2,
       blockEndLine: 3,
+      contentEndLine: 2,
       headingLevel: 4,
       headingText: "Prompt",
     },

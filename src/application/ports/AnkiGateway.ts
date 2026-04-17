@@ -14,10 +14,16 @@ export interface UpdateAnkiNoteInput {
   fields: Record<string, string>;
 }
 
+export interface AnkiNoteSummary {
+  noteId: number;
+  modelName: string;
+}
+
 export interface AnkiGateway {
   ensureDeckExists(deckName: string): Promise<void>;
   listNoteModels(): Promise<string[]>;
   getModelDetails(modelName: string): Promise<NoteModelDetails>;
+  getNoteSummaries(noteIds: number[]): Promise<AnkiNoteSummary[]>;
   addNote(input: AddAnkiNoteInput): Promise<number>;
   updateNote(input: UpdateAnkiNoteInput): Promise<void>;
   storeMedia(asset: MediaAsset): Promise<void>;

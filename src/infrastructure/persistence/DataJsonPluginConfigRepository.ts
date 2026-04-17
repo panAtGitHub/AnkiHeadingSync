@@ -8,7 +8,9 @@ export interface PluginDataSnapshot {
     records: Array<{
       cardKey: string;
       filePath: string;
+      identityMode?: "embedded-note-id" | "legacy-card-key" | "pending-note-id-write";
       lastSyncedAt: number;
+      legacyCardKey?: string;
       noteId: number;
       orphan: boolean;
       sourceHash: string;

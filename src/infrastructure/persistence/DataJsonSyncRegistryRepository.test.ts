@@ -27,6 +27,8 @@ describe("DataJsonSyncRegistryRepository", () => {
     const registry = new SyncRegistry([
       {
         cardKey: createCardKey("card-1"),
+        identityMode: "embedded-note-id",
+        legacyCardKey: createCardKey("legacy-1"),
         noteId: 101,
         filePath: "notes/example.md",
         sourceHash: createContentHash("hash-1"),

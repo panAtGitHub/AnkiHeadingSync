@@ -13,8 +13,17 @@ interface HeadingMatch {
   lineIndex: number;
 }
 
+interface ExtractedMarkerResult {
+  bodyLines: string[];
+  embeddedNoteId?: number;
+  contentEndLine: number;
+  markerLine?: number;
+}
+
 const HEADING_REGEXP = /^(#{1,6})\s+(.*?)\s*$/;
 const TARGET_DECK_REGEXP = /^\s*TARGET DECK\s*:\s*(.+?)\s*$/i;
+const VALID_AHS_MARKER_REGEXP = /^\s*<!--\s*AHS:([1-9]\d*)\s*-->\s*$/;
+const AHS_MARKER_CANDIDATE_REGEXP = /<!--\s*AHS:/;
 
 export class CardExtractionService {
   extract(sourceFile: SourceFile, headingPolicy: HeadingPolicy): CardDraft[] {
@@ -35,15 +44,19 @@ export class CardExtractionService {
 
       const blockEndLineIndex = findBlockEndLineIndex(headings, headingIndex, lines.length);
       const bodyLines = lines.slice(heading.lineIndex + 1, blockEndLineIndex);
-      const bodyMarkdown = trimBlankEdges(bodyLines).join("\n");
+      const extractedMarker = extractEmbeddedMarker(bodyLines, heading.lineIndex + 2, heading.lineIndex + 1);
+      const bodyMarkdown = trimBlankEdges(extractedMarker.bodyLines).join("\n");
 
       drafts.push({
         source: {
           filePath: sourceFile.path,
+          sourceContent: sourceFile.content,
           headingLine: heading.lineIndex + 1,
           blockStartLine: heading.lineIndex + 1,
           bodyStartLine: heading.lineIndex + 2,
           blockEndLine: blockEndLineIndex,
+          contentEndLine: extractedMarker.contentEndLine,
+          markerLine: extractedMarker.markerLine,
           headingLevel: heading.level,
           headingText: heading.text,
         },
@@ -51,6 +64,7 @@ export class CardExtractionService {
         headingLevel: heading.level,
         type: cardType,
         bodyMarkdown,
+        embeddedNoteId: extractedMarker.embeddedNoteId,
         deckHint: targetDeck ? createDeckName(targetDeck) : undefined,
       });
     }
@@ -169,4 +183,75 @@ function trimBlankEdges(lines: string[]): string[] {
   }
 
   return lines.slice(startIndex, endIndex);
+}
+
+function extractEmbeddedMarker(bodyLines: string[], bodyStartLine: number, headingLine: number): ExtractedMarkerResult {
+  const ahsCandidates = bodyLines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => AHS_MARKER_CANDIDATE_REGEXP.test(line));
+  const validMarkers = ahsCandidates.filter(({ line }) => VALID_AHS_MARKER_REGEXP.test(line));
+
+  if (validMarkers.length > 1) {
+    throw new Error(`Multiple AHS markers found in heading block at line ${headingLine}.`);
+  }
+
+  let lastNonEmptyIndex = bodyLines.length - 1;
+  while (lastNonEmptyIndex >= 0 && !bodyLines[lastNonEmptyIndex].trim()) {
+    lastNonEmptyIndex -= 1;
+  }
+
+  if (lastNonEmptyIndex < 0) {
+    if (ahsCandidates.length > 0) {
+      throw new Error(`Invalid AHS marker found in heading block at line ${headingLine}.`);
+    }
+
+    return {
+      bodyLines,
+      contentEndLine: headingLine,
+    };
+  }
+
+  const lastNonEmptyLine = bodyLines[lastNonEmptyIndex];
+  const validMarkerMatch = lastNonEmptyLine.match(VALID_AHS_MARKER_REGEXP);
+
+  if (validMarkerMatch) {
+    const markerIndex = lastNonEmptyIndex;
+
+    for (const candidate of ahsCandidates) {
+      if (candidate.index === markerIndex) {
+        continue;
+      }
+
+      throw new Error(`Multiple or misplaced AHS markers found in heading block at line ${headingLine}.`);
+    }
+
+    const nextBodyLines = bodyLines.filter((_line, index) => index !== markerIndex);
+    const contentEndLine = findContentEndLine(nextBodyLines, bodyStartLine, headingLine);
+
+    return {
+      bodyLines: nextBodyLines,
+      embeddedNoteId: Number(validMarkerMatch[1]),
+      contentEndLine,
+      markerLine: bodyStartLine + markerIndex,
+    };
+  }
+
+  if (AHS_MARKER_CANDIDATE_REGEXP.test(lastNonEmptyLine) || ahsCandidates.length > 0) {
+    throw new Error(`Invalid AHS marker found in heading block at line ${headingLine}.`);
+  }
+
+  return {
+    bodyLines,
+    contentEndLine: findContentEndLine(bodyLines, bodyStartLine, headingLine),
+  };
+}
+
+function findContentEndLine(bodyLines: string[], bodyStartLine: number, headingLine: number): number {
+  for (let index = bodyLines.length - 1; index >= 0; index -= 1) {
+    if (bodyLines[index].trim()) {
+      return bodyStartLine + index;
+    }
+  }
+
+  return headingLine;
 }

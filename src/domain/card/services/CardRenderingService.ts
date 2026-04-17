@@ -81,6 +81,7 @@ export class CardRenderingService {
       type: draft.type,
       heading: draft.heading,
       bodyMarkdown: draft.bodyMarkdown,
+      embeddedNoteId: draft.embeddedNoteId,
       deck,
       noteModel,
       tags: [],

@@ -53,6 +53,15 @@ class FakeVaultGateway implements VaultGateway {
     };
   }
 
+  async replaceMarkdownFile(path: string, expectedContent: string, nextContent: string) {
+    const file = this.files.find((candidate) => candidate.path === path);
+    if (!file || file.content !== expectedContent) {
+      throw new Error(`Markdown file changed before AHS write-back: ${path}`);
+    }
+
+    file.content = nextContent;
+  }
+
   resolveWikiLink(rawTarget: string) {
     return { url: `obsidian://open?vault=Vault&file=${rawTarget}`, displayText: rawTarget.split("|")[1] ?? rawTarget };
   }
@@ -83,6 +92,10 @@ class FakeAnkiGateway implements AnkiGateway {
     return modelName === "Cloze"
       ? { fieldNames: ["Text", "Extra"], isCloze: true }
       : { fieldNames: ["Front", "Back"], isCloze: false };
+  }
+
+  async getNoteSummaries(): Promise<Array<{ noteId: number; modelName: string }>> {
+    return [];
   }
 
   async addNote(input: { deckName: string; modelName: string; fields: Record<string, string> }): Promise<number> {
@@ -142,7 +155,7 @@ describe("SyncVaultUseCase", () => {
     const ankiGateway = new FakeAnkiGateway();
     const repository = new DataJsonSyncRegistryRepository(store);
     const scanUseCase = new ScanAndPlanSyncUseCase(vaultGateway, repository);
-    const executeUseCase = new ExecuteSyncPlanUseCase(ankiGateway, repository, undefined, () => 2000);
+    const executeUseCase = new ExecuteSyncPlanUseCase(ankiGateway, repository, vaultGateway, undefined, () => 2000);
     const useCase = new SyncVaultUseCase(scanUseCase, executeUseCase);
 
     const result = await useCase.execute(

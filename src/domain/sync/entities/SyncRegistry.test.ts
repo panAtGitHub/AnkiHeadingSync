@@ -10,6 +10,7 @@ describe("SyncRegistry", () => {
     const registry = new SyncRegistry([
       {
         cardKey: createCardKey("card-1"),
+        identityMode: "legacy-card-key",
         noteId: 101,
         filePath: "notes/old.md",
         sourceHash: createContentHash("old-hash"),
@@ -22,6 +23,7 @@ describe("SyncRegistry", () => {
 
     expect(registry.get(createCardKey("card-1"))).toEqual({
       cardKey: createCardKey("card-1"),
+      identityMode: "legacy-card-key",
       noteId: 101,
       filePath: "notes/new.md",
       sourceHash: createContentHash("new-hash"),
@@ -34,6 +36,7 @@ describe("SyncRegistry", () => {
     const registry = new SyncRegistry([
       {
         cardKey: createCardKey("card-1"),
+        identityMode: "legacy-card-key",
         noteId: 101,
         filePath: "notes/example.md",
         sourceHash: createContentHash("hash"),
@@ -46,5 +49,33 @@ describe("SyncRegistry", () => {
 
     expect(registry.get(createCardKey("card-1"))?.orphan).toBe(true);
     expect(registry.get(createCardKey("card-1"))?.noteId).toBe(101);
+  });
+
+  it("reassigns a note id to the latest card key", () => {
+    const registry = new SyncRegistry([
+      {
+        cardKey: createCardKey("card-1"),
+        identityMode: "embedded-note-id",
+        noteId: 101,
+        filePath: "notes/example.md",
+        sourceHash: createContentHash("hash"),
+        lastSyncedAt: 1,
+        orphan: false,
+      },
+    ]);
+
+    registry.recordSync({
+      cardKey: createCardKey("card-2"),
+      identityMode: "embedded-note-id",
+      noteId: 101,
+      filePath: "notes/renamed.md",
+      sourceHash: createContentHash("hash"),
+      lastSyncedAt: 2,
+      orphan: false,
+    });
+
+    expect(registry.get(createCardKey("card-1"))).toBeUndefined();
+    expect(registry.get(createCardKey("card-2"))?.noteId).toBe(101);
+    expect(registry.findByNoteId(101)?.cardKey).toBe(createCardKey("card-2"));
   });
 });

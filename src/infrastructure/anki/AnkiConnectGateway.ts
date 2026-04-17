@@ -1,7 +1,7 @@
 import { requestUrl } from "obsidian";
 
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
-import type { AddAnkiNoteInput, AnkiGateway, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
+import type { AddAnkiNoteInput, AnkiGateway, AnkiNoteSummary, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
 import type { MediaAsset } from "@/domain/card/entities/RenderedFields";
 
 interface AnkiResponse<T> {
@@ -11,6 +11,8 @@ interface AnkiResponse<T> {
 
 interface NoteInfo {
   cards: number[];
+  modelName?: string;
+  noteId?: number;
 }
 
 type ModelTemplates = Record<string, unknown>;
@@ -41,6 +43,27 @@ export class AnkiConnectGateway implements AnkiGateway {
       fieldNames,
       isCloze,
     };
+  }
+
+  async getNoteSummaries(noteIds: number[]): Promise<AnkiNoteSummary[]> {
+    if (noteIds.length === 0) {
+      return [];
+    }
+
+    const noteInfo = await this.invoke<Array<NoteInfo | null>>("notesInfo", {
+      notes: noteIds,
+    });
+
+    return noteInfo.flatMap((entry) => {
+      if (!entry || typeof entry.noteId !== "number" || typeof entry.modelName !== "string") {
+        return [];
+      }
+
+      return [{
+        noteId: entry.noteId,
+        modelName: entry.modelName,
+      }];
+    });
   }
 
   async addNote(input: AddAnkiNoteInput): Promise<number> {
