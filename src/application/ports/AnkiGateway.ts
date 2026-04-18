@@ -17,14 +17,25 @@ export interface UpdateAnkiNoteInput {
 export interface AnkiNoteSummary {
   noteId: number;
   modelName: string;
+  cardIds: number[];
+}
+
+export interface ChangeDeckInput {
+  deckName: string;
+  cardIds: number[];
 }
 
 export interface AnkiGateway {
   ensureDeckExists(deckName: string): Promise<void>;
+  ensureDecks(deckNames: string[]): Promise<void>;
   listNoteModels(): Promise<string[]>;
   getModelDetails(modelName: string): Promise<NoteModelDetails>;
   getNoteSummaries(noteIds: number[]): Promise<AnkiNoteSummary[]>;
   addNote(input: AddAnkiNoteInput): Promise<number>;
+  addNotes(inputs: AddAnkiNoteInput[]): Promise<number[]>;
   updateNote(input: UpdateAnkiNoteInput): Promise<void>;
+  updateNotes(inputs: UpdateAnkiNoteInput[]): Promise<void>;
+  changeDecks(inputs: ChangeDeckInput[]): Promise<void>;
   storeMedia(asset: MediaAsset): Promise<void>;
+  storeMediaFiles(assets: MediaAsset[]): Promise<void>;
 }

@@ -1,7 +1,5 @@
-import type { SourceFile } from "@/domain/card/entities/SourceFile";
-
 export class ScanScopeService {
-  filter(files: SourceFile[], includeFolders: string[], excludeFolders: string[]): SourceFile[] {
+  filter<T extends { path: string }>(files: T[], includeFolders: string[], excludeFolders: string[]): T[] {
     const normalizedIncludes = includeFolders.map(normalizeFolderPath).filter(Boolean);
     const normalizedExcludes = excludeFolders.map(normalizeFolderPath).filter(Boolean);
 

@@ -1,6 +1,7 @@
 import { TFile } from "obsidian";
 import type { App } from "obsidian";
 
+import type { MarkdownFileReference, ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
 import { MarkdownFileNotFoundError, MarkdownWriteConflictError, type VaultGateway } from "@/application/ports/VaultGateway";
 import { hashString } from "@/domain/shared/hash";
 import type { SourceLocation } from "@/domain/card/value-objects/SourceLocation";
@@ -8,8 +9,17 @@ import type { SourceLocation } from "@/domain/card/value-objects/SourceLocation"
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "bmp", "svg", "webp", "tiff"]);
 const AUDIO_EXTENSIONS = new Set(["wav", "m4a", "flac", "mp3", "wma", "aac", "webm", "ogg"]);
 
-export class ObsidianVaultGateway implements VaultGateway {
+export class ObsidianVaultGateway implements VaultGateway, ManualSyncVaultGateway {
   constructor(private readonly app: App) {}
+
+  async listMarkdownFileRefs(): Promise<MarkdownFileReference[]> {
+    return this.app.vault.getMarkdownFiles().map((file) => ({
+      path: file.path,
+      basename: file.basename,
+      mtime: file.stat.mtime,
+      size: file.stat.size,
+    }));
+  }
 
   async listMarkdownFiles() {
     const files = this.app.vault.getMarkdownFiles();
@@ -25,6 +35,10 @@ export class ObsidianVaultGateway implements VaultGateway {
     }
 
     return this.toSourceFile(abstractFile);
+  }
+
+  async readMarkdownFile(path: string) {
+    return this.getMarkdownFile(path);
   }
 
   async replaceMarkdownFile(path: string, expectedContent: string, nextContent: string) {

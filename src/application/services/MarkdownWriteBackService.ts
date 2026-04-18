@@ -1,0 +1,102 @@
+import { MarkdownWriteConflictError } from "@/application/ports/VaultGateway";
+import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
+import type { IndexedFile } from "@/domain/manual-sync/entities/IndexedFile";
+import type { PendingWriteBackState } from "@/domain/manual-sync/entities/PluginState";
+import type { PlannedCard } from "@/domain/manual-sync/value-objects/ManualSyncPlan";
+import { CardMarkerService, type MarkerWriteRequest } from "@/domain/manual-sync/services/CardMarkerService";
+
+export interface MarkdownWriteBackResult {
+  writtenCardIds: string[];
+  conflictFiles: string[];
+  failureFiles: Array<{ filePath: string; message: string }>;
+  pendingEntries: PendingWriteBackState[];
+}
+
+export class MarkdownWriteBackService {
+  constructor(
+    private readonly vaultGateway: ManualSyncVaultGateway,
+    private readonly markerService = new CardMarkerService(),
+  ) {}
+
+  async write(plannedCards: PlannedCard[], indexedFilesByPath: Map<string, IndexedFile>): Promise<MarkdownWriteBackResult> {
+    const plannedByFile = new Map<string, PlannedCard[]>();
+    const writtenCardIds: string[] = [];
+    const conflictFiles: string[] = [];
+    const failureFiles: Array<{ filePath: string; message: string }> = [];
+    const pendingEntries: PendingWriteBackState[] = [];
+
+    for (const plannedCard of plannedCards) {
+      const entries = plannedByFile.get(plannedCard.card.filePath);
+      if (entries) {
+        entries.push(plannedCard);
+        continue;
+      }
+
+      plannedByFile.set(plannedCard.card.filePath, [plannedCard]);
+    }
+
+    for (const [filePath, fileCards] of plannedByFile.entries()) {
+      const indexedFile = indexedFilesByPath.get(filePath);
+      const sourceContent = indexedFile?.content ?? fileCards[0]?.card.sourceContent;
+
+      if (!sourceContent || !indexedFile) {
+        pendingEntries.push(...fileCards.map((plannedCard) => this.createPendingEntry(filePath, plannedCard, indexedFile?.fileHash ?? "")));
+        failureFiles.push({ filePath, message: `Missing scanned source content for ${filePath}.` });
+        continue;
+      }
+
+      try {
+        const nextContent = this.markerService.applyBatch(
+          sourceContent,
+          fileCards.map((plannedCard) => this.toWriteRequest(plannedCard, sourceContent)),
+        );
+
+        await this.vaultGateway.replaceMarkdownFile(filePath, sourceContent, nextContent);
+        writtenCardIds.push(...fileCards.map((plannedCard) => plannedCard.card.cardId));
+      } catch (error) {
+        pendingEntries.push(...fileCards.map((plannedCard) => this.createPendingEntry(filePath, plannedCard, indexedFile.fileHash)));
+
+        if (error instanceof MarkdownWriteConflictError) {
+          conflictFiles.push(filePath);
+          continue;
+        }
+
+        failureFiles.push({
+          filePath,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return {
+      writtenCardIds,
+      conflictFiles,
+      failureFiles,
+      pendingEntries,
+    };
+  }
+
+  private toWriteRequest(plannedCard: PlannedCard, sourceContent: string): MarkerWriteRequest {
+    return {
+      filePath: plannedCard.card.filePath,
+      cardId: plannedCard.card.cardId,
+      noteId: plannedCard.noteId,
+      blockStartLine: plannedCard.card.blockStartLine,
+      contentEndLine: plannedCard.card.contentEndLine,
+      blockEndLine: plannedCard.card.blockEndLine,
+      markerLine: plannedCard.card.markerLine,
+      sourceContent,
+    };
+  }
+
+  private createPendingEntry(filePath: string, plannedCard: PlannedCard, expectedFileHash: string): PendingWriteBackState {
+    return {
+      filePath,
+      cardId: plannedCard.card.cardId,
+      noteId: plannedCard.noteId,
+      expectedFileHash,
+      targetMarker: this.markerService.create(plannedCard.card.cardId, plannedCard.noteId).raw,
+      rawBlockHash: plannedCard.card.rawBlockHash,
+    };
+  }
+}

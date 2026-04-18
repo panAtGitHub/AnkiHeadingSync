@@ -109,6 +109,10 @@ class FakeAnkiGateway implements AnkiGateway {
     this.ensuredDecks.push(deckName);
   }
 
+  async ensureDecks(deckNames: string[]): Promise<void> {
+    this.ensuredDecks.push(...deckNames);
+  }
+
   async listNoteModels(): Promise<string[]> {
     return Object.keys(this.modelDetailsByName);
   }
@@ -130,12 +134,30 @@ class FakeAnkiGateway implements AnkiGateway {
     return this.nextAddedNoteId;
   }
 
+  async addNotes(inputs: Array<{ deckName: string; modelName: string; fields: Record<string, string>; tags: string[] }>): Promise<number[]> {
+    return Promise.all(inputs.map((input) => this.addNote(input)));
+  }
+
   async updateNote(input: { noteId: number; deckName: string; fields: Record<string, string> }): Promise<void> {
     this.updatedNotes.push(input);
   }
 
+  async updateNotes(inputs: Array<{ noteId: number; deckName: string; fields: Record<string, string> }>): Promise<void> {
+    for (const input of inputs) {
+      await this.updateNote(input);
+    }
+  }
+
+  async changeDecks(): Promise<void> {}
+
   async storeMedia(asset: { fileName: string }): Promise<void> {
     this.storedMedia.push(asset.fileName);
+  }
+
+  async storeMediaFiles(assets: Array<{ fileName: string }>): Promise<void> {
+    for (const asset of assets) {
+      await this.storeMedia(asset);
+    }
   }
 }
 
@@ -623,7 +645,7 @@ describe("ExecuteSyncPlanUseCase", () => {
       [card.source.filePath]: card.source.sourceContent ?? "",
     });
     const ankiGateway = new FakeAnkiGateway();
-    ankiGateway.noteSummariesById.set(42, { noteId: 42, modelName: "Basic" });
+    ankiGateway.noteSummariesById.set(42, { noteId: 42, modelName: "Basic", cardIds: [1] });
     const existingRecord = {
       cardKey: createCardKey("legacy-embedded-key"),
       identityMode: "embedded-note-id" as const,
@@ -716,7 +738,7 @@ describe("ExecuteSyncPlanUseCase", () => {
     });
     const vaultGateway = new FakeVaultGateway({ "notes/current.md": card.source.sourceContent ?? "" });
     const ankiGateway = new FakeAnkiGateway();
-    ankiGateway.noteSummariesById.set(42, { noteId: 42, modelName: "Basic" });
+    ankiGateway.noteSummariesById.set(42, { noteId: 42, modelName: "Basic", cardIds: [1] });
     const repository = new InMemorySyncRegistryRepository();
     const useCase = new ExecuteSyncPlanUseCase(ankiGateway, repository, vaultGateway, undefined, () => 1234);
 
@@ -785,7 +807,7 @@ describe("ExecuteSyncPlanUseCase", () => {
     });
     const vaultGateway = new FakeVaultGateway({ "notes/current.md": card.source.sourceContent ?? "" });
     const ankiGateway = new FakeAnkiGateway();
-    ankiGateway.noteSummariesById.set(42, { noteId: 42, modelName: "Basic" });
+    ankiGateway.noteSummariesById.set(42, { noteId: 42, modelName: "Basic", cardIds: [1] });
     const repository = new InMemorySyncRegistryRepository();
     const useCase = new ExecuteSyncPlanUseCase(ankiGateway, repository, vaultGateway, undefined, () => 1234);
 
@@ -848,7 +870,7 @@ describe("ExecuteSyncPlanUseCase", () => {
     };
     const vaultGateway = new FakeVaultGateway({ "notes/current.md": card.source.sourceContent ?? "" });
     const ankiGateway = new FakeAnkiGateway();
-    ankiGateway.noteSummariesById.set(42, { noteId: 42, modelName: "Basic" });
+    ankiGateway.noteSummariesById.set(42, { noteId: 42, modelName: "Basic", cardIds: [1] });
     const repository = new InMemorySyncRegistryRepository(new SyncRegistry([pendingRecord]));
     const useCase = new ExecuteSyncPlanUseCase(ankiGateway, repository, vaultGateway, undefined, () => 1234);
 

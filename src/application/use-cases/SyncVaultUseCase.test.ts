@@ -84,6 +84,10 @@ class FakeAnkiGateway implements AnkiGateway {
     this.ensureDeckCalls.push(deckName);
   }
 
+  async ensureDecks(deckNames: string[]): Promise<void> {
+    this.ensureDeckCalls.push(...deckNames);
+  }
+
   async listNoteModels(): Promise<string[]> {
     return ["Basic", "Cloze"];
   }
@@ -94,7 +98,7 @@ class FakeAnkiGateway implements AnkiGateway {
       : { fieldNames: ["Front", "Back"], isCloze: false };
   }
 
-  async getNoteSummaries(): Promise<Array<{ noteId: number; modelName: string }>> {
+  async getNoteSummaries(): Promise<Array<{ noteId: number; modelName: string; cardIds: number[] }>> {
     return [];
   }
 
@@ -103,11 +107,25 @@ class FakeAnkiGateway implements AnkiGateway {
     return 200 + this.addCalls.length;
   }
 
+  async addNotes(inputs: Array<{ deckName: string; modelName: string; fields: Record<string, string>; tags: string[] }>): Promise<number[]> {
+    return Promise.all(inputs.map((input) => this.addNote(input)));
+  }
+
   async updateNote(input: { noteId: number; deckName: string; fields: Record<string, string> }): Promise<void> {
     this.updateCalls.push(input);
   }
 
+  async updateNotes(inputs: Array<{ noteId: number; deckName: string; fields: Record<string, string> }>): Promise<void> {
+    for (const input of inputs) {
+      await this.updateNote(input);
+    }
+  }
+
+  async changeDecks(): Promise<void> {}
+
   async storeMedia(): Promise<void> {}
+
+  async storeMediaFiles(): Promise<void> {}
 }
 
 function createSettings(overrides: Partial<PluginSettings> = {}): PluginSettings {

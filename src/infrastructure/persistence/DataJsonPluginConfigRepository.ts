@@ -1,9 +1,11 @@
 import { DEFAULT_SETTINGS, type PluginSettings, validatePluginSettings } from "@/application/config/PluginSettings";
 import type { PluginConfigRepository } from "@/application/ports/PluginConfigRepository";
 import type { PluginDataStore } from "@/application/ports/PluginDataStore";
+import type { PluginState } from "@/domain/manual-sync/entities/PluginState";
 
 export interface PluginDataSnapshot {
   settings?: Partial<PluginSettings>;
+  pluginState?: PluginState;
   syncRegistry?: {
     records: Array<{
       cardKey: string;

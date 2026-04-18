@@ -2,18 +2,18 @@ import { Plugin } from "obsidian";
 
 import { DEFAULT_SETTINGS, type PluginSettings } from "@/application/config/PluginSettings";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
-import { ScanAndPlanSyncUseCase } from "@/application/use-cases/ScanAndPlanSyncUseCase";
-import { ExecuteSyncPlanUseCase } from "@/application/use-cases/ExecuteSyncPlanUseCase";
-import { SyncCurrentFileUseCase } from "@/application/use-cases/SyncCurrentFileUseCase";
-import { SyncVaultUseCase } from "@/application/use-cases/SyncVaultUseCase";
+import { ManualSyncCurrentFileUseCase } from "@/application/use-cases/ManualSyncCurrentFileUseCase";
+import { RebuildCardIndexUseCase } from "@/application/use-cases/RebuildCardIndexUseCase";
+import { ManualSyncVaultUseCase } from "@/application/use-cases/ManualSyncVaultUseCase";
 import { AnkiConnectGateway } from "@/infrastructure/anki/AnkiConnectGateway";
 import { ObsidianPluginDataStore } from "@/infrastructure/obsidian/ObsidianPluginDataStore";
 import { ObsidianVaultGateway } from "@/infrastructure/obsidian/ObsidianVaultGateway";
 import { DataJsonPluginConfigRepository, type PluginDataSnapshot } from "@/infrastructure/persistence/DataJsonPluginConfigRepository";
-import { DataJsonSyncRegistryRepository } from "@/infrastructure/persistence/DataJsonSyncRegistryRepository";
+import { DataJsonPluginStateRepository } from "@/infrastructure/persistence/DataJsonPluginStateRepository";
 import { registerCommands } from "@/presentation/commands/registerCommands";
 import { NoticeService } from "@/presentation/notices/NoticeService";
 import { AnkiHeadingSyncSettingTab } from "@/presentation/settings/PluginSettingTab";
+import { ManualSyncService } from "@/application/services/ManualSyncService";
 
 export default class AnkiHeadingSyncPlugin extends Plugin {
   settings: PluginSettings = DEFAULT_SETTINGS;
@@ -21,14 +21,15 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
   private readonly noticeService = new NoticeService();
   private readonly ankiGateway = new AnkiConnectGateway(() => this.settings.ankiConnectUrl);
 
-  private syncCurrentFileUseCase?: SyncCurrentFileUseCase;
-  private syncVaultUseCase?: SyncVaultUseCase;
+  private syncCurrentFileUseCase?: ManualSyncCurrentFileUseCase;
+  private syncVaultUseCase?: ManualSyncVaultUseCase;
+  private rebuildCardIndexUseCase?: RebuildCardIndexUseCase;
   private pluginConfigRepository?: DataJsonPluginConfigRepository;
 
   async onload(): Promise<void> {
     const pluginDataStore = new ObsidianPluginDataStore<PluginDataSnapshot>(this);
     this.pluginConfigRepository = new DataJsonPluginConfigRepository(pluginDataStore);
-    const syncRegistryRepository = new DataJsonSyncRegistryRepository(pluginDataStore);
+    const pluginStateRepository = new DataJsonPluginStateRepository(pluginDataStore);
     const vaultGateway = new ObsidianVaultGateway(this.app);
 
     try {
@@ -39,10 +40,10 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
       this.noticeService.error("Invalid plugin settings were detected. Default settings were restored in memory.");
     }
 
-    const scanAndPlanSyncUseCase = new ScanAndPlanSyncUseCase(vaultGateway, syncRegistryRepository);
-    const executeSyncPlanUseCase = new ExecuteSyncPlanUseCase(this.ankiGateway, syncRegistryRepository, vaultGateway);
-    this.syncCurrentFileUseCase = new SyncCurrentFileUseCase(scanAndPlanSyncUseCase, executeSyncPlanUseCase);
-    this.syncVaultUseCase = new SyncVaultUseCase(scanAndPlanSyncUseCase, executeSyncPlanUseCase);
+    const manualSyncService = new ManualSyncService(vaultGateway, pluginStateRepository, this.ankiGateway);
+    this.syncCurrentFileUseCase = new ManualSyncCurrentFileUseCase(manualSyncService);
+    this.syncVaultUseCase = new ManualSyncVaultUseCase(manualSyncService);
+    this.rebuildCardIndexUseCase = new RebuildCardIndexUseCase(manualSyncService);
 
     registerCommands(this);
     this.addSettingTab(new AnkiHeadingSyncSettingTab(this));
@@ -89,7 +90,7 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
 
     try {
       const result = await this.syncCurrentFileUseCase.execute(activeFile.path, this.settings);
-      this.noticeService.showSyncSummary("Current file sync finished", result);
+      this.noticeService.showSyncSummary("当前文件同步完成", result);
     } catch (error) {
       console.error("Current file sync failed.", error);
       this.noticeService.error(error instanceof Error ? error.message : "Current file sync failed.");
@@ -104,10 +105,25 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
 
     try {
       const result = await this.syncVaultUseCase.execute(this.settings);
-      this.noticeService.showSyncSummary("Vault sync finished", result);
+      this.noticeService.showSyncSummary("全库同步完成", result);
     } catch (error) {
       console.error("Vault sync failed.", error);
       this.noticeService.error(error instanceof Error ? error.message : "Vault sync failed.");
+    }
+  }
+
+  async runRebuildCardIndex(): Promise<void> {
+    if (!this.rebuildCardIndexUseCase) {
+      this.noticeService.error("Sync use case is not initialized.");
+      return;
+    }
+
+    try {
+      const result = await this.rebuildCardIndexUseCase.execute(this.settings);
+      this.noticeService.showRebuildSummary("卡片索引重建完成", result);
+    } catch (error) {
+      console.error("Card index rebuild failed.", error);
+      this.noticeService.error(error instanceof Error ? error.message : "Card index rebuild failed.");
     }
   }
 }

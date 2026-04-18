@@ -1,7 +1,7 @@
 import { requestUrl } from "obsidian";
 
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
-import type { AddAnkiNoteInput, AnkiGateway, AnkiNoteSummary, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
+import type { AddAnkiNoteInput, AnkiGateway, AnkiNoteSummary, ChangeDeckInput, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
 import type { MediaAsset } from "@/domain/card/entities/RenderedFields";
 
 interface AnkiResponse<T> {
@@ -22,6 +22,14 @@ export class AnkiConnectGateway implements AnkiGateway {
 
   async ensureDeckExists(deckName: string): Promise<void> {
     await this.invoke("createDeck", { deck: deckName });
+  }
+
+  async ensureDecks(deckNames: string[]): Promise<void> {
+    const uniqueDeckNames = Array.from(new Set(deckNames));
+    await this.invokeMulti<void>(uniqueDeckNames.map((deckName) => ({
+      action: "createDeck",
+      params: { deck: deckName },
+    })));
   }
 
   async listNoteModels(): Promise<string[]> {
@@ -62,6 +70,7 @@ export class AnkiConnectGateway implements AnkiGateway {
       return [{
         noteId: entry.noteId,
         modelName: entry.modelName,
+        cardIds: Array.isArray(entry.cards) ? entry.cards : [],
       }];
     });
   }
@@ -79,6 +88,24 @@ export class AnkiConnectGateway implements AnkiGateway {
         tags: input.tags,
       },
     });
+  }
+
+  async addNotes(inputs: AddAnkiNoteInput[]): Promise<number[]> {
+    return this.invokeMulti<number>(inputs.map((input) => ({
+      action: "addNote",
+      params: {
+        note: {
+          deckName: input.deckName,
+          modelName: input.modelName,
+          fields: input.fields,
+          options: {
+            allowDuplicate: false,
+            duplicateScope: "deck",
+          },
+          tags: input.tags,
+        },
+      },
+    })));
   }
 
   async updateNote(input: UpdateAnkiNoteInput): Promise<void> {
@@ -102,11 +129,43 @@ export class AnkiConnectGateway implements AnkiGateway {
     }
   }
 
+  async updateNotes(inputs: UpdateAnkiNoteInput[]): Promise<void> {
+    await this.invokeMulti<void>(inputs.map((input) => ({
+      action: "updateNoteFields",
+      params: {
+        note: {
+          id: input.noteId,
+          fields: input.fields,
+        },
+      },
+    })));
+  }
+
+  async changeDecks(inputs: ChangeDeckInput[]): Promise<void> {
+    await this.invokeMulti<void>(inputs.filter((input) => input.cardIds.length > 0).map((input) => ({
+      action: "changeDeck",
+      params: {
+        cards: input.cardIds,
+        deck: input.deckName,
+      },
+    })));
+  }
+
   async storeMedia(asset: MediaAsset): Promise<void> {
     await this.invoke("storeMediaFile", {
       filename: asset.fileName,
       path: asset.absolutePath,
     });
+  }
+
+  async storeMediaFiles(assets: MediaAsset[]): Promise<void> {
+    await this.invokeMulti<void>(assets.map((asset) => ({
+      action: "storeMediaFile",
+      params: {
+        filename: asset.fileName,
+        path: asset.absolutePath,
+      },
+    })));
   }
 
   private async invoke<TResult>(action: string, params: Record<string, unknown>): Promise<TResult> {
@@ -127,5 +186,13 @@ export class AnkiConnectGateway implements AnkiGateway {
     }
 
     return parsed.result;
+  }
+
+  private async invokeMulti<TResult>(actions: Array<{ action: string; params: Record<string, unknown> }>): Promise<TResult[]> {
+    if (actions.length === 0) {
+      return [];
+    }
+
+    return this.invoke<TResult[]>("multi", { actions });
   }
 }

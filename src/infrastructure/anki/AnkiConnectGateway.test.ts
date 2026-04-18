@@ -76,14 +76,158 @@ describe("AnkiConnectGateway", () => {
     const summaries = await gateway.getNoteSummaries([100, 101, 102]);
 
     expect(summaries).toEqual([
-      { noteId: 100, modelName: "Basic" },
-      { noteId: 102, modelName: "Cloze" },
+      { noteId: 100, modelName: "Basic", cardIds: [1] },
+      { noteId: 102, modelName: "Cloze", cardIds: [2] },
     ]);
     expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
       action: "notesInfo",
       version: 6,
       params: {
         notes: [100, 101, 102],
+      },
+    });
+  });
+
+  it("batches add note calls through AnkiConnect multi", async () => {
+    requestUrlMock.mockResolvedValue({
+      json: {
+        error: null,
+        result: [9001, 9002],
+      },
+    });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    const noteIds = await gateway.addNotes([
+      {
+        deckName: "Deck",
+        modelName: "Basic",
+        fields: { Front: "A", Back: "B" },
+        tags: [],
+      },
+      {
+        deckName: "Deck",
+        modelName: "Basic",
+        fields: { Front: "C", Back: "D" },
+        tags: ["tag"],
+      },
+    ]);
+
+    expect(noteIds).toEqual([9001, 9002]);
+    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+      action: "multi",
+      version: 6,
+      params: {
+        actions: [
+          {
+            action: "addNote",
+            params: {
+              note: {
+                deckName: "Deck",
+                modelName: "Basic",
+                fields: { Front: "A", Back: "B" },
+                options: {
+                  allowDuplicate: false,
+                  duplicateScope: "deck",
+                },
+                tags: [],
+              },
+            },
+          },
+          {
+            action: "addNote",
+            params: {
+              note: {
+                deckName: "Deck",
+                modelName: "Basic",
+                fields: { Front: "C", Back: "D" },
+                options: {
+                  allowDuplicate: false,
+                  duplicateScope: "deck",
+                },
+                tags: ["tag"],
+              },
+            },
+          },
+        ],
+      },
+    });
+  });
+
+  it("batches update, changeDeck, and media operations through multi", async () => {
+    requestUrlMock.mockResolvedValue({
+      json: {
+        error: null,
+        result: [null, null],
+      },
+    });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    await gateway.updateNotes([
+      {
+        noteId: 10,
+        deckName: "Deck A",
+        fields: { Front: "Prompt", Back: "Answer" },
+      },
+    ]);
+    await gateway.changeDecks([
+      {
+        deckName: "Deck B",
+        cardIds: [1, 2],
+      },
+    ]);
+    await gateway.storeMediaFiles([
+      {
+        kind: "image",
+        fileName: "asset.png",
+        absolutePath: "/tmp/asset.png",
+      },
+    ]);
+
+    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+      action: "multi",
+      version: 6,
+      params: {
+        actions: [
+          {
+            action: "updateNoteFields",
+            params: {
+              note: {
+                id: 10,
+                fields: { Front: "Prompt", Back: "Answer" },
+              },
+            },
+          },
+        ],
+      },
+    });
+    expect(JSON.parse(requestUrlMock.mock.calls[1][0].body)).toEqual({
+      action: "multi",
+      version: 6,
+      params: {
+        actions: [
+          {
+            action: "changeDeck",
+            params: {
+              cards: [1, 2],
+              deck: "Deck B",
+            },
+          },
+        ],
+      },
+    });
+    expect(JSON.parse(requestUrlMock.mock.calls[2][0].body)).toEqual({
+      action: "multi",
+      version: 6,
+      params: {
+        actions: [
+          {
+            action: "storeMediaFile",
+            params: {
+              filename: "asset.png",
+              path: "/tmp/asset.png",
+            },
+          },
+        ],
       },
     });
   });

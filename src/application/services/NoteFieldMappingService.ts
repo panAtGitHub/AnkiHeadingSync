@@ -1,10 +1,25 @@
 import type { Card } from "@/domain/card/entities/Card";
 import { createNoteFieldMappingKey, type NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
+import type { CardType, RenderedFields } from "@/domain/card/entities/RenderedFields";
+
+interface RenderedCardInput {
+  type: CardType;
+  noteModel: string;
+  renderedFields: RenderedFields;
+}
 
 export class NoteFieldMappingService {
   map(
     card: Card,
+    noteModelDetails: NoteModelDetails,
+    noteFieldMappings: Record<string, NoteModelFieldMapping>,
+  ): Record<string, string> {
+    return this.mapRenderedCard(card, noteModelDetails, noteFieldMappings);
+  }
+
+  mapRenderedCard(
+    card: RenderedCardInput,
     noteModelDetails: NoteModelDetails,
     noteFieldMappings: Record<string, NoteModelFieldMapping>,
   ): Record<string, string> {
@@ -76,7 +91,7 @@ export class NoteFieldMappingService {
     }
   }
 
-  private mapBasic(card: Card, mapping: NoteModelFieldMapping): Record<string, string> {
+  private mapBasic(card: RenderedCardInput, mapping: NoteModelFieldMapping): Record<string, string> {
     const titleFieldName = mapping.titleField;
     const bodyFieldName = mapping.bodyField;
 
@@ -90,7 +105,7 @@ export class NoteFieldMappingService {
     };
   }
 
-  private mapCloze(card: Card, noteModelDetails: NoteModelDetails, mapping: NoteModelFieldMapping): Record<string, string> {
+  private mapCloze(card: RenderedCardInput, noteModelDetails: NoteModelDetails, mapping: NoteModelFieldMapping): Record<string, string> {
     if (!noteModelDetails.isCloze) {
       throw new Error(`Cloze note type "${card.noteModel}" is not cloze-compatible in Anki.`);
     }
@@ -105,7 +120,7 @@ export class NoteFieldMappingService {
   }
 
   private getRequiredMapping(
-    card: Card,
+    card: RenderedCardInput,
     noteFieldMappings: Record<string, NoteModelFieldMapping>,
   ): NoteModelFieldMapping {
     const mapping = noteFieldMappings[createNoteFieldMappingKey(card.type, card.noteModel)];
