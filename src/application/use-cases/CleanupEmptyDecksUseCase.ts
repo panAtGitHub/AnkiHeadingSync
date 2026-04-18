@@ -7,7 +7,8 @@ export class CleanupEmptyDecksUseCase {
 
   async listCandidates(): Promise<string[]> {
     const deckNames = await this.ankiGateway.listDeckNames();
-    const stats = await this.ankiGateway.getDeckStats(deckNames);
+    const leafDeckNames = collectLeafDeckNames(deckNames);
+    const stats = await this.ankiGateway.getDeckStats(leafDeckNames);
 
     return stats
       .filter((stat) => stat.noteCount === 0)
@@ -32,10 +33,10 @@ export class CleanupEmptyDecksUseCase {
       this.ankiGateway.getDeckStats(uniqueSelectedDeckNames),
     ]);
 
-    const currentDeckNameSet = new Set(currentDeckNames);
+    const currentLeafDeckNameSet = new Set(collectLeafDeckNames(currentDeckNames));
     const currentDeckStatsByName = new Map(currentDeckStats.map((stat) => [stat.deckName, stat.noteCount]));
-    const deletableDeckNames = uniqueSelectedDeckNames.filter((deckName) => currentDeckNameSet.has(deckName) && currentDeckStatsByName.get(deckName) === 0);
-    const skippedDeckNames = uniqueSelectedDeckNames.filter((deckName) => !currentDeckNameSet.has(deckName) || currentDeckStatsByName.get(deckName) !== 0);
+    const deletableDeckNames = uniqueSelectedDeckNames.filter((deckName) => currentLeafDeckNameSet.has(deckName) && currentDeckStatsByName.get(deckName) === 0);
+    const skippedDeckNames = uniqueSelectedDeckNames.filter((deckName) => !currentLeafDeckNameSet.has(deckName) || currentDeckStatsByName.get(deckName) !== 0);
     const deletedDeckNames: string[] = [];
 
     for (const deckName of deletableDeckNames) {
@@ -55,4 +56,8 @@ export class CleanupEmptyDecksUseCase {
       skippedDeckNames,
     };
   }
+}
+
+function collectLeafDeckNames(deckNames: string[]): string[] {
+  return deckNames.filter((deckName) => !deckNames.some((candidate) => candidate !== deckName && candidate.startsWith(`${deckName}::`)));
 }

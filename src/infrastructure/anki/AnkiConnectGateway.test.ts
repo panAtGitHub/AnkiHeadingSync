@@ -38,16 +38,20 @@ describe("AnkiConnectGateway", () => {
     requestUrlMock.mockResolvedValue({
       json: {
         error: null,
-        result: ["Default", "Scoped::Deck"],
+        result: {
+          Default: 1,
+          "Scoped::Deck": 2,
+          "Scoped::Deck::Leaf": 3,
+        },
       },
     });
 
     const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
     const deckNames = await gateway.listDeckNames();
 
-    expect(deckNames).toEqual(["Default", "Scoped::Deck"]);
+    expect(deckNames).toEqual(["Default", "Scoped::Deck", "Scoped::Deck::Leaf"]);
     expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
-      action: "deckNames",
+      action: "deckNamesAndIds",
       version: 6,
       params: {},
     });
@@ -108,23 +112,33 @@ describe("AnkiConnectGateway", () => {
   });
 
   it("maps deck stats into empty-deck detection shape", async () => {
-    requestUrlMock.mockResolvedValue({
-      json: {
-        error: null,
-        result: {
-          "1651445861967": {
-            deck_id: 1651445861967,
-            name: "Empty",
-            total_in_deck: 0,
-          },
-          "1651445861968": {
-            deck_id: 1651445861968,
-            name: "Busy",
-            total_in_deck: 3,
+    requestUrlMock
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: {
+            Empty: 1651445861967,
+            Busy: 1651445861968,
           },
         },
-      },
-    });
+      })
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: {
+            "1651445861967": {
+              deck_id: 1651445861967,
+              name: "Empty",
+              total_in_deck: 0,
+            },
+            "1651445861968": {
+              deck_id: 1651445861968,
+              name: "Busy",
+              total_in_deck: 3,
+            },
+          },
+        },
+      });
 
     const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
     const stats = await gateway.getDeckStats(["Empty", "Busy"]);
@@ -134,6 +148,11 @@ describe("AnkiConnectGateway", () => {
       { deckName: "Busy", noteCount: 3 },
     ]);
     expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+      action: "deckNamesAndIds",
+      version: 6,
+      params: {},
+    });
+    expect(JSON.parse(requestUrlMock.mock.calls[1][0].body)).toEqual({
       action: "getDeckStats",
       version: 6,
       params: {
@@ -143,18 +162,27 @@ describe("AnkiConnectGateway", () => {
   });
 
   it("does not treat missing requested deck stats as empty", async () => {
-    requestUrlMock.mockResolvedValue({
-      json: {
-        error: null,
-        result: {
-          "1651445861967": {
-            deck_id: 1651445861967,
-            name: "Empty",
-            total_in_deck: 0,
+    requestUrlMock
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: {
+            Empty: 1651445861967,
           },
         },
-      },
-    });
+      })
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: {
+            "1651445861967": {
+              deck_id: 1651445861967,
+              name: "Empty",
+              total_in_deck: 0,
+            },
+          },
+        },
+      });
 
     const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
     const stats = await gateway.getDeckStats(["Empty", "Missing"]);
@@ -166,12 +194,22 @@ describe("AnkiConnectGateway", () => {
   });
 
   it("treats an empty stats object as unknown instead of empty", async () => {
-    requestUrlMock.mockResolvedValue({
-      json: {
-        error: null,
-        result: {},
-      },
-    });
+    requestUrlMock
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: {
+            "Deck A": 1651445861967,
+            "Deck B": 1651445861968,
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: {},
+        },
+      });
 
     const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
     const stats = await gateway.getDeckStats(["Deck A", "Deck B"]);
@@ -183,27 +221,38 @@ describe("AnkiConnectGateway", () => {
   });
 
   it("treats malformed deck stats entries as unknown instead of zero", async () => {
-    requestUrlMock.mockResolvedValue({
-      json: {
-        error: null,
-        result: {
-          "1651445861967": {
-            deck_id: 1651445861967,
-            name: "Broken",
-          },
-          "1651445861968": {
-            deck_id: 1651445861968,
-            name: "WrongType",
-            total_in_deck: "0",
-          },
-          "1651445861969": {
-            deck_id: 1651445861969,
-            name: "Empty",
-            total_in_deck: 0,
+    requestUrlMock
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: {
+            Broken: 1651445861967,
+            WrongType: 1651445861968,
+            Empty: 1651445861969,
           },
         },
-      },
-    });
+      })
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: {
+            "1651445861967": {
+              deck_id: 1651445861967,
+              name: "Broken",
+            },
+            "1651445861968": {
+              deck_id: 1651445861968,
+              name: "WrongType",
+              total_in_deck: "0",
+            },
+            "1651445861969": {
+              deck_id: 1651445861969,
+              name: "Empty",
+              total_in_deck: 0,
+            },
+          },
+        },
+      });
 
     const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
     const stats = await gateway.getDeckStats(["Broken", "WrongType", "Empty"]);
@@ -215,24 +264,34 @@ describe("AnkiConnectGateway", () => {
     ]);
   });
 
-  it("matches deck stats by the value.name field when top-level keys are deck ids", async () => {
-    requestUrlMock.mockResolvedValue({
-      json: {
-        error: null,
-        result: {
-          "1651445861967": {
-            deck_id: 1651445861967,
-            name: "Scoped::Empty",
-            total_in_deck: 0,
-          },
-          "1651445861968": {
-            deck_id: 1651445861968,
-            name: "Scoped::Busy",
-            total_in_deck: 7,
+  it("matches nested deck stats by deck id even when the raw name is only the leaf segment", async () => {
+    requestUrlMock
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: {
+            "Scoped::Empty": 1651445861967,
+            "Scoped::Busy": 1651445861968,
           },
         },
-      },
-    });
+      })
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: {
+            "1651445861967": {
+              deck_id: 1651445861967,
+              name: "Empty",
+              total_in_deck: 0,
+            },
+            "1651445861968": {
+              deck_id: 1651445861968,
+              name: "Busy",
+              total_in_deck: 7,
+            },
+          },
+        },
+      });
 
     const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
     const stats = await gateway.getDeckStats(["Scoped::Empty", "Scoped::Busy"]);
@@ -244,18 +303,28 @@ describe("AnkiConnectGateway", () => {
   });
 
   it("treats partial deck-id keyed responses as unknown for unmatched deck names", async () => {
-    requestUrlMock.mockResolvedValue({
-      json: {
-        error: null,
-        result: {
-          "1651445861967": {
-            deck_id: 1651445861967,
-            name: "Scoped::Empty",
-            total_in_deck: 0,
+    requestUrlMock
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: {
+            "Scoped::Empty": 1651445861967,
+            "Scoped::Busy": 1651445861968,
           },
         },
-      },
-    });
+      })
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: {
+            "1651445861967": {
+              deck_id: 1651445861967,
+              name: "Empty",
+              total_in_deck: 0,
+            },
+          },
+        },
+      });
 
     const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
     const stats = await gateway.getDeckStats(["Scoped::Empty", "Scoped::Missing", "Scoped::Busy"]);
@@ -267,18 +336,25 @@ describe("AnkiConnectGateway", () => {
     ]);
   });
 
-  it("treats deck-id keyed stats without a matching name as unknown", async () => {
-    requestUrlMock.mockResolvedValue({
-      json: {
-        error: null,
-        result: {
-          "1651445861967": {
-            deck_id: 1651445861967,
-            total_in_deck: 0,
+  it("treats decks missing from deckNamesAndIds as unknown", async () => {
+    requestUrlMock
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: {},
+        },
+      })
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: {
+            "1651445861967": {
+              deck_id: 1651445861967,
+              total_in_deck: 0,
+            },
           },
         },
-      },
-    });
+      });
 
     const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
     const stats = await gateway.getDeckStats(["Scoped::Empty"]);
@@ -463,7 +539,7 @@ describe("AnkiConnectGateway", () => {
       version: 6,
       params: {
         decks: ["Empty", "Scoped::Deck"],
-        cardsToo: false,
+        cardsToo: true,
       },
     });
   });

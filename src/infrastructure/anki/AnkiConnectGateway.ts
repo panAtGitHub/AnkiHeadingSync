@@ -43,7 +43,8 @@ export class AnkiConnectGateway implements AnkiGateway {
   }
 
   async listDeckNames(): Promise<string[]> {
-    return this.invoke<string[]>("deckNames", {});
+    const deckNamesAndIds = await this.invoke<Record<string, number>>("deckNamesAndIds", {});
+    return Object.keys(deckNamesAndIds);
   }
 
   async getModelDetails(modelName: string): Promise<NoteModelDetails> {
@@ -68,13 +69,14 @@ export class AnkiConnectGateway implements AnkiGateway {
       return [];
     }
 
+    const deckNamesAndIds = await this.invoke<Record<string, number>>("deckNamesAndIds", {});
     const rawStats = await this.invoke<unknown>("getDeckStats", {
       decks: deckNames,
     });
 
     return deckNames.map((deckName) => ({
       deckName,
-      noteCount: extractDeckNoteCount(rawStats, deckName),
+      noteCount: extractDeckNoteCount(rawStats, deckNamesAndIds[deckName]),
     }));
   }
 
@@ -194,7 +196,7 @@ export class AnkiConnectGateway implements AnkiGateway {
 
     await this.invoke("deleteDecks", {
       decks: uniqueDeckNames,
-      cardsToo: false,
+      cardsToo: true,
     });
   }
 
@@ -244,27 +246,24 @@ export class AnkiConnectGateway implements AnkiGateway {
   }
 }
 
-function extractDeckNoteCount(rawStats: unknown, deckName: string): number | undefined {
+function extractDeckNoteCount(rawStats: unknown, deckId: number | undefined): number | undefined {
   if (!rawStats || typeof rawStats !== "object") {
     return undefined;
   }
 
-  for (const rawDeckStat of Object.values(rawStats as Record<string, unknown>)) {
-    if (!rawDeckStat || typeof rawDeckStat !== "object") {
-      continue;
-    }
-
-    const deckStat = rawDeckStat as RawDeckStats;
-    if (deckStat.name !== deckName) {
-      continue;
-    }
-
-    const totalInDeck = deckStat.total_in_deck;
-    if (typeof totalInDeck === "number" && Number.isFinite(totalInDeck)) {
-      return totalInDeck;
-    }
-
+  if (typeof deckId !== "number") {
     return undefined;
+  }
+
+  const rawDeckStat = (rawStats as Record<string, unknown>)[String(deckId)];
+  if (!rawDeckStat || typeof rawDeckStat !== "object") {
+    return undefined;
+  }
+
+  const deckStat = rawDeckStat as RawDeckStats;
+  const totalInDeck = deckStat.total_in_deck;
+  if (typeof totalInDeck === "number" && Number.isFinite(totalInDeck)) {
+    return totalInDeck;
   }
 
   return undefined;

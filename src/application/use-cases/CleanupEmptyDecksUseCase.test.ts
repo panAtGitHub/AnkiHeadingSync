@@ -83,6 +83,73 @@ describe("CleanupEmptyDecksUseCase", () => {
     expect(candidates).toEqual(["Empty A", "Empty B"]);
   });
 
+  it("excludes parent decks and keeps only empty leaf decks", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    ankiGateway.listedDeckNames = [
+      "999, 试验卡片",
+      "999, 试验卡片::试验卡",
+      "999, 试验卡片::试验卡2",
+      "999, 试验卡片::试验卡11",
+    ];
+    ankiGateway.deckStatsByName.set("999, 试验卡片", { deckName: "999, 试验卡片", noteCount: 0 });
+    ankiGateway.deckStatsByName.set("999, 试验卡片::试验卡", { deckName: "999, 试验卡片::试验卡", noteCount: 0 });
+    ankiGateway.deckStatsByName.set("999, 试验卡片::试验卡2", { deckName: "999, 试验卡片::试验卡2", noteCount: 0 });
+    ankiGateway.deckStatsByName.set("999, 试验卡片::试验卡11", { deckName: "999, 试验卡片::试验卡11", noteCount: 1 });
+    const useCase = new CleanupEmptyDecksUseCase(ankiGateway);
+
+    const candidates = await useCase.listCandidates();
+
+    expect(candidates).toEqual([
+      "999, 试验卡片::试验卡",
+      "999, 试验卡片::试验卡2",
+    ]);
+  });
+
+  it("does not delete a parent deck even if its direct count is zero", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    ankiGateway.listedDeckNames = [
+      "Parent",
+      "Parent::Empty",
+    ];
+    ankiGateway.deckStatsByName.set("Parent", { deckName: "Parent", noteCount: 0 });
+    ankiGateway.deckStatsByName.set("Parent::Empty", { deckName: "Parent::Empty", noteCount: 0 });
+    const useCase = new CleanupEmptyDecksUseCase(ankiGateway);
+
+    const candidates = await useCase.listCandidates();
+    const result = await useCase.execute(["Parent", "Parent::Empty"], candidates);
+
+    expect(candidates).toEqual(["Parent::Empty"]);
+    expect(result.deletedDeckNames).toEqual(["Parent::Empty"]);
+    expect(result.skippedDeckNames).toEqual(["Parent"]);
+    expect(ankiGateway.deletedDecks).toEqual([["Parent::Empty"]]);
+  });
+
+  it("excludes intermediate parent decks in deeper hierarchies", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    ankiGateway.listedDeckNames = [
+      "999, 试验卡片",
+      "999, 试验卡片::试验卡",
+      "999, 试验卡片::试验卡片2",
+      "999, 试验卡片::课件2",
+      "999, 试验卡片::课件2::卡片试验",
+      "999, 试验卡片::课件2::未命名1111",
+    ];
+    ankiGateway.deckStatsByName.set("999, 试验卡片", { deckName: "999, 试验卡片", noteCount: 0 });
+    ankiGateway.deckStatsByName.set("999, 试验卡片::试验卡", { deckName: "999, 试验卡片::试验卡", noteCount: 0 });
+    ankiGateway.deckStatsByName.set("999, 试验卡片::试验卡片2", { deckName: "999, 试验卡片::试验卡片2", noteCount: 0 });
+    ankiGateway.deckStatsByName.set("999, 试验卡片::课件2", { deckName: "999, 试验卡片::课件2", noteCount: 0 });
+    ankiGateway.deckStatsByName.set("999, 试验卡片::课件2::卡片试验", { deckName: "999, 试验卡片::课件2::卡片试验", noteCount: 2 });
+    ankiGateway.deckStatsByName.set("999, 试验卡片::课件2::未命名1111", { deckName: "999, 试验卡片::课件2::未命名1111", noteCount: 1 });
+    const useCase = new CleanupEmptyDecksUseCase(ankiGateway);
+
+    const candidates = await useCase.listCandidates();
+
+    expect(candidates).toEqual([
+      "999, 试验卡片::试验卡",
+      "999, 试验卡片::试验卡片2",
+    ]);
+  });
+
   it("returns zero candidates when Anki returns no stats for the listed decks", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     ankiGateway.listedDeckNames = ["Deck A", "Deck B", "Deck C"];
