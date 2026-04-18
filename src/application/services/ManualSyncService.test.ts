@@ -26,6 +26,8 @@ describe("ManualSyncService", () => {
     expect(result.warnings).toEqual([]);
     expect(ankiGateway.addedNotes[0]?.deckName).toBe("notes");
     expect(ankiGateway.ensuredDecks).toEqual([["notes"]]);
+    expect(ankiGateway.deletedNotes).toEqual([]);
+    expect(ankiGateway.deletedDecks).toEqual([]);
     expect(vaultGateway.getFileContent("notes/example.md")).toContain("<!-- AHS:card=");
     expect(vaultGateway.getFileContent("notes/example.md")).toContain("note=9001");
     expect(stateRepository.savedState?.pendingWriteBack).toEqual([]);
@@ -63,6 +65,8 @@ describe("ManualSyncService", () => {
     expect(result.migratedDecks).toBe(0);
     expect(ankiGateway.addedNotes).toHaveLength(0);
     expect(ankiGateway.changedDecks).toEqual([]);
+    expect(ankiGateway.deletedNotes).toEqual([]);
+    expect(ankiGateway.deletedDecks).toEqual([]);
     expect(vaultGateway.getFileContent("notes/example.md")).toContain("<!-- AHS:card=");
     expect(vaultGateway.getFileContent("notes/example.md")).not.toContain("note=");
   });
@@ -375,6 +379,8 @@ describe("ManualSyncService", () => {
 
     expect(result.migratedDecks).toBe(1);
     expect(ankiGateway.changedDecks).toEqual([{ deckName: "Scoped::Deck", cardIds: [7001] }]);
+    expect(ankiGateway.deletedNotes).toEqual([]);
+    expect(ankiGateway.deletedDecks).toEqual([]);
   });
 
   it("ordinary sync re-evaluates unchanged files when file-level deck is enabled and migrates old notes", async () => {

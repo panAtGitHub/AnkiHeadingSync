@@ -1,5 +1,6 @@
 import { Notice } from "obsidian";
 
+import type { ClearCurrentFileSyncedCardsResult, CleanupEmptyDecksResult } from "@/application/use-cases/cleanupResetTypes";
 import type { ManualSyncResult } from "@/application/use-cases/manualSyncTypes";
 
 export class NoticeService {
@@ -35,5 +36,26 @@ export class NoticeService {
     for (const warning of result.warnings.slice(0, 3)) {
       this.info(warning.message);
     }
+  }
+
+  showClearCurrentFileSummary(prefix: string, result: ClearCurrentFileSyncedCardsResult): void {
+    const summary = `${prefix}: tracked ${result.trackedCards}, deleted notes ${result.deletedNotes}, removed markers ${result.removedMarkers}, deleted local records ${result.deletedLocalRecords}.`;
+    const conflicts = result.conflictFiles.length > 0
+      ? ` Marker removal conflicts: ${result.conflictFiles.join(", ")}.`
+      : "";
+    const failures = result.failureFiles.length > 0
+      ? ` Failures: ${result.failureFiles.map((entry) => `${entry.filePath} (${entry.message})`).join(", ")}.`
+      : "";
+
+    this.info(`${summary}${conflicts}${failures}`);
+  }
+
+  showCleanupEmptyDecksSummary(prefix: string, result: CleanupEmptyDecksResult): void {
+    const summary = `${prefix}: candidates ${result.candidateCount}, selected ${result.selectedCount}, deleted ${result.deletedCount}, skipped ${result.skippedDeckNames.length}.`;
+    const skipped = result.skippedDeckNames.length > 0
+      ? ` Skipped decks: ${result.skippedDeckNames.join(", ")}.`
+      : "";
+
+    this.info(`${summary}${skipped}`);
   }
 }

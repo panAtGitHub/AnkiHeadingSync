@@ -131,9 +131,23 @@ export class CardIndexingService {
       const pending = pendingByCardId.get(markerCardId);
       const known = knownCardsById.get(markerCardId);
 
+      if (pending && pending.noteId !== undefined) {
+        return {
+          cardId: markerCardId,
+          noteId: pending.noteId,
+        };
+      }
+
+      if (known) {
+        return {
+          cardId: markerCardId,
+          noteId: known.noteId,
+        };
+      }
+
       return {
         cardId: markerCardId,
-        noteId: pending?.noteId ?? known?.noteId ?? markerNoteId,
+        noteId: markerNoteId,
       };
     }
 

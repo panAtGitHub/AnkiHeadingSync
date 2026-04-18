@@ -117,8 +117,16 @@ class FakeAnkiGateway implements AnkiGateway {
     return Object.keys(this.modelDetailsByName);
   }
 
+  async listDeckNames(): Promise<string[]> {
+    return [];
+  }
+
   async getModelDetails(modelName: string) {
     return this.modelDetailsByName[modelName] ?? { fieldNames: ["Front", "Back"], isCloze: false };
+  }
+
+  async getDeckStats(): Promise<Array<{ deckName: string; noteCount: number }>> {
+    return [];
   }
 
   async getNoteSummaries(noteIds: number[]): Promise<AnkiNoteSummary[]> {
@@ -138,6 +146,8 @@ class FakeAnkiGateway implements AnkiGateway {
     return Promise.all(inputs.map((input) => this.addNote(input)));
   }
 
+  async deleteNotes(): Promise<void> {}
+
   async updateNote(input: { noteId: number; deckName: string; fields: Record<string, string> }): Promise<void> {
     this.updatedNotes.push(input);
   }
@@ -149,6 +159,8 @@ class FakeAnkiGateway implements AnkiGateway {
   }
 
   async changeDecks(): Promise<void> {}
+
+  async deleteDecks(): Promise<void> {}
 
   async storeMedia(asset: { fileName: string }): Promise<void> {
     this.storedMedia.push(asset.fileName);

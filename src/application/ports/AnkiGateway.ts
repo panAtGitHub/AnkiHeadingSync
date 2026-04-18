@@ -25,17 +25,26 @@ export interface ChangeDeckInput {
   cardIds: number[];
 }
 
+export interface DeckStat {
+  deckName: string;
+  noteCount: number;
+}
+
 export interface AnkiGateway {
   ensureDeckExists(deckName: string): Promise<void>;
   ensureDecks(deckNames: string[]): Promise<void>;
   listNoteModels(): Promise<string[]>;
+  listDeckNames(): Promise<string[]>;
   getModelDetails(modelName: string): Promise<NoteModelDetails>;
+  getDeckStats(deckNames: string[]): Promise<DeckStat[]>;
   getNoteSummaries(noteIds: number[]): Promise<AnkiNoteSummary[]>;
   addNote(input: AddAnkiNoteInput): Promise<number>;
   addNotes(inputs: AddAnkiNoteInput[]): Promise<number[]>;
+  deleteNotes(noteIds: number[]): Promise<void>;
   updateNote(input: UpdateAnkiNoteInput): Promise<void>;
   updateNotes(inputs: UpdateAnkiNoteInput[]): Promise<void>;
   changeDecks(inputs: ChangeDeckInput[]): Promise<void>;
+  deleteDecks(deckNames: string[]): Promise<void>;
   storeMedia(asset: MediaAsset): Promise<void>;
   storeMediaFiles(assets: MediaAsset[]): Promise<void>;
 }

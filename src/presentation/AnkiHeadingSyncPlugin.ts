@@ -3,6 +3,8 @@ import { Plugin } from "obsidian";
 import { DEFAULT_SETTINGS, type PluginSettings } from "@/application/config/PluginSettings";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
 import { DeckTemplateInsertionService } from "@/application/services/DeckTemplateInsertionService";
+import { CleanupEmptyDecksUseCase } from "@/application/use-cases/CleanupEmptyDecksUseCase";
+import { ClearCurrentFileSyncedCardsUseCase } from "@/application/use-cases/ClearCurrentFileSyncedCardsUseCase";
 import { ManualSyncCurrentFileUseCase } from "@/application/use-cases/ManualSyncCurrentFileUseCase";
 import { RebuildCardIndexUseCase } from "@/application/use-cases/RebuildCardIndexUseCase";
 import { ManualSyncVaultUseCase } from "@/application/use-cases/ManualSyncVaultUseCase";
@@ -12,6 +14,7 @@ import { ObsidianVaultGateway } from "@/infrastructure/obsidian/ObsidianVaultGat
 import { DataJsonPluginConfigRepository, type PluginDataSnapshot } from "@/infrastructure/persistence/DataJsonPluginConfigRepository";
 import { DataJsonPluginStateRepository } from "@/infrastructure/persistence/DataJsonPluginStateRepository";
 import { registerCommands } from "@/presentation/commands/registerCommands";
+import { EmptyDeckSelectionModal } from "@/presentation/modals/EmptyDeckSelectionModal";
 import { NoticeService } from "@/presentation/notices/NoticeService";
 import { AnkiHeadingSyncSettingTab } from "@/presentation/settings/PluginSettingTab";
 import { CurrentFileOutOfScopeError, ManualSyncService } from "@/application/services/ManualSyncService";
@@ -28,6 +31,8 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
   private syncCurrentFileUseCase?: ManualSyncCurrentFileUseCase;
   private syncVaultUseCase?: ManualSyncVaultUseCase;
   private rebuildCardIndexUseCase?: RebuildCardIndexUseCase;
+  private clearCurrentFileSyncedCardsUseCase?: ClearCurrentFileSyncedCardsUseCase;
+  private cleanupEmptyDecksUseCase?: CleanupEmptyDecksUseCase;
   private pluginConfigRepository?: DataJsonPluginConfigRepository;
   private vaultGateway?: ManualSyncVaultGateway;
 
@@ -50,6 +55,8 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
     this.syncCurrentFileUseCase = new ManualSyncCurrentFileUseCase(manualSyncService);
     this.syncVaultUseCase = new ManualSyncVaultUseCase(manualSyncService);
     this.rebuildCardIndexUseCase = new RebuildCardIndexUseCase(manualSyncService);
+    this.clearCurrentFileSyncedCardsUseCase = new ClearCurrentFileSyncedCardsUseCase(pluginStateRepository, this.ankiGateway, vaultGateway);
+    this.cleanupEmptyDecksUseCase = new CleanupEmptyDecksUseCase(this.ankiGateway);
 
     registerCommands(this);
     this.addSettingTab(new AnkiHeadingSyncSettingTab(this));
@@ -183,6 +190,61 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
     } catch (error) {
       console.error("Deck template insertion failed.", error);
       this.noticeService.error(error instanceof Error ? error.message : "Deck template insertion failed.");
+    }
+  }
+
+  async runClearCurrentFileSyncedCards(): Promise<void> {
+    const activeFile = this.app.workspace.getActiveFile();
+
+    if (!activeFile || activeFile.extension.toLowerCase() !== "md") {
+      this.noticeService.error("No active Markdown file is available for reset.");
+      return;
+    }
+
+    if (!this.clearCurrentFileSyncedCardsUseCase) {
+      this.noticeService.error("Clear-current-file use case is not initialized.");
+      return;
+    }
+
+    try {
+      const hasTrackedCards = await this.clearCurrentFileSyncedCardsUseCase.hasTrackedCards(activeFile.path);
+      if (!hasTrackedCards) {
+        this.noticeService.info("当前文件没有已同步卡片");
+        return;
+      }
+
+      const result = await this.clearCurrentFileSyncedCardsUseCase.execute(activeFile.path);
+      this.noticeService.showClearCurrentFileSummary("当前文件已同步卡片清空完成", result);
+    } catch (error) {
+      console.error("Clear current file synced cards failed.", error);
+      this.noticeService.error(error instanceof Error ? error.message : "Clear current file synced cards failed.");
+    }
+  }
+
+  async runCleanupEmptyDecks(): Promise<void> {
+    if (!this.cleanupEmptyDecksUseCase) {
+      this.noticeService.error("Empty-deck cleanup use case is not initialized.");
+      return;
+    }
+
+    try {
+      const candidateDeckNames = await this.cleanupEmptyDecksUseCase.listCandidates();
+      if (candidateDeckNames.length === 0) {
+        this.noticeService.info("未发现可清理的空牌组");
+        return;
+      }
+
+      const selectedDeckNames = await new EmptyDeckSelectionModal(this.app, candidateDeckNames).openAndGetSelection();
+      if (selectedDeckNames === null) {
+        this.noticeService.info("已取消空牌组清理");
+        return;
+      }
+
+      const result = await this.cleanupEmptyDecksUseCase.execute(selectedDeckNames, candidateDeckNames);
+      this.noticeService.showCleanupEmptyDecksSummary("空牌组清理完成", result);
+    } catch (error) {
+      console.error("Cleanup empty decks failed.", error);
+      this.noticeService.error(error instanceof Error ? error.message : "Cleanup empty decks failed.");
     }
   }
 }

@@ -1,7 +1,7 @@
 import { requestUrl } from "obsidian";
 
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
-import type { AddAnkiNoteInput, AnkiGateway, AnkiNoteSummary, ChangeDeckInput, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
+import type { AddAnkiNoteInput, AnkiGateway, AnkiNoteSummary, ChangeDeckInput, DeckStat, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
 import type { MediaAsset } from "@/domain/card/entities/RenderedFields";
 
 interface AnkiResponse<T> {
@@ -13,6 +13,10 @@ interface NoteInfo {
   cards: number[];
   modelName?: string;
   noteId?: number;
+}
+
+interface RawDeckStats {
+  total_in_deck?: number;
 }
 
 type ModelTemplates = Record<string, unknown>;
@@ -36,6 +40,10 @@ export class AnkiConnectGateway implements AnkiGateway {
     return this.invoke<string[]>("modelNames", {});
   }
 
+  async listDeckNames(): Promise<string[]> {
+    return this.invoke<string[]>("deckNames", {});
+  }
+
   async getModelDetails(modelName: string): Promise<NoteModelDetails> {
     const fieldNames = await this.invoke<string[]>("modelFieldNames", { modelName });
     let isCloze = modelName.toLowerCase().includes("cloze");
@@ -51,6 +59,21 @@ export class AnkiConnectGateway implements AnkiGateway {
       fieldNames,
       isCloze,
     };
+  }
+
+  async getDeckStats(deckNames: string[]): Promise<DeckStat[]> {
+    if (deckNames.length === 0) {
+      return [];
+    }
+
+    const rawStats = await this.invoke<Record<string, RawDeckStats>>("getDeckStats", {
+      decks: deckNames,
+    });
+
+    return deckNames.map((deckName) => ({
+      deckName,
+      noteCount: rawStats[deckName]?.total_in_deck ?? 0,
+    }));
   }
 
   async getNoteSummaries(noteIds: number[]): Promise<AnkiNoteSummary[]> {
@@ -108,6 +131,16 @@ export class AnkiConnectGateway implements AnkiGateway {
     })));
   }
 
+  async deleteNotes(noteIds: number[]): Promise<void> {
+    if (noteIds.length === 0) {
+      return;
+    }
+
+    await this.invoke("deleteNotes", {
+      notes: noteIds,
+    });
+  }
+
   async updateNote(input: UpdateAnkiNoteInput): Promise<void> {
     await this.invoke("updateNoteFields", {
       note: {
@@ -149,6 +182,18 @@ export class AnkiConnectGateway implements AnkiGateway {
         deck: input.deckName,
       },
     })));
+  }
+
+  async deleteDecks(deckNames: string[]): Promise<void> {
+    const uniqueDeckNames = Array.from(new Set(deckNames));
+    if (uniqueDeckNames.length === 0) {
+      return;
+    }
+
+    await this.invoke("deleteDecks", {
+      decks: uniqueDeckNames,
+      cardsToo: false,
+    });
   }
 
   async storeMedia(asset: MediaAsset): Promise<void> {

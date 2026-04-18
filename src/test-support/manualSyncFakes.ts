@@ -1,7 +1,7 @@
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import { DEFAULT_SETTINGS } from "@/application/config/PluginSettings";
 import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
-import type { AddAnkiNoteInput, AnkiGateway, AnkiNoteSummary, ChangeDeckInput, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
+import type { AddAnkiNoteInput, AnkiGateway, AnkiNoteSummary, ChangeDeckInput, DeckStat, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
 import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
 import type { PluginStateRepository } from "@/application/ports/PluginStateRepository";
 import { MarkdownWriteConflictError } from "@/application/ports/VaultGateway";
@@ -137,10 +137,13 @@ export class FakeManualSyncVaultGateway implements ManualSyncVaultGateway {
 export class FakeManualSyncAnkiGateway implements AnkiGateway {
   public ensuredDecks: string[][] = [];
   public addedNotes: AddAnkiNoteInput[] = [];
+  public deletedNotes: number[][] = [];
   public updatedNotes: UpdateAnkiNoteInput[] = [];
   public changedDecks: ChangeDeckInput[] = [];
+  public deletedDecks: string[][] = [];
   public storedMedia: MediaAsset[] = [];
   public noteSummariesById = new Map<number, AnkiNoteSummary>();
+  public deckStatsByName = new Map<string, DeckStat>();
   public modelDetailsByName: Record<string, NoteModelDetails> = {
     Basic: { fieldNames: ["Front", "Back"], isCloze: false },
     Cloze: { fieldNames: ["Text", "Extra"], isCloze: true },
@@ -160,8 +163,16 @@ export class FakeManualSyncAnkiGateway implements AnkiGateway {
     return Object.keys(this.modelDetailsByName);
   }
 
+  async listDeckNames(): Promise<string[]> {
+    return Array.from(this.deckStatsByName.keys());
+  }
+
   async getModelDetails(modelName: string): Promise<NoteModelDetails> {
     return this.modelDetailsByName[modelName] ?? { fieldNames: ["Front", "Back"], isCloze: false };
+  }
+
+  async getDeckStats(deckNames: string[]): Promise<DeckStat[]> {
+    return deckNames.map((deckName) => this.deckStatsByName.get(deckName) ?? { deckName, noteCount: 0 });
   }
 
   async getNoteSummaries(noteIds: number[]): Promise<AnkiNoteSummary[]> {
@@ -184,6 +195,10 @@ export class FakeManualSyncAnkiGateway implements AnkiGateway {
     });
   }
 
+  async deleteNotes(noteIds: number[]): Promise<void> {
+    this.deletedNotes.push(noteIds);
+  }
+
   async updateNote(input: UpdateAnkiNoteInput): Promise<void> {
     await this.updateNotes([input]);
   }
@@ -194,6 +209,10 @@ export class FakeManualSyncAnkiGateway implements AnkiGateway {
 
   async changeDecks(inputs: ChangeDeckInput[]): Promise<void> {
     this.changedDecks.push(...inputs);
+  }
+
+  async deleteDecks(deckNames: string[]): Promise<void> {
+    this.deletedDecks.push(deckNames);
   }
 
   async storeMedia(asset: MediaAsset): Promise<void> {

@@ -131,6 +131,31 @@ describe("CardIndexingService", () => {
     });
   });
 
+  it("prefers a known card with cleared noteId over a stale marker noteId", () => {
+    const service = new CardIndexingService();
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: ["#### Prompt", "Answer", "<!-- AHS:card=ahs_known note=42 -->"].join("\n"),
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        fileStamp: "1:1",
+        knownCards: [createKnownCardState({ cardId: "ahs_known", noteId: undefined })],
+        pendingWriteBack: [],
+      },
+    );
+
+    expect(indexedFile.cards[0]).toMatchObject({
+      cardId: "ahs_known",
+      noteId: undefined,
+      markerNoteId: 42,
+      markerState: "card-and-note",
+    });
+  });
+
   it("rejects misplaced or multiple markers inside a single heading block", () => {
     const service = new CardIndexingService();
 
@@ -256,7 +281,7 @@ function createKnownCardState(overrides: Partial<CardState> = {}): CardState {
 
   return {
     cardId: overrides.cardId ?? "ahs_known",
-    noteId: overrides.noteId ?? 42,
+    noteId: Object.prototype.hasOwnProperty.call(overrides, "noteId") ? overrides.noteId : 42,
     filePath: overrides.filePath ?? "notes/example.md",
     heading: overrides.heading ?? "Prompt",
     headingLevel: overrides.headingLevel ?? 4,

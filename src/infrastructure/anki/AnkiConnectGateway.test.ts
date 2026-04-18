@@ -34,6 +34,25 @@ describe("AnkiConnectGateway", () => {
     });
   });
 
+  it("loads deck names from AnkiConnect", async () => {
+    requestUrlMock.mockResolvedValue({
+      json: {
+        error: null,
+        result: ["Default", "Scoped::Deck"],
+      },
+    });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    const deckNames = await gateway.listDeckNames();
+
+    expect(deckNames).toEqual(["Default", "Scoped::Deck"]);
+    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+      action: "deckNames",
+      version: 6,
+      params: {},
+    });
+  });
+
   it("loads model fields and detects cloze templates", async () => {
     requestUrlMock
       .mockResolvedValueOnce({
@@ -84,6 +103,33 @@ describe("AnkiConnectGateway", () => {
       version: 6,
       params: {
         notes: [100, 101, 102],
+      },
+    });
+  });
+
+  it("maps deck stats into empty-deck detection shape", async () => {
+    requestUrlMock.mockResolvedValue({
+      json: {
+        error: null,
+        result: {
+          Empty: { total_in_deck: 0 },
+          Busy: { total_in_deck: 3 },
+        },
+      },
+    });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    const stats = await gateway.getDeckStats(["Empty", "Busy"]);
+
+    expect(stats).toEqual([
+      { deckName: "Empty", noteCount: 0 },
+      { deckName: "Busy", noteCount: 3 },
+    ]);
+    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+      action: "getDeckStats",
+      version: 6,
+      params: {
+        decks: ["Empty", "Busy"],
       },
     });
   });
@@ -228,6 +274,42 @@ describe("AnkiConnectGateway", () => {
             },
           },
         ],
+      },
+    });
+  });
+
+  it("deletes notes and empty decks through direct actions", async () => {
+    requestUrlMock
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: null,
+        },
+      })
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: null,
+        },
+      });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    await gateway.deleteNotes([1, 2]);
+    await gateway.deleteDecks(["Empty", "Empty", "Scoped::Deck"]);
+
+    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+      action: "deleteNotes",
+      version: 6,
+      params: {
+        notes: [1, 2],
+      },
+    });
+    expect(JSON.parse(requestUrlMock.mock.calls[1][0].body)).toEqual({
+      action: "deleteDecks",
+      version: 6,
+      params: {
+        decks: ["Empty", "Scoped::Deck"],
+        cardsToo: false,
       },
     });
   });

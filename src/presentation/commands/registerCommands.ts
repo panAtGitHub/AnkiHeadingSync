@@ -24,4 +24,20 @@ export function registerCommands(plugin: AnkiHeadingSyncPlugin): void {
       void plugin.runRebuildCardIndex();
     },
   });
+
+  plugin.addCommand({
+    id: "clear-current-file-synced-cards",
+    name: "清空当前文件已同步卡片",
+    callback: () => {
+      void plugin.runClearCurrentFileSyncedCards();
+    },
+  });
+
+  plugin.addCommand({
+    id: "cleanup-empty-decks",
+    name: "清理空牌组",
+    callback: () => {
+      void plugin.runCleanupEmptyDecks();
+    },
+  });
 }

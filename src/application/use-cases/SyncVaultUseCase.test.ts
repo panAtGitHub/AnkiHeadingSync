@@ -92,6 +92,10 @@ class FakeAnkiGateway implements AnkiGateway {
     return ["Basic", "Cloze"];
   }
 
+  async listDeckNames(): Promise<string[]> {
+    return [];
+  }
+
   async getModelDetails(modelName: string) {
     return modelName === "Cloze"
       ? { fieldNames: ["Text", "Extra"], isCloze: true }
@@ -99,6 +103,10 @@ class FakeAnkiGateway implements AnkiGateway {
   }
 
   async getNoteSummaries(): Promise<Array<{ noteId: number; modelName: string; cardIds: number[] }>> {
+    return [];
+  }
+
+  async getDeckStats(): Promise<Array<{ deckName: string; noteCount: number }>> {
     return [];
   }
 
@@ -111,6 +119,8 @@ class FakeAnkiGateway implements AnkiGateway {
     return Promise.all(inputs.map((input) => this.addNote(input)));
   }
 
+  async deleteNotes(): Promise<void> {}
+
   async updateNote(input: { noteId: number; deckName: string; fields: Record<string, string> }): Promise<void> {
     this.updateCalls.push(input);
   }
@@ -122,6 +132,8 @@ class FakeAnkiGateway implements AnkiGateway {
   }
 
   async changeDecks(): Promise<void> {}
+
+  async deleteDecks(): Promise<void> {}
 
   async storeMedia(): Promise<void> {}
 
