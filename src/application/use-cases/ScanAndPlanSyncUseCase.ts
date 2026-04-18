@@ -23,7 +23,7 @@ export class ScanAndPlanSyncUseCase {
     validatePluginSettings(settings);
 
     const markdownFiles = await this.vaultGateway.listMarkdownFiles();
-    const scopedFiles = this.scanScopeService.filter(markdownFiles, settings.includeFolders, settings.excludeFolders);
+    const scopedFiles = this.scanScopeService.filter(markdownFiles, settings.scopeMode, settings.includeFolders, settings.excludeFolders);
 
     return this.scanFiles(scopedFiles, settings);
   }

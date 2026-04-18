@@ -18,12 +18,13 @@ class InMemoryPluginDataStore implements PluginDataStore<PluginDataSnapshot> {
 }
 
 describe("DataJsonPluginConfigRepository", () => {
-  it("loads legacy settings snapshots without noteFieldMappings", async () => {
+  it("loads legacy settings snapshots without noteFieldMappings and defaults scopeMode to all", async () => {
     const repository = new DataJsonPluginConfigRepository(
       new InMemoryPluginDataStore({
         settings: {
           qaNoteType: "Legacy Basic",
           clozeNoteType: "Legacy Cloze",
+          includeFolders: ["cards"],
         },
       }),
     );
@@ -33,6 +34,8 @@ describe("DataJsonPluginConfigRepository", () => {
     expect(settings.qaNoteType).toBe("Legacy Basic");
     expect(settings.clozeNoteType).toBe("Legacy Cloze");
     expect(settings.noteFieldMappings).toEqual({});
+    expect(settings.scopeMode).toBe("all");
+    expect(settings.includeFolders).toEqual(["cards"]);
   });
 
   it("persists note field mappings across save and reload", async () => {

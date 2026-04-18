@@ -1,6 +1,7 @@
-import { TFile } from "obsidian";
+import { TFile, TFolder } from "obsidian";
 import type { App } from "obsidian";
 
+import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
 import type { MarkdownFileReference, ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
 import { MarkdownFileNotFoundError, MarkdownWriteConflictError, type VaultGateway } from "@/application/ports/VaultGateway";
 import { hashString } from "@/domain/shared/hash";
@@ -11,6 +12,13 @@ const AUDIO_EXTENSIONS = new Set(["wav", "m4a", "flac", "mp3", "wma", "aac", "we
 
 export class ObsidianVaultGateway implements VaultGateway, ManualSyncVaultGateway {
   constructor(private readonly app: App) {}
+
+  async listFolderTree(): Promise<FolderTreeNode[]> {
+    return this.app.vault
+      .getRoot()
+      .children.filter((child): child is TFolder => child instanceof TFolder)
+      .map((folder) => this.toFolderTreeNode(folder));
+  }
 
   async listMarkdownFileRefs(): Promise<MarkdownFileReference[]> {
     return this.app.vault.getMarkdownFiles().map((file) => ({
@@ -111,6 +119,14 @@ export class ObsidianVaultGateway implements VaultGateway, ManualSyncVaultGatewa
 
   private createObsidianUrl(target: string): string {
     return `obsidian://open?vault=${encodeURIComponent(this.app.vault.getName())}&file=${encodeURIComponent(target)}`;
+  }
+
+  private toFolderTreeNode(folder: TFolder): FolderTreeNode {
+    return {
+      path: folder.path,
+      name: folder.name,
+      children: folder.children.filter((child): child is TFolder => child instanceof TFolder).map((child) => this.toFolderTreeNode(child)),
+    };
   }
 }
 

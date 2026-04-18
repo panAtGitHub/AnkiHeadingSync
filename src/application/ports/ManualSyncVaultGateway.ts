@@ -1,3 +1,4 @@
+import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
 import type { SourceFile } from "@/domain/card/entities/SourceFile";
 import type { RenderResourceResolver } from "@/domain/card/ports/RenderResourceResolver";
 
@@ -9,6 +10,7 @@ export interface MarkdownFileReference {
 }
 
 export interface ManualSyncVaultGateway extends RenderResourceResolver {
+  listFolderTree(): Promise<FolderTreeNode[]>;
   listMarkdownFileRefs(): Promise<MarkdownFileReference[]>;
   readMarkdownFile(path: string): Promise<SourceFile | null>;
   replaceMarkdownFile(path: string, expectedContent: string, nextContent: string): Promise<void>;

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createModule3Settings } from "@/test-support/manualSyncFakes";
 import { createEmptyPluginState } from "@/domain/manual-sync/entities/PluginState";
+import { RenderConfigService } from "@/application/services/RenderConfigService";
 
 import { DiffPlannerService } from "./DiffPlannerService";
 
@@ -35,6 +36,66 @@ describe("DiffPlannerService", () => {
     );
 
     expect(plan.toCreate).toHaveLength(1);
+  });
+
+  it("rewrites a missing marker without create or update when the restored card content is unchanged", () => {
+    const service = new DiffPlannerService();
+    const settings = createModule3Settings();
+    const card = {
+      cardId: "ahs_known",
+      noteId: 42,
+      filePath: "notes/example.md",
+      cardType: "basic" as const,
+      heading: "Prompt",
+      headingLevel: 4,
+      bodyMarkdown: "Body",
+      blockStartOffset: 0,
+      blockEndOffset: 16,
+      blockStartLine: 1,
+      bodyStartLine: 2,
+      blockEndLine: 2,
+      contentEndLine: 2,
+      rawBlockText: ["#### Prompt", "Body"].join("\n"),
+      rawBlockHash: "hash-card",
+      tagsHint: [],
+      markerState: "missing" as const,
+    };
+    const renderPlan = new RenderConfigService().resolve(card, settings);
+    const state = {
+      files: {},
+      cards: {
+        ahs_known: {
+          cardId: "ahs_known",
+          noteId: 42,
+          filePath: "notes/example.md",
+          heading: "Prompt",
+          headingLevel: 4,
+          bodyMarkdown: "Body",
+          cardType: "basic" as const,
+          blockStartOffset: 0,
+          blockEndOffset: 16,
+          blockStartLine: 1,
+          bodyStartLine: 2,
+          blockEndLine: 2,
+          contentEndLine: 2,
+          rawBlockText: ["#### Prompt", "Body"].join("\n"),
+          rawBlockHash: "hash-card",
+          renderConfigHash: renderPlan.renderConfigHash,
+          deck: renderPlan.deck,
+          tagsHint: [],
+          lastSyncedAt: 1,
+          orphan: false,
+        },
+      },
+      pendingWriteBack: [],
+    };
+
+    const plan = service.plan([card], state, ["notes/example.md"], settings);
+
+    expect(plan.toCreate).toHaveLength(0);
+    expect(plan.toUpdate).toHaveLength(0);
+    expect(plan.toRewriteMarker.map((plannedCard) => plannedCard.card.cardId)).toEqual(["ahs_known"]);
+    expect(plan.unchangedCards).toBe(1);
   });
 
   it("uses rawBlockHash, renderConfigHash, and pending entries to schedule updates and rewrites", () => {

@@ -13,7 +13,9 @@ import { DataJsonPluginStateRepository } from "@/infrastructure/persistence/Data
 import { registerCommands } from "@/presentation/commands/registerCommands";
 import { NoticeService } from "@/presentation/notices/NoticeService";
 import { AnkiHeadingSyncSettingTab } from "@/presentation/settings/PluginSettingTab";
-import { ManualSyncService } from "@/application/services/ManualSyncService";
+import { CurrentFileOutOfScopeError, ManualSyncService } from "@/application/services/ManualSyncService";
+import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
+import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
 
 export default class AnkiHeadingSyncPlugin extends Plugin {
   settings: PluginSettings = DEFAULT_SETTINGS;
@@ -25,12 +27,14 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
   private syncVaultUseCase?: ManualSyncVaultUseCase;
   private rebuildCardIndexUseCase?: RebuildCardIndexUseCase;
   private pluginConfigRepository?: DataJsonPluginConfigRepository;
+  private vaultGateway?: ManualSyncVaultGateway;
 
   async onload(): Promise<void> {
     const pluginDataStore = new ObsidianPluginDataStore<PluginDataSnapshot>(this);
     this.pluginConfigRepository = new DataJsonPluginConfigRepository(pluginDataStore);
     const pluginStateRepository = new DataJsonPluginStateRepository(pluginDataStore);
     const vaultGateway = new ObsidianVaultGateway(this.app);
+    this.vaultGateway = vaultGateway;
 
     try {
       this.settings = await this.pluginConfigRepository.load();
@@ -75,6 +79,14 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
     return this.ankiGateway.getModelDetails(modelName);
   }
 
+  async listFolderTree(): Promise<FolderTreeNode[]> {
+    if (!this.vaultGateway) {
+      return [];
+    }
+
+    return this.vaultGateway.listFolderTree();
+  }
+
   async runSyncCurrentFile(): Promise<void> {
     const activeFile = this.app.workspace.getActiveFile();
 
@@ -92,6 +104,11 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
       const result = await this.syncCurrentFileUseCase.execute(activeFile.path, this.settings);
       this.noticeService.showSyncSummary("当前文件同步完成", result);
     } catch (error) {
+      if (error instanceof CurrentFileOutOfScopeError) {
+        this.noticeService.info("当前文件不在插件作用范围内");
+        return;
+      }
+
       console.error("Current file sync failed.", error);
       this.noticeService.error(error instanceof Error ? error.message : "Current file sync failed.");
     }

@@ -1,5 +1,6 @@
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import { DEFAULT_SETTINGS } from "@/application/config/PluginSettings";
+import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
 import type { AddAnkiNoteInput, AnkiGateway, AnkiNoteSummary, ChangeDeckInput, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
 import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
 import type { PluginStateRepository } from "@/application/ports/PluginStateRepository";
@@ -47,6 +48,36 @@ export class FakeManualSyncVaultGateway implements ManualSyncVaultGateway {
       mtime: file.mtime,
       size: file.size,
     }));
+  }
+
+  async listFolderTree(): Promise<FolderTreeNode[]> {
+    const rootMap = new Map<string, FolderTreeNode>();
+
+    for (const path of this.files.keys()) {
+      const segments = path.split("/");
+      segments.pop();
+
+      let currentPath = "";
+      let siblings = rootMap;
+      for (const segment of segments) {
+        currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+        const existing = siblings.get(currentPath);
+        if (existing) {
+          siblings = new Map(existing.children.map((child) => [child.path, child]));
+          continue;
+        }
+
+        const nextNode: FolderTreeNode = {
+          path: currentPath,
+          name: segment,
+          children: [],
+        };
+        siblings.set(currentPath, nextNode);
+        siblings = new Map();
+      }
+    }
+
+    return buildFolderTree(Array.from(this.files.keys()));
   }
 
   async readMarkdownFile(path: string): Promise<SourceFile | null> {
@@ -196,4 +227,37 @@ export function createModule3Settings(overrides: Partial<PluginSettings> = {}): 
     },
     ...overrides,
   };
+}
+
+function buildFolderTree(filePaths: string[]): FolderTreeNode[] {
+  const root: FolderTreeNode = {
+    path: "",
+    name: "",
+    children: [],
+  };
+  const nodeByPath = new Map<string, FolderTreeNode>([["", root]]);
+
+  for (const filePath of filePaths) {
+    const folderSegments = filePath.split("/").slice(0, -1);
+    let currentPath = "";
+
+    for (const segment of folderSegments) {
+      currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+      if (nodeByPath.has(currentPath)) {
+        continue;
+      }
+
+      const node: FolderTreeNode = {
+        path: currentPath,
+        name: segment,
+        children: [],
+      };
+      nodeByPath.set(currentPath, node);
+
+      const parentPath = currentPath.includes("/") ? currentPath.slice(0, currentPath.lastIndexOf("/")) : "";
+      nodeByPath.get(parentPath)?.children.push(node);
+    }
+  }
+
+  return root.children;
 }

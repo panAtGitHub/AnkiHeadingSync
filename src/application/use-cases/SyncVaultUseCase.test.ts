@@ -178,8 +178,8 @@ describe("SyncVaultUseCase", () => {
 
     const result = await useCase.execute(
       createSettings({
-        includeFolders: ["cards"],
-        excludeFolders: ["cards/skip"],
+        scopeMode: "exclude",
+        excludeFolders: ["cards/skip", "outside"],
       }),
     );
     const snapshot = store.readSnapshot();

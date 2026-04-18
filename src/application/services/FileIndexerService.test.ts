@@ -15,6 +15,7 @@ describe("FileIndexerService", () => {
 
     await service.indexVault(
       createModule3Settings({
+        scopeMode: "include",
         includeFolders: ["keep"],
       }),
       createEmptyPluginState(),

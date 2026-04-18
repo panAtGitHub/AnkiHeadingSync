@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ScanScopeService } from "./ScanScopeService";
 
 describe("ScanScopeService", () => {
-  it("scans the whole vault when includeFolders is empty", () => {
+  it("scans the whole vault when scopeMode is all", () => {
     const service = new ScanScopeService();
     const files = service.filter(
       [
@@ -11,6 +11,7 @@ describe("ScanScopeService", () => {
         { path: "notes/two.md", basename: "two", content: "" },
         { path: "notes/three.txt", basename: "three", content: "" },
       ],
+      "all",
       [],
       [],
     );
@@ -18,7 +19,7 @@ describe("ScanScopeService", () => {
     expect(files.map((file) => file.path)).toEqual(["notes/one.md", "notes/two.md"]);
   });
 
-  it("applies includeFolders and excludeFolders together", () => {
+  it("only scans folders selected by include mode", () => {
     const service = new ScanScopeService();
     const files = service.filter(
       [
@@ -26,10 +27,27 @@ describe("ScanScopeService", () => {
         { path: "cards/archive/b.md", basename: "b", content: "" },
         { path: "other/c.md", basename: "c", content: "" },
       ],
+      "include",
       ["cards"],
+      [],
+    );
+
+    expect(files.map((file) => file.path)).toEqual(["cards/a.md", "cards/archive/b.md"]);
+  });
+
+  it("skips excluded folders in exclude mode", () => {
+    const service = new ScanScopeService();
+    const files = service.filter(
+      [
+        { path: "cards/a.md", basename: "a", content: "" },
+        { path: "cards/archive/b.md", basename: "b", content: "" },
+        { path: "other/c.md", basename: "c", content: "" },
+      ],
+      "exclude",
+      [],
       ["cards/archive"],
     );
 
-    expect(files.map((file) => file.path)).toEqual(["cards/a.md"]);
+    expect(files.map((file) => file.path)).toEqual(["cards/a.md", "other/c.md"]);
   });
 });

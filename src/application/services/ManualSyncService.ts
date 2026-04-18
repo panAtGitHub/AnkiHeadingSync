@@ -7,6 +7,7 @@ import { AnkiBatchExecutor } from "@/application/services/AnkiBatchExecutor";
 import { FileIndexerService } from "@/application/services/FileIndexerService";
 import { MarkdownWriteBackService } from "@/application/services/MarkdownWriteBackService";
 import { RenderConfigService } from "@/application/services/RenderConfigService";
+import { ScanScopeService } from "@/application/services/ScanScopeService";
 import type { IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
 import type { PluginState } from "@/domain/manual-sync/entities/PluginState";
 import type { RenderedSyncCard } from "@/domain/manual-sync/entities/RenderedSyncCard";
@@ -15,7 +16,16 @@ import { ManualCardRenderer, type ManualCardRenderContext } from "@/domain/manua
 
 import type { ManualSyncResult } from "@/application/use-cases/manualSyncTypes";
 
+export class CurrentFileOutOfScopeError extends Error {
+  constructor(filePath: string) {
+    super(`当前文件不在插件作用范围内: ${filePath}`);
+    this.name = "CurrentFileOutOfScopeError";
+  }
+}
+
 export class ManualSyncService {
+  private readonly scanScopeService = new ScanScopeService();
+
   constructor(
     private readonly vaultGateway: ManualSyncVaultGateway,
     private readonly pluginStateRepository: PluginStateRepository,
@@ -38,6 +48,10 @@ export class ManualSyncService {
 
   async syncFile(filePath: string, settings: PluginSettings): Promise<ManualSyncResult> {
     validatePluginSettings(settings);
+    if (!this.scanScopeService.isPathInScope(filePath, settings.scopeMode, settings.includeFolders, settings.excludeFolders)) {
+      throw new CurrentFileOutOfScopeError(filePath);
+    }
+
     const state = await this.pluginStateRepository.load();
     const indexResult = await this.fileIndexerService.indexFile(filePath, settings, state);
     return this.syncIndexedResult(indexResult, state, settings);

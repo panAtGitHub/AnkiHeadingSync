@@ -6,24 +6,72 @@ import { DEFAULT_SETTINGS } from "@/application/config/PluginSettings";
 const {
   FakeButtonComponent,
   FakeDropdownComponent,
+  FakeElement,
   FakePluginSettingTab,
   FakeSetting,
 } = vi.hoisted(() => {
-  class HoistedFakeContainerEl {
-    settings: HoistedFakeSetting[] = [];
-    textNodes: string[] = [];
+  class HoistedFakeElement {
+    public readonly children: HoistedFakeElement[] = [];
+    public readonly dataset: Record<string, string> = {};
+    public checked = false;
+    public indeterminate = false;
+    public type = "";
+    public value = "";
+    public text = "";
+
+    private readonly listeners = new Map<string, Array<() => void | Promise<void>>>();
+
+    constructor(
+      public readonly root: HoistedFakeContainerEl,
+      public readonly tag: string,
+    ) {}
+
+    createEl(tag: string, options?: { text?: string }): HoistedFakeElement {
+      const child = new HoistedFakeElement(this.root, tag);
+      if (options?.text) {
+        child.text = options.text;
+        this.root.textNodes.push(options.text);
+      }
+
+      this.children.push(child);
+      return child;
+    }
+
+    createDiv(options?: { text?: string }): HoistedFakeElement {
+      return this.createEl("div", options);
+    }
+
+    addEventListener(eventName: string, callback: () => void | Promise<void>): void {
+      const callbacks = this.listeners.get(eventName) ?? [];
+      callbacks.push(callback);
+      this.listeners.set(eventName, callbacks);
+    }
+
+    async trigger(eventName: string): Promise<void> {
+      for (const callback of this.listeners.get(eventName) ?? []) {
+        await callback();
+      }
+    }
+
+    setAttr(name: string, value: string | number): this {
+      (this as Record<string, unknown>)[name] = value;
+      return this;
+    }
+  }
+
+  class HoistedFakeContainerEl extends HoistedFakeElement {
+    public settings: HoistedFakeSetting[] = [];
+    public textNodes: string[] = [];
+
+    constructor() {
+      super(undefined as never, "root");
+      (this as { root: HoistedFakeContainerEl }).root = this;
+    }
 
     empty(): void {
       this.settings = [];
       this.textNodes = [];
-    }
-
-    createEl(_tag: string, options?: { text?: string }): HoistedFakeContainerEl {
-      if (options?.text) {
-        this.textNodes.push(options.text);
-      }
-
-      return this;
+      this.children.length = 0;
     }
   }
 
@@ -107,7 +155,7 @@ const {
 
   class HoistedFakeSetting {
     public name = "";
-    public desc = "";
+    public desc: unknown = "";
     public controls: Array<
       HoistedFakeButtonComponent | HoistedFakeDropdownComponent | HoistedFakeTextComponent | HoistedFakeToggleComponent
     > = [];
@@ -121,7 +169,7 @@ const {
       return this;
     }
 
-    setDesc(desc: string): this {
+    setDesc(desc: unknown): this {
       this.desc = desc;
       return this;
     }
@@ -173,8 +221,8 @@ const {
 
   return {
     FakeButtonComponent: HoistedFakeButtonComponent,
-    FakeContainerEl: HoistedFakeContainerEl,
     FakeDropdownComponent: HoistedFakeDropdownComponent,
+    FakeElement: HoistedFakeElement,
     FakePluginSettingTab: HoistedFakePluginSettingTab,
     FakeSetting: HoistedFakeSetting,
   };
@@ -191,6 +239,7 @@ type FakeContainerElInstance = InstanceType<typeof FakePluginSettingTab>["contai
 type FakeSettingInstance = InstanceType<typeof FakeSetting>;
 type FakeButtonComponentInstance = InstanceType<typeof FakeButtonComponent>;
 type FakeDropdownComponentInstance = InstanceType<typeof FakeDropdownComponent>;
+type FakeElementInstance = InstanceType<typeof FakeElement>;
 
 class FakePlugin {
   public readonly app = {};
@@ -199,6 +248,29 @@ class FakePlugin {
     qaNoteType: "Custom Basic",
     noteFieldMappings: {},
   };
+  public folderTree = [
+    {
+      path: "notes",
+      name: "notes",
+      children: [
+        {
+          path: "notes/sub",
+          name: "sub",
+          children: [],
+        },
+        {
+          path: "notes/other",
+          name: "other",
+          children: [],
+        },
+      ],
+    },
+    {
+      path: "empty",
+      name: "empty",
+      children: [],
+    },
+  ];
 
   async updateSettings(partialSettings: Record<string, unknown>): Promise<void> {
     this.settings = {
@@ -224,6 +296,10 @@ class FakePlugin {
       isCloze: false,
     };
   }
+
+  async listFolderTree() {
+    return this.folderTree;
+  }
 }
 
 function findSetting(containerEl: FakeContainerElInstance, name: string): FakeSettingInstance {
@@ -234,6 +310,10 @@ function findSetting(containerEl: FakeContainerElInstance, name: string): FakeSe
   }
 
   return setting;
+}
+
+function querySetting(containerEl: FakeContainerElInstance, name: string): FakeSettingInstance | undefined {
+  return containerEl.settings.find((candidate: FakeSettingInstance) => candidate.name === name);
 }
 
 function getButton(setting: FakeSettingInstance): FakeButtonComponentInstance {
@@ -254,6 +334,46 @@ function getDropdown(setting: FakeSettingInstance): FakeDropdownComponentInstanc
   }
 
   return dropdown;
+}
+
+function queryCheckboxByPath(containerEl: FakeContainerElInstance, folderPath: string): FakeElementInstance | undefined {
+  return findElement(containerEl, (element) => element.tag === "input" && element.dataset.folderPath === folderPath);
+}
+
+function getCheckboxByPath(containerEl: FakeContainerElInstance, folderPath: string): FakeElementInstance {
+  const checkbox = queryCheckboxByPath(containerEl, folderPath);
+  if (!checkbox) {
+    throw new Error(`Checkbox not found for folder path: ${folderPath}`);
+  }
+
+  return checkbox;
+}
+
+function findElement(
+  root: FakeElementInstance,
+  predicate: (element: FakeElementInstance) => boolean,
+): FakeElementInstance | undefined {
+  if (predicate(root)) {
+    return root;
+  }
+
+  for (const child of root.children) {
+    if (!(child instanceof FakeElement)) {
+      continue;
+    }
+
+    const match = findElement(child as FakeElementInstance, predicate);
+    if (match) {
+      return match;
+    }
+  }
+
+  return undefined;
+}
+
+async function flushAsync(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 describe("AnkiHeadingSyncSettingTab", () => {
@@ -316,5 +436,65 @@ describe("AnkiHeadingSyncSettingTab", () => {
 
     const mainFieldDropdown = getDropdown(findSetting(container, "Cloze main field"));
     expect(mainFieldDropdown.value).toBe("Text");
+  });
+
+  it("removes the old folder textareas and hides the folder tree in all mode", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+    const container = tab.containerEl as unknown as FakeContainerElInstance;
+
+    tab.display();
+    await flushAsync();
+
+    expect(querySetting(container, "Include folders")).toBeUndefined();
+    expect(querySetting(container, "Exclude folders")).toBeUndefined();
+    expect(findSetting(container, "运行范围")).toBeDefined();
+    expect(queryCheckboxByPath(container, "notes")).toBeUndefined();
+  });
+
+  it("shows the folder tree in include mode and rehydrates saved selections after redisplay", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = {
+      ...plugin.settings,
+      scopeMode: "include",
+      includeFolders: ["notes/sub"],
+    };
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+    const container = tab.containerEl as unknown as FakeContainerElInstance;
+
+    tab.display();
+    await flushAsync();
+    tab.display();
+
+    const parentCheckbox = getCheckboxByPath(container, "notes");
+    const childCheckbox = getCheckboxByPath(container, "notes/sub");
+
+    expect(parentCheckbox.checked).toBe(false);
+    expect(parentCheckbox.indeterminate).toBe(true);
+    expect(childCheckbox.checked).toBe(true);
+    expect(container.textNodes).toContain("empty");
+  });
+
+  it("switches scope mode and saves compressed folder selections from the tree", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+    const container = tab.containerEl as unknown as FakeContainerElInstance;
+
+    tab.display();
+    await flushAsync();
+    await getDropdown(findSetting(container, "运行范围")).triggerChange("include");
+    await flushAsync();
+
+    const parentCheckbox = getCheckboxByPath(container, "notes");
+    parentCheckbox.checked = true;
+    await parentCheckbox.trigger("change");
+    await flushAsync();
+
+    expect(plugin.settings.includeFolders).toEqual(["notes"]);
+
+    await getDropdown(findSetting(container, "运行范围")).triggerChange("all");
+    await flushAsync();
+
+    expect(queryCheckboxByPath(container, "notes")).toBeUndefined();
   });
 });

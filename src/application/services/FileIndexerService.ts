@@ -28,7 +28,12 @@ export class FileIndexerService {
   ) {}
 
   async indexVault(settings: PluginSettings, state: PluginState, forceReadAll = false): Promise<FileIndexerResult> {
-    const refs = this.scanScopeService.filter(await this.vaultGateway.listMarkdownFileRefs(), settings.includeFolders, settings.excludeFolders);
+    const refs = this.scanScopeService.filter(
+      await this.vaultGateway.listMarkdownFileRefs(),
+      settings.scopeMode,
+      settings.includeFolders,
+      settings.excludeFolders,
+    );
     return this.indexRefs(refs, settings, state, this.buildStateIndex(state), forceReadAll);
   }
 

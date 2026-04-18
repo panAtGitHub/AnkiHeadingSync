@@ -44,6 +44,7 @@ export class CardIndexingService {
     const targetDeck = extractTargetDeck(lines);
     const cards: IndexedCard[] = [];
     const knownCardsById = new Map(context.knownCards.map((card) => [card.cardId, card]));
+    const knownCardsByBlockKey = groupKnownCardsByBlockKey(context.knownCards);
     const pendingByCardId = new Map(context.pendingWriteBack.map((pending) => [pending.cardId, pending]));
     const usedCardIds = new Set<string>();
 
@@ -62,10 +63,14 @@ export class CardIndexingService {
       const rawBlockText = [lines[heading.lineIndex], ...trimmedBodyLines].join("\n").trimEnd();
       const rawBlockHash = hashString(rawBlockText);
       const resolvedIdentity = this.resolveIdentity(
+        sourceFile.path,
+        rawBlockHash,
         marker.markerCardId,
         marker.markerNoteId,
         knownCardsById,
+        knownCardsByBlockKey,
         pendingByCardId,
+        usedCardIds,
       );
 
       usedCardIds.add(resolvedIdentity.cardId);
@@ -105,10 +110,14 @@ export class CardIndexingService {
   }
 
   private resolveIdentity(
+    filePath: string,
+    rawBlockHash: string,
     markerCardId: string | undefined,
     markerNoteId: number | undefined,
     knownCardsById: Map<string, CardState>,
+    knownCardsByBlockKey: Map<string, CardState[]>,
     pendingByCardId: Map<string, PendingWriteBackState>,
+    usedCardIds: Set<string>,
   ): { cardId: string; noteId?: number } {
     if (markerCardId) {
       const pending = pendingByCardId.get(markerCardId);
@@ -120,10 +129,43 @@ export class CardIndexingService {
       };
     }
 
+    const knownMatches = knownCardsByBlockKey.get(createKnownCardBlockKey(filePath, rawBlockHash)) ?? [];
+    if (knownMatches.length === 1 && !usedCardIds.has(knownMatches[0].cardId)) {
+      return {
+        cardId: knownMatches[0].cardId,
+        noteId: knownMatches[0].noteId,
+      };
+    }
+
     return {
       cardId: this.markerService.generateCardId(),
     };
   }
+}
+
+function groupKnownCardsByBlockKey(knownCards: CardState[]): Map<string, CardState[]> {
+  const grouped = new Map<string, CardState[]>();
+
+  for (const card of knownCards) {
+    if (card.orphan) {
+      continue;
+    }
+
+    const key = createKnownCardBlockKey(card.filePath, card.rawBlockHash);
+    const entries = grouped.get(key);
+    if (entries) {
+      entries.push(card);
+      continue;
+    }
+
+    grouped.set(key, [card]);
+  }
+
+  return grouped;
+}
+
+function createKnownCardBlockKey(filePath: string, rawBlockHash: string): string {
+  return `${filePath}\u0000${rawBlockHash}`;
 }
 
 function validateHeadingPolicy(qaHeadingLevel: number, clozeHeadingLevel: number): void {

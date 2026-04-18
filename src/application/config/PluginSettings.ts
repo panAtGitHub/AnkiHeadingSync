@@ -1,5 +1,7 @@
 import type { NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
 
+export type ScopeMode = "all" | "include" | "exclude";
+
 export interface PluginSettings {
   qaHeadingLevel: number;
   clozeHeadingLevel: number;
@@ -7,6 +9,7 @@ export interface PluginSettings {
   clozeNoteType: string;
   noteFieldMappings: Record<string, NoteModelFieldMapping>;
   defaultDeck: string;
+  scopeMode: ScopeMode;
   includeFolders: string[];
   excludeFolders: string[];
   addObsidianBacklink: boolean;
@@ -21,6 +24,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   clozeNoteType: "Cloze",
   noteFieldMappings: {},
   defaultDeck: "Obsidian",
+  scopeMode: "all",
   includeFolders: [],
   excludeFolders: [],
   addObsidianBacklink: true,
@@ -55,8 +59,27 @@ export function validatePluginSettings(settings: PluginSettings): void {
     throw new Error("Default deck is required.");
   }
 
+  if (settings.scopeMode !== "all" && settings.scopeMode !== "include" && settings.scopeMode !== "exclude") {
+    throw new Error("Scope mode must be one of all, include, or exclude.");
+  }
+
+  validateFolderList(settings.includeFolders, "Include folders");
+  validateFolderList(settings.excludeFolders, "Exclude folders");
+
   if (!settings.ankiConnectUrl.trim()) {
     throw new Error("AnkiConnect URL is required.");
+  }
+}
+
+function validateFolderList(folderList: string[], label: string): void {
+  if (!Array.isArray(folderList)) {
+    throw new Error(`${label} must be an array.`);
+  }
+
+  for (const folder of folderList) {
+    if (typeof folder !== "string") {
+      throw new Error(`${label} must only contain strings.`);
+    }
   }
 }
 

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import type { CardState } from "@/domain/manual-sync/entities/PluginState";
+import { hashString } from "@/domain/shared/hash";
+
 import { CardIndexingService } from "./CardIndexingService";
 
 describe("CardIndexingService", () => {
@@ -26,29 +29,46 @@ describe("CardIndexingService", () => {
     expect(indexedFile.cards[0]?.bodyMarkdown).toBe("Answer");
   });
 
-  it("treats a missing marker as a new card even if local pending state has the same raw block hash", () => {
+  it("reuses cardId and noteId when marker is missing but the same file has a unique raw block hash match", () => {
     const service = new CardIndexingService();
+    const rawBlockText = ["#### Prompt", "Answer"].join("\n");
     const indexedFile = service.index(
       {
         path: "notes/example.md",
         basename: "example",
-        content: ["#### Prompt", "Answer"].join("\n"),
+        content: rawBlockText,
       },
       {
         qaHeadingLevel: 4,
         clozeHeadingLevel: 5,
         fileStamp: "1:1",
-        knownCards: [],
-        pendingWriteBack: [
-          {
-            filePath: "notes/example.md",
-            cardId: "ahs_known",
-            noteId: 42,
-            expectedFileHash: "hash",
-            targetMarker: "<!-- AHS:card=ahs_known note=42 -->",
-            rawBlockHash: "hash-card",
-          },
-        ],
+        knownCards: [createKnownCardState({ rawBlockHash: hashString(rawBlockText) })],
+        pendingWriteBack: [],
+      },
+    );
+
+    expect(indexedFile.cards[0]).toMatchObject({
+      cardId: "ahs_known",
+      noteId: 42,
+      markerState: "missing",
+    });
+  });
+
+  it("treats a missing marker as a new card when the raw block hash changed", () => {
+    const service = new CardIndexingService();
+    const oldRawBlockText = ["#### Prompt", "Answer"].join("\n");
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: ["#### Prompt", "Updated Answer"].join("\n"),
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        fileStamp: "1:1",
+        knownCards: [createKnownCardState({ rawBlockHash: hashString(oldRawBlockText) })],
+        pendingWriteBack: [],
       },
     );
 
@@ -56,8 +76,37 @@ describe("CardIndexingService", () => {
     expect(indexedFile.cards[0]?.noteId).toBeUndefined();
   });
 
-  it("restores noteId when the marker still carries cardId", () => {
+  it("does not reuse card identity when multiple same-file candidates share the same raw block hash", () => {
     const service = new CardIndexingService();
+    const rawBlockText = ["#### Prompt", "Answer"].join("\n");
+    const rawBlockHash = hashString(rawBlockText);
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: rawBlockText,
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        fileStamp: "1:1",
+        knownCards: [
+          createKnownCardState({ cardId: "ahs_known", rawBlockHash }),
+          createKnownCardState({ cardId: "ahs_other", noteId: 99, rawBlockHash }),
+        ],
+        pendingWriteBack: [],
+      },
+    );
+
+    expect(indexedFile.cards[0]?.cardId).not.toBe("ahs_known");
+    expect(indexedFile.cards[0]?.cardId).not.toBe("ahs_other");
+    expect(indexedFile.cards[0]?.noteId).toBeUndefined();
+  });
+
+  it("restores noteId from the marker cardId before considering hash-based recovery", () => {
+    const service = new CardIndexingService();
+    const rawBlockText = ["#### Prompt", "Answer"].join("\n");
+    const rawBlockHash = hashString(rawBlockText);
     const indexedFile = service.index(
       {
         path: "notes/example.md",
@@ -69,28 +118,8 @@ describe("CardIndexingService", () => {
         clozeHeadingLevel: 5,
         fileStamp: "1:1",
         knownCards: [
-          {
-            cardId: "ahs_known",
-            noteId: 42,
-            filePath: "notes/example.md",
-            heading: "Prompt",
-            headingLevel: 4,
-            bodyMarkdown: "Answer",
-            cardType: "basic",
-            blockStartOffset: 0,
-            blockEndOffset: 13,
-            blockStartLine: 1,
-            bodyStartLine: 2,
-            blockEndLine: 3,
-            contentEndLine: 2,
-            rawBlockText: ["#### Prompt", "Answer"].join("\n"),
-            rawBlockHash: "hash-card",
-            renderConfigHash: "render-hash",
-            deck: "Obsidian",
-            tagsHint: [],
-            lastSyncedAt: 1,
-            orphan: false,
-          },
+          createKnownCardState({ cardId: "ahs_known", rawBlockHash }),
+          createKnownCardState({ cardId: "ahs_hash_match", noteId: 99, rawBlockHash }),
         ],
         pendingWriteBack: [],
       },
@@ -123,3 +152,32 @@ describe("CardIndexingService", () => {
     ).toThrow("Multiple AHS markers");
   });
 });
+
+function createKnownCardState(overrides: Partial<CardState> = {}): CardState {
+  const rawBlockText = overrides.rawBlockText ?? ["#### Prompt", "Answer"].join("\n");
+
+  return {
+    cardId: overrides.cardId ?? "ahs_known",
+    noteId: overrides.noteId ?? 42,
+    filePath: overrides.filePath ?? "notes/example.md",
+    heading: overrides.heading ?? "Prompt",
+    headingLevel: overrides.headingLevel ?? 4,
+    bodyMarkdown: overrides.bodyMarkdown ?? "Answer",
+    cardType: overrides.cardType ?? "basic",
+    blockStartOffset: overrides.blockStartOffset ?? 0,
+    blockEndOffset: overrides.blockEndOffset ?? rawBlockText.length,
+    blockStartLine: overrides.blockStartLine ?? 1,
+    bodyStartLine: overrides.bodyStartLine ?? 2,
+    blockEndLine: overrides.blockEndLine ?? 2,
+    contentEndLine: overrides.contentEndLine ?? 2,
+    markerLine: overrides.markerLine,
+    rawBlockText,
+    rawBlockHash: overrides.rawBlockHash ?? hashString(rawBlockText),
+    renderConfigHash: overrides.renderConfigHash ?? "render-hash",
+    deck: overrides.deck ?? "Obsidian",
+    deckHint: overrides.deckHint,
+    tagsHint: overrides.tagsHint ?? [],
+    lastSyncedAt: overrides.lastSyncedAt ?? 1,
+    orphan: overrides.orphan ?? false,
+  };
+}

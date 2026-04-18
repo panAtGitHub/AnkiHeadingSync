@@ -1,21 +1,38 @@
+import type { ScopeMode } from "@/application/config/PluginSettings";
+
 export class ScanScopeService {
-  filter<T extends { path: string }>(files: T[], includeFolders: string[], excludeFolders: string[]): T[] {
-    const normalizedIncludes = includeFolders.map(normalizeFolderPath).filter(Boolean);
-    const normalizedExcludes = excludeFolders.map(normalizeFolderPath).filter(Boolean);
+  filter<T extends { path: string }>(files: T[], scopeMode: ScopeMode, includeFolders: string[], excludeFolders: string[]): T[] {
+    const normalizedIncludes = normalizeFolderList(includeFolders);
+    const normalizedExcludes = normalizeFolderList(excludeFolders);
 
     return files.filter((file) => {
       if (!file.path.toLowerCase().endsWith(".md")) {
         return false;
       }
 
-      const normalizedPath = normalizeFilePath(file.path);
-      const included =
-        normalizedIncludes.length === 0 || normalizedIncludes.some((folder) => isPathInsideFolder(normalizedPath, folder));
-      const excluded = normalizedExcludes.some((folder) => isPathInsideFolder(normalizedPath, folder));
-
-      return included && !excluded;
+      return this.isPathInScope(file.path, scopeMode, normalizedIncludes, normalizedExcludes);
     });
   }
+
+  isPathInScope(filePath: string, scopeMode: ScopeMode, includeFolders: string[], excludeFolders: string[]): boolean {
+    const normalizedPath = normalizeFilePath(filePath);
+    const normalizedIncludes = normalizeFolderList(includeFolders);
+    const normalizedExcludes = normalizeFolderList(excludeFolders);
+
+    if (scopeMode === "include") {
+      return normalizedIncludes.some((folder) => isPathInsideFolder(normalizedPath, folder));
+    }
+
+    if (scopeMode === "exclude") {
+      return !normalizedExcludes.some((folder) => isPathInsideFolder(normalizedPath, folder));
+    }
+
+    return true;
+  }
+}
+
+function normalizeFolderList(folderPaths: string[]): string[] {
+  return folderPaths.map(normalizeFolderPath).filter(Boolean);
 }
 
 function normalizeFolderPath(folderPath: string): string {

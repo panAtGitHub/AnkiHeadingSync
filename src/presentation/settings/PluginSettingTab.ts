@@ -1,12 +1,17 @@
 import { PluginSettingTab, Setting } from "obsidian";
 
+import type { ScopeMode } from "@/application/config/PluginSettings";
 import { createNoteFieldMappingKey, type NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
+import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
 import { NoteFieldMappingService } from "@/application/services/NoteFieldMappingService";
 import type { CardType } from "@/domain/card/entities/RenderedFields";
 import type AnkiHeadingSyncPlugin from "@/presentation/AnkiHeadingSyncPlugin";
 
+import { buildFolderTreeSelection, toggleFolderTreeSelection, type FolderTreeSelectionNode } from "./FolderScopeTree";
+
 const NOTE_TYPE_STATUS_IDLE = "Refresh note types from Anki to load the available note types.";
+const FOLDER_TREE_STATUS_LOADING = "正在读取当前 vault 文件夹...";
 
 interface MappingSectionConfig {
   cardType: CardType;
@@ -27,6 +32,10 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private readonly draftMappings: Record<string, NoteModelFieldMapping> = {};
   private readonly loadedModelDetails: Record<string, NoteModelDetails> = {};
   private readonly sectionStatuses: Partial<Record<CardType, string>> = {};
+  private folderTree: FolderTreeNode[] = [];
+  private folderTreeStatus = FOLDER_TREE_STATUS_LOADING;
+  private folderTreeLoadPromise: Promise<void> | null = null;
+  private hasLoadedFolderTree = false;
 
   constructor(plugin: AnkiHeadingSyncPlugin) {
     super(plugin.app, plugin);
@@ -86,23 +95,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
       });
 
-    new Setting(containerEl)
-      .setName("Include folders")
-      .setDesc("Comma-separated folder paths. Empty means scan the whole vault.")
-      .addTextArea((textArea) => {
-        textArea.setValue(settings.includeFolders.join(", ")).onChange((value) => {
-          void this.plugin.updateSettings({ includeFolders: splitFolders(value) });
-        });
-      });
-
-    new Setting(containerEl)
-      .setName("Exclude folders")
-      .setDesc("Comma-separated folder paths always filtered out of vault sync.")
-      .addTextArea((textArea) => {
-        textArea.setValue(settings.excludeFolders.join(", ")).onChange((value) => {
-          void this.plugin.updateSettings({ excludeFolders: splitFolders(value) });
-        });
-      });
+    this.renderScopeSection(containerEl, settings);
 
     new Setting(containerEl)
       .setName("Add Obsidian backlink")
@@ -388,11 +381,131 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private getSelectedNoteType(cardType: CardType): string {
     return cardType === "basic" ? this.plugin.settings.qaNoteType : this.plugin.settings.clozeNoteType;
   }
+
+  private renderScopeSection(containerEl: HTMLElement, settings: AnkiHeadingSyncPlugin["settings"]): void {
+    new Setting(containerEl)
+      .setName("运行范围")
+      .setDesc(getScopeModeSummary(settings.scopeMode))
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOption("all", "全部文件")
+          .addOption("include", "仅在指定文件夹")
+          .addOption("exclude", "排除指定文件夹")
+          .setValue(settings.scopeMode)
+          .onChange((value) => {
+            if (value !== "all" && value !== "include" && value !== "exclude") {
+              return;
+            }
+
+            void this.updateScopeMode(value);
+          });
+      });
+
+    if (settings.scopeMode === "all") {
+      return;
+    }
+
+    this.ensureFolderTreeLoaded();
+
+    const scopeContainer = containerEl.createDiv();
+    scopeContainer.createEl("p", { text: getScopeModeTreeDescription(settings.scopeMode) });
+
+    if (this.folderTreeLoadPromise) {
+      scopeContainer.createEl("p", { text: this.folderTreeStatus });
+      return;
+    }
+
+    if (this.folderTree.length === 0) {
+      scopeContainer.createEl("p", { text: this.folderTreeStatus });
+      return;
+    }
+
+    const selectedFolders = settings.scopeMode === "include" ? settings.includeFolders : settings.excludeFolders;
+    const selectionTree = buildFolderTreeSelection(this.folderTree, selectedFolders);
+    const treeContainer = scopeContainer.createDiv();
+
+    for (const node of selectionTree) {
+      this.renderFolderNode(treeContainer, node, settings.scopeMode);
+    }
+  }
+
+  private renderFolderNode(containerEl: HTMLElement, node: FolderTreeSelectionNode, scopeMode: ScopeMode): void {
+    const row = containerEl.createDiv();
+    const checkbox = row.createEl("input") as HTMLInputElement;
+    checkbox.type = "checkbox";
+    checkbox.checked = node.checked;
+    checkbox.indeterminate = node.indeterminate;
+    checkbox.dataset.folderPath = node.path;
+    checkbox.addEventListener("change", () => {
+      void this.updateFolderSelection(scopeMode, node.path, checkbox.checked);
+    });
+
+    const label = row.createEl("span", { text: node.name });
+    label.dataset.folderPathLabel = node.path;
+
+    if (node.children.length === 0) {
+      return;
+    }
+
+    const childrenContainer = containerEl.createDiv();
+    for (const child of node.children) {
+      this.renderFolderNode(childrenContainer, child, scopeMode);
+    }
+  }
+
+  private ensureFolderTreeLoaded(): void {
+    if (this.hasLoadedFolderTree || this.folderTreeLoadPromise) {
+      return;
+    }
+
+    this.folderTreeStatus = FOLDER_TREE_STATUS_LOADING;
+    this.folderTreeLoadPromise = this.plugin
+      .listFolderTree()
+      .then((folderTree) => {
+        this.folderTree = folderTree;
+        this.folderTreeStatus = folderTree.length > 0 ? "" : "当前 vault 中没有可选文件夹。";
+      })
+      .catch((error) => {
+        this.folderTree = [];
+        this.folderTreeStatus = error instanceof Error ? error.message : "读取 vault 文件夹失败。";
+      })
+      .finally(() => {
+        this.hasLoadedFolderTree = true;
+        this.folderTreeLoadPromise = null;
+        this.display();
+      });
+  }
+
+  private async updateScopeMode(scopeMode: ScopeMode): Promise<void> {
+    await this.plugin.updateSettings({ scopeMode });
+    this.display();
+  }
+
+  private async updateFolderSelection(scopeMode: ScopeMode, folderPath: string, checked: boolean): Promise<void> {
+    const currentSelection = scopeMode === "include" ? this.plugin.settings.includeFolders : this.plugin.settings.excludeFolders;
+    const nextSelection = toggleFolderTreeSelection(this.folderTree, currentSelection, folderPath, checked);
+
+    await this.plugin.updateSettings(scopeMode === "include" ? { includeFolders: nextSelection } : { excludeFolders: nextSelection });
+    this.display();
+  }
 }
 
-function splitFolders(value: string): string[] {
-  return value
-    .split(",")
-    .map((segment) => segment.trim())
-    .filter(Boolean);
+function getScopeModeSummary(scopeMode: ScopeMode): string {
+  if (scopeMode === "include") {
+    return "仅处理下方勾选文件夹中的 Markdown 文件";
+  }
+
+  if (scopeMode === "exclude") {
+    return "处理整个 vault，但跳过下方勾选文件夹中的 Markdown 文件";
+  }
+
+  return "处理整个 vault 中的 Markdown 文件";
+}
+
+function getScopeModeTreeDescription(scopeMode: ScopeMode): string {
+  if (scopeMode === "include") {
+    return "仅在指定文件夹：只处理下方勾选文件夹中的 Markdown 文件";
+  }
+
+  return "排除指定文件夹：处理整个 vault，但跳过下方勾选文件夹中的 Markdown 文件";
 }

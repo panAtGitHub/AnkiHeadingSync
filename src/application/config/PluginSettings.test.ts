@@ -16,4 +16,13 @@ describe("PluginSettings", () => {
       }),
     ).toThrow("QA and Cloze heading levels must be different.");
   });
+
+  it("rejects invalid scope modes", () => {
+    expect(() =>
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        scopeMode: "invalid" as never,
+      }),
+    ).toThrow("Scope mode must be one of all, include, or exclude.");
+  });
 });

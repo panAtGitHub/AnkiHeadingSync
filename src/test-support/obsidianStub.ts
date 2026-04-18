@@ -80,3 +80,15 @@ export class TFile {
     this.basename = extensionIndex >= 0 ? this.name.slice(0, extensionIndex) : this.name;
   }
 }
+
+export class TFolder {
+  public readonly name: string;
+
+  constructor(
+    public readonly path: string,
+    public readonly children: Array<TFolder | TFile> = [],
+  ) {
+    const segments = path.split("/").filter(Boolean);
+    this.name = segments[segments.length - 1] ?? "";
+  }
+}
