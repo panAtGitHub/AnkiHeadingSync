@@ -2,12 +2,9 @@ import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { OBSIDIAN_PLUGIN_DIR } from "./obsidian-plugin-path.mjs";
-
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(scriptDir, "..");
-const target = process.argv[2] === "obsidian" ? "obsidian" : "dist";
-const outputDir = target === "obsidian" ? OBSIDIAN_PLUGIN_DIR : join(rootDir, "dist", "plugin");
+const outputDir = join(rootDir, "dist", "plugin");
 
 await mkdir(outputDir, { recursive: true });
 
@@ -21,9 +18,7 @@ await writeFile(
   [
     "Anki Heading Sync — Obsidian plugin package",
     "",
-    target === "obsidian"
-      ? `npm run build deploys this plugin package directly to ${OBSIDIAN_PLUGIN_DIR}.`
-      : "Development output lives in this folder for local inspection.",
+    "Build output lives in this folder for packaging, release zips, and manual vault sync.",
     "This build flow only overwrites plugin package files and does not touch data.json.",
     "",
     "Included files:",

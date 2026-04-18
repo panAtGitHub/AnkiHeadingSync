@@ -1,13 +1,22 @@
-import { HeadingSyncMarkerService, type MarkerWriteRequest } from "@/application/services/HeadingSyncMarkerService";
+import {
+  HeadingSyncMarkerBatchError,
+  HeadingSyncMarkerService,
+  type MarkerWriteRequest,
+} from "@/application/services/HeadingSyncMarkerService";
 import type { AnkiGateway } from "@/application/ports/AnkiGateway";
 import type { SyncRegistryRepository } from "@/application/ports/SyncRegistryRepository";
-import type { VaultGateway } from "@/application/ports/VaultGateway";
+import { MarkdownWriteConflictError, type VaultGateway } from "@/application/ports/VaultGateway";
 import { NoteFieldMappingService } from "@/application/services/NoteFieldMappingService";
 import { SyncRegistry } from "@/domain/sync/entities/SyncRegistry";
 import type { Card } from "@/domain/card/entities/Card";
 import type { SyncRecord } from "@/domain/sync/entities/SyncRecord";
 
 import type { ExecuteSyncPlanResult, ScanAndPlanResult } from "./types";
+
+interface MarkerWriteFailure {
+  filePath: string;
+  message: string;
+}
 
 export class ExecuteSyncPlanUseCase {
   constructor(
@@ -84,7 +93,7 @@ export class ExecuteSyncPlanUseCase {
       await this.updateLegacyCard(entry.card, entry.noteId, existingRecord, syncRegistry, timestamp, modelDetailsCache, scanAndPlanResult);
     }
 
-    await this.flushMarkerWrites(markerWrites, syncRegistry, timestamp);
+    const markerWriteFailures = await this.flushMarkerWrites(markerWrites, syncRegistry, timestamp);
 
     const mutatedCardKeys = new Set(syncCards.map((card) => card.key));
     for (const card of scanAndPlanResult.cards) {
@@ -122,6 +131,10 @@ export class ExecuteSyncPlanUseCase {
     }
 
     await this.syncRegistryRepository.save(syncRegistry);
+
+    if (markerWriteFailures.length > 0) {
+      throw this.createMarkerWriteFailureError(markerWriteFailures);
+    }
 
     return {
       created: scanAndPlanResult.plan.toAdd.length,
@@ -287,7 +300,8 @@ export class ExecuteSyncPlanUseCase {
     };
   }
 
-  private async flushMarkerWrites(writes: MarkerWriteRequest[], syncRegistry: SyncRegistry, timestamp: number): Promise<void> {
+  private async flushMarkerWrites(writes: MarkerWriteRequest[], syncRegistry: SyncRegistry, timestamp: number): Promise<MarkerWriteFailure[]> {
+    const failures: MarkerWriteFailure[] = [];
     const writesByFile = new Map<string, MarkerWriteRequest[]>();
 
     for (const write of writes) {
@@ -301,25 +315,47 @@ export class ExecuteSyncPlanUseCase {
     }
 
     for (const [filePath, fileWrites] of writesByFile.entries()) {
-      const sourceContent = fileWrites[0]?.location.sourceContent;
-      if (!sourceContent) {
-        throw new Error(`Missing scanned source content for ${filePath}.`);
-      }
-
-      const nextContent = this.headingSyncMarkerService.applyBatch(sourceContent, fileWrites);
-
       try {
+        const sourceContent = this.requireSourceContent(filePath, fileWrites);
+        const nextContent = this.headingSyncMarkerService.applyBatch(sourceContent, fileWrites);
         await this.vaultGateway.replaceMarkdownFile(filePath, sourceContent, nextContent);
 
         for (const write of fileWrites) {
           syncRegistry.recordSync(this.createEmbeddedRecordFromWrite(write, timestamp));
         }
-      } catch {
+      } catch (error) {
         for (const write of fileWrites) {
           syncRegistry.recordSync(this.createPendingRecordFromWrite(write, timestamp));
         }
+
+        if (!this.isRecoverableMarkerWriteError(error)) {
+          failures.push({
+            filePath,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
     }
+
+    return failures;
+  }
+
+  private requireSourceContent(filePath: string, writes: MarkerWriteRequest[]): string {
+    const sourceContent = writes[0]?.location.sourceContent;
+    if (!sourceContent) {
+      throw new HeadingSyncMarkerBatchError(`Missing scanned source content for ${filePath}.`);
+    }
+
+    return sourceContent;
+  }
+
+  private isRecoverableMarkerWriteError(error: unknown): boolean {
+    return error instanceof MarkdownWriteConflictError;
+  }
+
+  private createMarkerWriteFailureError(failures: MarkerWriteFailure[]): Error {
+    const details = failures.map((failure) => `${failure.filePath}: ${failure.message}`).join("\n");
+    return new Error(`Failed to persist AHS markers for ${failures.length} file(s).\n${details}`);
   }
 
   private assertModelMatches(card: Card, actualModelName: string, noteId: number): void {

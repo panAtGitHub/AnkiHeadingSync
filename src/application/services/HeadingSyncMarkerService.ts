@@ -17,6 +17,13 @@ export interface MarkerWriteRequest {
   sourceHash: ContentHash;
 }
 
+export class HeadingSyncMarkerBatchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "HeadingSyncMarkerBatchError";
+  }
+}
+
 export class HeadingSyncMarkerService {
   apply(location: SourceLocation, noteId: number): string {
     if (!location.sourceContent) {
@@ -45,24 +52,24 @@ export class HeadingSyncMarkerService {
 
     for (const write of writes) {
       if (write.filePath !== filePath) {
-        throw new Error("Batch marker writes must belong to the same Markdown file.");
+        throw new HeadingSyncMarkerBatchError("Batch marker writes must belong to the same Markdown file.");
       }
 
       if (write.location.filePath !== write.filePath) {
-        throw new Error(`Marker write path mismatch for ${write.filePath}.`);
+        throw new HeadingSyncMarkerBatchError(`Marker write path mismatch for ${write.filePath}.`);
       }
 
       if (write.location.sourceContent !== sourceContent) {
-        throw new Error(`Marker writes for ${write.filePath} must share the scanned source content.`);
+        throw new HeadingSyncMarkerBatchError(`Marker writes for ${write.filePath} must share the scanned source content.`);
       }
 
       if (write.mode === "replace" && !write.location.markerLine) {
-        throw new Error(`Cannot replace a missing AHS marker in ${write.filePath}.`);
+        throw new HeadingSyncMarkerBatchError(`Cannot replace a missing AHS marker in ${write.filePath}.`);
       }
 
       const blockKey = write.location.blockStartLine;
       if (seenBlocks.has(blockKey)) {
-        throw new Error(`Duplicate marker write detected for block ${blockKey} in ${write.filePath}.`);
+        throw new HeadingSyncMarkerBatchError(`Duplicate marker write detected for block ${blockKey} in ${write.filePath}.`);
       }
 
       seenBlocks.add(blockKey);
@@ -83,7 +90,7 @@ export class HeadingSyncMarkerService {
     const adjustedBlockEndLine = location.markerLine ? location.blockEndLine - 1 : location.blockEndLine;
 
     if (location.contentEndLine < location.headingLine || location.contentEndLine > adjustedBlockEndLine) {
-      throw new Error(`Cannot write AHS marker outside the heading block in ${location.filePath}.`);
+      throw new HeadingSyncMarkerBatchError(`Cannot write AHS marker outside the heading block in ${location.filePath}.`);
     }
 
     if (location.markerLine) {

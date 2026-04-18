@@ -1,7 +1,7 @@
 import { TFile } from "obsidian";
 import type { App } from "obsidian";
 
-import type { VaultGateway } from "@/application/ports/VaultGateway";
+import { MarkdownFileNotFoundError, MarkdownWriteConflictError, type VaultGateway } from "@/application/ports/VaultGateway";
 import { hashString } from "@/domain/shared/hash";
 import type { SourceLocation } from "@/domain/card/value-objects/SourceLocation";
 
@@ -31,12 +31,12 @@ export class ObsidianVaultGateway implements VaultGateway {
     const abstractFile = this.app.vault.getAbstractFileByPath(path);
 
     if (!(abstractFile instanceof TFile) || abstractFile.extension.toLowerCase() !== "md") {
-      throw new Error(`Markdown file not found: ${path}`);
+      throw new MarkdownFileNotFoundError(path);
     }
 
     const currentContent = await this.app.vault.cachedRead(abstractFile);
     if (currentContent !== expectedContent) {
-      throw new Error(`Markdown file changed before AHS write-back: ${path}`);
+      throw new MarkdownWriteConflictError(path);
     }
 
     await this.app.vault.modify(abstractFile, nextContent);

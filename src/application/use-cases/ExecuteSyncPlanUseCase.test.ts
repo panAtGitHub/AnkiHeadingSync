@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createNoteFieldMappingKey } from "@/application/config/NoteModelFieldMapping";
 import type { AnkiGateway, AnkiNoteSummary } from "@/application/ports/AnkiGateway";
 import type { SyncRegistryRepository } from "@/application/ports/SyncRegistryRepository";
-import type { VaultGateway } from "@/application/ports/VaultGateway";
+import { MarkdownWriteConflictError, type VaultGateway } from "@/application/ports/VaultGateway";
 import type { Card } from "@/domain/card/entities/Card";
 import { createCardKey } from "@/domain/card/value-objects/CardKey";
 import { createContentHash } from "@/domain/card/value-objects/ContentHash";
@@ -31,6 +31,7 @@ class InMemorySyncRegistryRepository implements SyncRegistryRepository {
 class FakeVaultGateway implements VaultGateway {
   public readonly files = new Map<string, string>();
   public failReplace = false;
+  public replaceError: Error | null = null;
   public replaceCalls: Array<{ path: string; expectedContent: string; nextContent: string }> = [];
 
   constructor(initialFiles: Record<string, string> = {}) {
@@ -63,13 +64,17 @@ class FakeVaultGateway implements VaultGateway {
   async replaceMarkdownFile(path: string, expectedContent: string, nextContent: string): Promise<void> {
     this.replaceCalls.push({ path, expectedContent, nextContent });
 
+    if (this.replaceError) {
+      throw this.replaceError;
+    }
+
     if (this.failReplace) {
-      throw new Error(`Markdown file changed before AHS write-back: ${path}`);
+      throw new MarkdownWriteConflictError(path);
     }
 
     const currentContent = this.files.get(path);
     if (currentContent !== expectedContent) {
-      throw new Error(`Markdown file changed before AHS write-back: ${path}`);
+      throw new MarkdownWriteConflictError(path);
     }
 
     this.files.set(path, nextContent);
@@ -419,6 +424,85 @@ describe("ExecuteSyncPlanUseCase", () => {
     expect(vaultGateway.files.get("notes/current.md")).toBe(sourceContent);
     expect(repository.savedRegistry?.get(firstCard.key)).toMatchObject({ identityMode: "pending-note-id-write", noteId: 9001 });
     expect(repository.savedRegistry?.get(secondCard.key)).toMatchObject({ identityMode: "pending-note-id-write", noteId: 9002 });
+  });
+
+  it("persists pending records before surfacing applyBatch validation failures", async () => {
+    const sourceContent = ["###### 卡片1", "正文1"].join("\n");
+    const vaultGateway = new FakeVaultGateway({ "notes/current.md": sourceContent });
+    const ankiGateway = new FakeAnkiGateway();
+    const repository = new InMemorySyncRegistryRepository();
+    const firstCard = createCard({
+      key: createCardKey("duplicate-block-1"),
+      contentHash: createContentHash("hash-duplicate-1"),
+      source: {
+        filePath: "notes/current.md",
+        sourceContent,
+        headingLine: 1,
+        blockStartLine: 1,
+        bodyStartLine: 2,
+        blockEndLine: 2,
+        contentEndLine: 2,
+        headingLevel: 6,
+        headingText: "卡片1",
+      },
+    });
+    const secondCard = createCard({
+      key: createCardKey("duplicate-block-2"),
+      contentHash: createContentHash("hash-duplicate-2"),
+      source: {
+        filePath: "notes/current.md",
+        sourceContent,
+        headingLine: 1,
+        blockStartLine: 1,
+        bodyStartLine: 2,
+        blockEndLine: 2,
+        contentEndLine: 2,
+        headingLevel: 6,
+        headingText: "卡片1",
+      },
+    });
+    const useCase = new ExecuteSyncPlanUseCase(ankiGateway, repository, vaultGateway, undefined, () => 1234);
+
+    await expect(useCase.execute(createResult({
+      cards: [firstCard, secondCard],
+      plan: {
+        toCreateDecks: [createDeckName("Deck")],
+        toAdd: [firstCard, secondCard],
+        toUpdate: [],
+        toMarkOrphan: [],
+      },
+    }))).rejects.toThrow("Duplicate marker write detected");
+
+    expect(ankiGateway.addedNotes).toHaveLength(2);
+    expect(vaultGateway.replaceCalls).toHaveLength(0);
+    expect(repository.savedRegistry?.get(firstCard.key)).toMatchObject({ identityMode: "pending-note-id-write", noteId: 9001 });
+    expect(repository.savedRegistry?.get(secondCard.key)).toMatchObject({ identityMode: "pending-note-id-write", noteId: 9002 });
+  });
+
+  it("persists pending records and surfaces unexpected file write errors", async () => {
+    const vaultGateway = new FakeVaultGateway({
+      "notes/current.md": ["#### Prompt", "Answer"].join("\n"),
+    });
+    vaultGateway.replaceError = new Error("permission denied");
+    const ankiGateway = new FakeAnkiGateway();
+    const repository = new InMemorySyncRegistryRepository();
+    const card = createCard();
+    const useCase = new ExecuteSyncPlanUseCase(ankiGateway, repository, vaultGateway, undefined, () => 1234);
+
+    await expect(useCase.execute(createResult({
+      cards: [card],
+      plan: {
+        toCreateDecks: [createDeckName("Deck")],
+        toAdd: [card],
+        toUpdate: [],
+        toMarkOrphan: [],
+      },
+    }))).rejects.toThrow("permission denied");
+
+    expect(repository.savedRegistry?.get(card.key)).toMatchObject({
+      identityMode: "pending-note-id-write",
+      noteId: 9001,
+    });
   });
 
   it("flushes recreate-and-insert writes for the same file together", async () => {
