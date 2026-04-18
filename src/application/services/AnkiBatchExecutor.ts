@@ -28,6 +28,7 @@ export class AnkiBatchExecutor {
     renderOnDemand: (plannedCard: PlannedCard) => Promise<RenderedSyncCard>,
     noteFieldMappings: Record<string, NoteModelFieldMapping>,
   ): Promise<AnkiBatchExecutionResult> {
+    const modelDetailsCache = new Map<string, Promise<Awaited<ReturnType<AnkiGateway["getModelDetails"]>>>>();
     const resolvedNoteIds = new Map<string, number | undefined>();
     const touchedCardIds = new Set<string>();
     const markerWriteMap = new Map<string, PlannedCard>();
@@ -84,7 +85,7 @@ export class AnkiBatchExecutor {
         await Promise.all(batch.map(async (renderedCard) => ({
           deckName: renderedCard.deck,
           modelName: renderedCard.noteModel,
-          fields: await this.mapFields(renderedCard, noteFieldMappings),
+          fields: await this.mapFields(renderedCard, noteFieldMappings, modelDetailsCache),
           tags: renderedCard.card.tagsHint,
         }))),
       );
@@ -114,7 +115,7 @@ export class AnkiBatchExecutor {
         await Promise.all(batch.map(async ({ plannedCard, renderedCard }) => ({
           noteId: plannedCard.noteId ?? 0,
           deckName: renderedCard.deck,
-          fields: await this.mapFields(renderedCard, noteFieldMappings),
+          fields: await this.mapFields(renderedCard, noteFieldMappings, modelDetailsCache),
         }))),
       );
     });
@@ -182,8 +183,9 @@ export class AnkiBatchExecutor {
   private async mapFields(
     renderedCard: RenderedSyncCard,
     noteFieldMappings: Record<string, NoteModelFieldMapping>,
+    modelDetailsCache: Map<string, Promise<Awaited<ReturnType<AnkiGateway["getModelDetails"]>>>>,
   ): Promise<Record<string, string>> {
-    const modelDetails = await this.ankiGateway.getModelDetails(renderedCard.noteModel);
+    const modelDetails = await this.getModelDetails(renderedCard.noteModel, modelDetailsCache);
     return this.noteFieldMappingService.mapRenderedCard(
       {
         type: renderedCard.card.cardType,
@@ -193,6 +195,24 @@ export class AnkiBatchExecutor {
       modelDetails,
       noteFieldMappings,
     );
+  }
+
+  private async getModelDetails(
+    noteModel: string,
+    modelDetailsCache: Map<string, Promise<Awaited<ReturnType<AnkiGateway["getModelDetails"]>>>>,
+  ): Promise<Awaited<ReturnType<AnkiGateway["getModelDetails"]>>> {
+    const cached = modelDetailsCache.get(noteModel);
+    if (cached) {
+      return cached;
+    }
+
+    const pending = this.ankiGateway.getModelDetails(noteModel).catch((error) => {
+      modelDetailsCache.delete(noteModel);
+      throw error;
+    });
+
+    modelDetailsCache.set(noteModel, pending);
+    return pending;
   }
 
   private async uploadMedia(renderedCards: RenderedSyncCard[]): Promise<number> {

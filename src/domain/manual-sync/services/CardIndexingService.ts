@@ -45,7 +45,6 @@ export class CardIndexingService {
     const cards: IndexedCard[] = [];
     const knownCardsById = new Map(context.knownCards.map((card) => [card.cardId, card]));
     const pendingByCardId = new Map(context.pendingWriteBack.map((pending) => [pending.cardId, pending]));
-    const reusableKnownCards = context.knownCards.filter((card) => !card.orphan);
     const usedCardIds = new Set<string>();
 
     for (let headingIndex = 0; headingIndex < headings.length; headingIndex += 1) {
@@ -63,14 +62,10 @@ export class CardIndexingService {
       const rawBlockText = [lines[heading.lineIndex], ...trimmedBodyLines].join("\n").trimEnd();
       const rawBlockHash = hashString(rawBlockText);
       const resolvedIdentity = this.resolveIdentity(
-        sourceFile.path,
-        rawBlockHash,
         marker.markerCardId,
         marker.markerNoteId,
         knownCardsById,
         pendingByCardId,
-        reusableKnownCards,
-        usedCardIds,
       );
 
       usedCardIds.add(resolvedIdentity.cardId);
@@ -110,14 +105,10 @@ export class CardIndexingService {
   }
 
   private resolveIdentity(
-    filePath: string,
-    rawBlockHash: string,
     markerCardId: string | undefined,
     markerNoteId: number | undefined,
     knownCardsById: Map<string, CardState>,
     pendingByCardId: Map<string, PendingWriteBackState>,
-    reusableKnownCards: CardState[],
-    usedCardIds: Set<string>,
   ): { cardId: string; noteId?: number } {
     if (markerCardId) {
       const pending = pendingByCardId.get(markerCardId);
@@ -126,26 +117,6 @@ export class CardIndexingService {
       return {
         cardId: markerCardId,
         noteId: pending?.noteId ?? known?.noteId ?? markerNoteId,
-      };
-    }
-
-    const pendingMatch = Array.from(pendingByCardId.values()).find(
-      (pending) => pending.filePath === filePath && pending.rawBlockHash === rawBlockHash && !usedCardIds.has(pending.cardId),
-    );
-    if (pendingMatch) {
-      return {
-        cardId: pendingMatch.cardId,
-        noteId: pendingMatch.noteId,
-      };
-    }
-
-    const knownMatch = reusableKnownCards.find(
-      (card) => card.filePath === filePath && card.rawBlockHash === rawBlockHash && !usedCardIds.has(card.cardId),
-    );
-    if (knownMatch) {
-      return {
-        cardId: knownMatch.cardId,
-        noteId: knownMatch.noteId,
       };
     }
 

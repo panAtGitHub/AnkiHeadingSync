@@ -24,9 +24,10 @@
 
 ## 4. pending write-back 恢复策略
 
-- 计划要求 pending write-back 可恢复，但 marker 缺失时无法仅靠 marker 重新定位
-- 因此增加一个严格受限的内部恢复规则：仅允许在“同一文件 + 相同 `rawBlockHash`”时复用既有 `cardId/noteId`
-- 这不是通用无 marker 身份推断，只用于本地已知 pending 或已存在状态的恢复
+- 模块 3 的正式身份只认 marker 中的 `cardId`
+- 若 marker 丢失，即视为新卡片块，重新生成新的 `cardId`
+- pending write-back 仅在 marker 仍保留 `cardId` 时恢复对应 `noteId`
+- 不按 `rawBlockHash` 对无 marker 块做长期身份复绑
 
 ## 5. 渲染策略
 
@@ -60,7 +61,7 @@
 - 它会：
   - 全量重建文件状态与卡片状态
   - 为缺失 `cardId` 的块补齐 marker
-  - 尝试用本地状态恢复已知 `noteId`
+  - 仅对仍保留 `cardId` 的块恢复本地已知 `noteId`
 
 ## 9. 命令与提示
 

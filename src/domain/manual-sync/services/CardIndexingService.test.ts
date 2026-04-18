@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { hashString } from "@/domain/shared/hash";
-
 import { CardIndexingService } from "./CardIndexingService";
 
 describe("CardIndexingService", () => {
@@ -28,7 +26,7 @@ describe("CardIndexingService", () => {
     expect(indexedFile.cards[0]?.bodyMarkdown).toBe("Answer");
   });
 
-  it("reuses cardId and noteId from pending write-back when marker is still missing", () => {
+  it("treats a missing marker as a new card even if local pending state has the same raw block hash", () => {
     const service = new CardIndexingService();
     const indexedFile = service.index(
       {
@@ -48,9 +46,53 @@ describe("CardIndexingService", () => {
             noteId: 42,
             expectedFileHash: "hash",
             targetMarker: "<!-- AHS:card=ahs_known note=42 -->",
-            rawBlockHash: hashString(["#### Prompt", "Answer"].join("\n")),
+            rawBlockHash: "hash-card",
           },
         ],
+      },
+    );
+
+    expect(indexedFile.cards[0]?.cardId).not.toBe("ahs_known");
+    expect(indexedFile.cards[0]?.noteId).toBeUndefined();
+  });
+
+  it("restores noteId when the marker still carries cardId", () => {
+    const service = new CardIndexingService();
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: ["#### Prompt", "Answer", "<!-- AHS:card=ahs_known -->"].join("\n"),
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        fileStamp: "1:1",
+        knownCards: [
+          {
+            cardId: "ahs_known",
+            noteId: 42,
+            filePath: "notes/example.md",
+            heading: "Prompt",
+            headingLevel: 4,
+            bodyMarkdown: "Answer",
+            cardType: "basic",
+            blockStartOffset: 0,
+            blockEndOffset: 13,
+            blockStartLine: 1,
+            bodyStartLine: 2,
+            blockEndLine: 3,
+            contentEndLine: 2,
+            rawBlockText: ["#### Prompt", "Answer"].join("\n"),
+            rawBlockHash: "hash-card",
+            renderConfigHash: "render-hash",
+            deck: "Obsidian",
+            tagsHint: [],
+            lastSyncedAt: 1,
+            orphan: false,
+          },
+        ],
+        pendingWriteBack: [],
       },
     );
 

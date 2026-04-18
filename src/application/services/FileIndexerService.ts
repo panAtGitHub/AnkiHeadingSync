@@ -3,7 +3,7 @@ import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVault
 import { ScanScopeService } from "@/application/services/ScanScopeService";
 import type { IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
 import type { IndexedFile } from "@/domain/manual-sync/entities/IndexedFile";
-import type { CardState, PluginState } from "@/domain/manual-sync/entities/PluginState";
+import type { CardState, PendingWriteBackState, PluginState } from "@/domain/manual-sync/entities/PluginState";
 import { CardIndexingService } from "@/domain/manual-sync/services/CardIndexingService";
 
 export interface FileIndexerResult {
@@ -15,6 +15,11 @@ export interface FileIndexerResult {
   skippedUnchangedCards: number;
 }
 
+interface StateIndex {
+  cardsByFilePath: Map<string, CardState[]>;
+  pendingByFilePath: Map<string, PendingWriteBackState[]>;
+}
+
 export class FileIndexerService {
   constructor(
     private readonly vaultGateway: ManualSyncVaultGateway,
@@ -24,7 +29,7 @@ export class FileIndexerService {
 
   async indexVault(settings: PluginSettings, state: PluginState, forceReadAll = false): Promise<FileIndexerResult> {
     const refs = this.scanScopeService.filter(await this.vaultGateway.listMarkdownFileRefs(), settings.includeFolders, settings.excludeFolders);
-    return this.indexRefs(refs, settings, state, forceReadAll);
+    return this.indexRefs(refs, settings, state, this.buildStateIndex(state), forceReadAll);
   }
 
   async indexFile(filePath: string, settings: PluginSettings, state: PluginState): Promise<FileIndexerResult> {
@@ -37,12 +42,13 @@ export class FileIndexerService {
     }
 
     const fileStamp = reference ? createFileStamp(reference.mtime, reference.size) : `${Date.now()}:${sourceFile.content.length}`;
+    const stateIndex = this.buildStateIndex(state);
     const indexedFile = this.cardIndexingService.index(sourceFile, {
       qaHeadingLevel: settings.qaHeadingLevel,
       clozeHeadingLevel: settings.clozeHeadingLevel,
       fileStamp,
-      knownCards: Object.values(state.cards).filter((card) => card.filePath === filePath),
-      pendingWriteBack: state.pendingWriteBack.filter((pending) => pending.filePath === filePath),
+      knownCards: stateIndex.cardsByFilePath.get(filePath) ?? [],
+      pendingWriteBack: stateIndex.pendingByFilePath.get(filePath) ?? [],
     });
 
     return {
@@ -59,6 +65,7 @@ export class FileIndexerService {
     refs: Awaited<ReturnType<ManualSyncVaultGateway["listMarkdownFileRefs"]>>,
     settings: PluginSettings,
     state: PluginState,
+    stateIndex: StateIndex,
     forceReadAll: boolean,
   ): Promise<FileIndexerResult> {
     const indexedFiles: IndexedFile[] = [];
@@ -69,8 +76,9 @@ export class FileIndexerService {
     for (const ref of refs) {
       const fileStamp = createFileStamp(ref.mtime, ref.size);
       const existingFileState = state.files[ref.path];
-      const hasPendingWriteBack = state.pendingWriteBack.some((pending) => pending.filePath === ref.path);
-      const knownCards = Object.values(state.cards).filter((card) => card.filePath === ref.path);
+      const pendingWriteBack = stateIndex.pendingByFilePath.get(ref.path) ?? [];
+      const hasPendingWriteBack = pendingWriteBack.length > 0;
+      const knownCards = stateIndex.cardsByFilePath.get(ref.path) ?? [];
       const hasMissingKnownCard = existingFileState?.cardIds.some((cardId) => !state.cards[cardId]) ?? false;
       const shouldRead =
         forceReadAll ||
@@ -107,7 +115,7 @@ export class FileIndexerService {
         clozeHeadingLevel: settings.clozeHeadingLevel,
         fileStamp,
         knownCards,
-        pendingWriteBack: state.pendingWriteBack.filter((pending) => pending.filePath === ref.path),
+        pendingWriteBack,
       });
 
       indexedFiles.push(indexedFile);
@@ -121,6 +129,36 @@ export class FileIndexerService {
       cards,
       skippedUnchangedFiles,
       skippedUnchangedCards,
+    };
+  }
+
+  private buildStateIndex(state: PluginState): StateIndex {
+    const cardsByFilePath = new Map<string, CardState[]>();
+    const pendingByFilePath = new Map<string, PendingWriteBackState[]>();
+
+    for (const card of Object.values(state.cards)) {
+      const cards = cardsByFilePath.get(card.filePath);
+      if (cards) {
+        cards.push(card);
+        continue;
+      }
+
+      cardsByFilePath.set(card.filePath, [card]);
+    }
+
+    for (const pending of state.pendingWriteBack) {
+      const pendings = pendingByFilePath.get(pending.filePath);
+      if (pendings) {
+        pendings.push(pending);
+        continue;
+      }
+
+      pendingByFilePath.set(pending.filePath, [pending]);
+    }
+
+    return {
+      cardsByFilePath,
+      pendingByFilePath,
     };
   }
 }
