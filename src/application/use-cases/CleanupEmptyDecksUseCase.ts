@@ -34,8 +34,8 @@ export class CleanupEmptyDecksUseCase {
 
     const currentDeckNameSet = new Set(currentDeckNames);
     const currentDeckStatsByName = new Map(currentDeckStats.map((stat) => [stat.deckName, stat.noteCount]));
-    const deletableDeckNames = uniqueSelectedDeckNames.filter((deckName) => currentDeckNameSet.has(deckName) && (currentDeckStatsByName.get(deckName) ?? 0) === 0);
-    const skippedDeckNames = uniqueSelectedDeckNames.filter((deckName) => !currentDeckNameSet.has(deckName) || (currentDeckStatsByName.get(deckName) ?? 0) > 0);
+    const deletableDeckNames = uniqueSelectedDeckNames.filter((deckName) => currentDeckNameSet.has(deckName) && currentDeckStatsByName.get(deckName) === 0);
+    const skippedDeckNames = uniqueSelectedDeckNames.filter((deckName) => !currentDeckNameSet.has(deckName) || currentDeckStatsByName.get(deckName) !== 0);
     const deletedDeckNames: string[] = [];
 
     for (const deckName of deletableDeckNames) {

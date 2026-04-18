@@ -134,6 +134,64 @@ describe("AnkiConnectGateway", () => {
     });
   });
 
+  it("does not treat missing requested deck stats as empty", async () => {
+    requestUrlMock.mockResolvedValue({
+      json: {
+        error: null,
+        result: {
+          Empty: { total_in_deck: 0 },
+        },
+      },
+    });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    const stats = await gateway.getDeckStats(["Empty", "Missing"]);
+
+    expect(stats).toEqual([
+      { deckName: "Empty", noteCount: 0 },
+      { deckName: "Missing", noteCount: undefined },
+    ]);
+  });
+
+  it("treats an empty stats object as unknown instead of empty", async () => {
+    requestUrlMock.mockResolvedValue({
+      json: {
+        error: null,
+        result: {},
+      },
+    });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    const stats = await gateway.getDeckStats(["Deck A", "Deck B"]);
+
+    expect(stats).toEqual([
+      { deckName: "Deck A", noteCount: undefined },
+      { deckName: "Deck B", noteCount: undefined },
+    ]);
+  });
+
+  it("treats malformed deck stats entries as unknown instead of zero", async () => {
+    requestUrlMock.mockResolvedValue({
+      json: {
+        error: null,
+        result: {
+          Broken: {},
+          WrongType: { total_in_deck: "0" },
+          Empty: { total_in_deck: 0 },
+        },
+      },
+    });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    const stats = await gateway.getDeckStats(["Broken", "WrongType", "Empty"]);
+
+    expect(stats).toEqual([
+      { deckName: "Broken", noteCount: undefined },
+      { deckName: "WrongType", noteCount: undefined },
+      { deckName: "Empty", noteCount: 0 },
+    ]);
+  });
+
   it("batches add note calls through AnkiConnect multi", async () => {
     requestUrlMock.mockResolvedValue({
       json: {

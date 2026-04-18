@@ -27,7 +27,7 @@ export interface ChangeDeckInput {
 
 export interface DeckStat {
   deckName: string;
-  noteCount: number;
+  noteCount?: number;
 }
 
 export interface AnkiGateway {

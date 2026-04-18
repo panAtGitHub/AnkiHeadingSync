@@ -144,6 +144,7 @@ export class FakeManualSyncAnkiGateway implements AnkiGateway {
   public storedMedia: MediaAsset[] = [];
   public noteSummariesById = new Map<number, AnkiNoteSummary>();
   public deckStatsByName = new Map<string, DeckStat>();
+  public listedDeckNames: string[] | null = null;
   public modelDetailsByName: Record<string, NoteModelDetails> = {
     Basic: { fieldNames: ["Front", "Back"], isCloze: false },
     Cloze: { fieldNames: ["Text", "Extra"], isCloze: true },
@@ -164,7 +165,7 @@ export class FakeManualSyncAnkiGateway implements AnkiGateway {
   }
 
   async listDeckNames(): Promise<string[]> {
-    return Array.from(this.deckStatsByName.keys());
+    return this.listedDeckNames ? [...this.listedDeckNames] : Array.from(this.deckStatsByName.keys());
   }
 
   async getModelDetails(modelName: string): Promise<NoteModelDetails> {
@@ -172,7 +173,7 @@ export class FakeManualSyncAnkiGateway implements AnkiGateway {
   }
 
   async getDeckStats(deckNames: string[]): Promise<DeckStat[]> {
-    return deckNames.map((deckName) => this.deckStatsByName.get(deckName) ?? { deckName, noteCount: 0 });
+    return deckNames.map((deckName) => this.deckStatsByName.get(deckName) ?? { deckName });
   }
 
   async getNoteSummaries(noteIds: number[]): Promise<AnkiNoteSummary[]> {

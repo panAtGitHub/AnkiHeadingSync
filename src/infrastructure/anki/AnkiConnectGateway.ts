@@ -66,13 +66,13 @@ export class AnkiConnectGateway implements AnkiGateway {
       return [];
     }
 
-    const rawStats = await this.invoke<Record<string, RawDeckStats>>("getDeckStats", {
+    const rawStats = await this.invoke<unknown>("getDeckStats", {
       decks: deckNames,
     });
 
     return deckNames.map((deckName) => ({
       deckName,
-      noteCount: rawStats[deckName]?.total_in_deck ?? 0,
+      noteCount: extractDeckNoteCount(rawStats, deckName),
     }));
   }
 
@@ -240,4 +240,22 @@ export class AnkiConnectGateway implements AnkiGateway {
 
     return this.invoke<TResult[]>("multi", { actions });
   }
+}
+
+function extractDeckNoteCount(rawStats: unknown, deckName: string): number | undefined {
+  if (!rawStats || typeof rawStats !== "object") {
+    return undefined;
+  }
+
+  const rawDeckStat = (rawStats as Record<string, unknown>)[deckName];
+  if (!rawDeckStat || typeof rawDeckStat !== "object") {
+    return undefined;
+  }
+
+  const totalInDeck = (rawDeckStat as RawDeckStats).total_in_deck;
+  if (typeof totalInDeck !== "number" || !Number.isFinite(totalInDeck)) {
+    return undefined;
+  }
+
+  return totalInDeck;
 }
