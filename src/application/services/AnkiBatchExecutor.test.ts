@@ -38,6 +38,7 @@ describe("AnkiBatchExecutor", () => {
     const plan: ManualSyncPlan = {
       toCreate: [createOne, createTwo],
       toUpdate: [updateOne],
+      toChangeDeck: [],
       toRewriteMarker: [],
       toOrphan: [],
       unchangedCards: 0,
@@ -56,7 +57,7 @@ describe("AnkiBatchExecutor", () => {
     expect(ankiGateway.getModelDetailsCalls).toEqual(["Basic"]);
   });
 
-  it("ensures decks for adds and does not move existing notes to another deck on update", async () => {
+  it("ensures target decks and executes changeDecks separately from field updates", async () => {
     const ankiGateway = new CountingAnkiGateway();
     ankiGateway.noteSummariesById.set(300, {
       noteId: 300,
@@ -67,15 +68,18 @@ describe("AnkiBatchExecutor", () => {
     const executor = new AnkiBatchExecutor(ankiGateway);
     const createCard = createPlannedCard("ahs_create", undefined, "Folder::Deck");
     const updateCard = createPlannedCard("ahs_update", 300, "Changed::Deck");
+    const changeDeckCard = createPlannedCard("ahs_migrate", 300, "Changed::Deck");
     const renderedCards = new Map<string, RenderedSyncCard>([
       [createCard.card.cardId, createRenderedSyncCard(createCard)],
       [updateCard.card.cardId, createRenderedSyncCard(updateCard)],
+      [changeDeckCard.card.cardId, createRenderedSyncCard(changeDeckCard)],
     ]);
 
-    await executor.execute(
+    const result = await executor.execute(
       {
         toCreate: [createCard],
         toUpdate: [updateCard],
+        toChangeDeck: [changeDeckCard],
         toRewriteMarker: [],
         toOrphan: [],
         unchangedCards: 0,
@@ -86,10 +90,11 @@ describe("AnkiBatchExecutor", () => {
       createModule3Settings().noteFieldMappings,
     );
 
-    expect(ankiGateway.ensuredDecks).toEqual([["Folder::Deck"]]);
-    expect(ankiGateway.changedDecks).toEqual([]);
+    expect(result.migratedDecks).toBe(1);
+    expect(ankiGateway.ensuredDecks).toEqual([["Folder::Deck", "Changed::Deck"]]);
+    expect(ankiGateway.changedDecks).toEqual([{ deckName: "Changed::Deck", cardIds: [700] }]);
     expect(ankiGateway.addedNotes[0]?.deckName).toBe("Folder::Deck");
-    expect(ankiGateway.updatedNotes[0]?.deckName).toBe("Changed::Deck");
+    expect(ankiGateway.updatedNotes[0]?.deckName).toBeUndefined();
   });
 });
 

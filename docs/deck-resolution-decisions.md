@@ -33,9 +33,9 @@
 ## 4. 同步语义
 
 1. 新卡 add 必须使用 resolved deck
-2. 旧卡 update 只更新字段，不 changeDeck
-3. `renderConfigHash` 改为不包含 deck
-4. 为避免旧状态产生无意义 update，保留一个仅用于兼容比较的 legacy hash 分支
+2. 普通同步中，旧卡若 resolved deck 变化则执行 `changeDeck`
+3. `renderConfigHash` 不包含 deck，deck 迁移由独立计划集合承载
+4. rebuildIndex 仍不触发 `changeDeck`
 
 ## 5. 校验与错误
 

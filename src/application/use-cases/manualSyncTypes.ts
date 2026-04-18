@@ -5,6 +5,7 @@ export interface ManualSyncResult {
   scannedCards: number;
   created: number;
   updated: number;
+  migratedDecks: number;
   orphaned: number;
   uploadedMedia: number;
   skippedUnchangedCards: number;

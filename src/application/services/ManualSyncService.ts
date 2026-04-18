@@ -5,6 +5,7 @@ import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVault
 import type { PluginStateRepository } from "@/application/ports/PluginStateRepository";
 import { AnkiBatchExecutor } from "@/application/services/AnkiBatchExecutor";
 import { FileIndexerService } from "@/application/services/FileIndexerService";
+import { createDeckRulesFingerprint } from "@/application/services/FileIndexerService";
 import { MarkdownWriteBackService } from "@/application/services/MarkdownWriteBackService";
 import { RenderConfigService } from "@/application/services/RenderConfigService";
 import { ScanScopeService } from "@/application/services/ScanScopeService";
@@ -93,6 +94,7 @@ export class ManualSyncService {
       scannedCards: indexResult.cards.length,
       created: 0,
       updated: 0,
+      migratedDecks: 0,
       orphaned: plan.toOrphan.length,
       uploadedMedia: 0,
       skippedUnchangedCards: indexResult.skippedUnchangedCards,
@@ -157,6 +159,7 @@ export class ManualSyncService {
       scannedCards: indexResult.cards.length,
       created: executionResult.created,
       updated: executionResult.updated,
+      migratedDecks: executionResult.migratedDecks,
       orphaned: plan.toOrphan.length,
       uploadedMedia: executionResult.uploadedMedia,
       skippedUnchangedCards: indexResult.skippedUnchangedCards,
@@ -176,6 +179,7 @@ export class ManualSyncService {
     orphanCards: Array<{ cardId: string }>,
   ): PluginState {
     const now = this.now();
+    const deckRulesFingerprint = createDeckRulesFingerprint(settings);
     const nextState: PluginState = {
       files: { ...previousState.files },
       cards: { ...previousState.cards },
@@ -191,6 +195,7 @@ export class ManualSyncService {
         filePath: indexedFile.filePath,
         fileHash: indexedFile.fileHash,
         fileStamp: indexedFile.fileStamp,
+        deckRulesFingerprint,
         lastIndexedAt: now,
         cardIds: indexedFile.cards.map((card) => card.cardId),
       };

@@ -13,6 +13,7 @@ export class DiffPlannerService {
     const pendingByCardId = new Map(state.pendingWriteBack.map((pending) => [pending.cardId, pending]));
     const toCreate: PlannedCard[] = [];
     const toUpdate: PlannedCard[] = [];
+    const toChangeDeck: PlannedCard[] = [];
     const toRewriteMarker: PlannedCard[] = [];
     const warningMap = new Map<string, DeckResolutionWarning>();
     let unchangedCards = 0;
@@ -24,7 +25,7 @@ export class DiffPlannerService {
 
       cardsById.set(card.cardId, card);
       const existingState = state.cards[card.cardId];
-      const renderPlan = this.renderConfigService.resolve(card, settings, existingState?.deck ? [existingState.deck] : []);
+      const renderPlan = this.renderConfigService.resolve(card, settings);
       for (const warning of renderPlan.warnings) {
         warningMap.set(getDeckResolutionWarningKey(warning), warning);
       }
@@ -59,17 +60,24 @@ export class DiffPlannerService {
         continue;
       }
 
-      if (
+      const fieldsChanged =
         existingState.rawBlockHash !== card.rawBlockHash ||
-        !renderPlan.compatibleRenderConfigHashes.includes(existingState.renderConfigHash) ||
+        existingState.renderConfigHash !== renderPlan.renderConfigHash ||
         existingState.orphan ||
-        pendingByCardId.has(card.cardId)
-      ) {
+        pendingByCardId.has(card.cardId);
+      const deckChanged = existingState.deck !== renderPlan.deck;
+
+      if (fieldsChanged) {
         toUpdate.push(plannedCard);
-        continue;
       }
 
-      unchangedCards += 1;
+      if (deckChanged) {
+        toChangeDeck.push(plannedCard);
+      }
+
+      if (!fieldsChanged && !deckChanged) {
+        unchangedCards += 1;
+      }
     }
 
     const scopedPaths = new Set(scopedFilePaths);
@@ -78,6 +86,7 @@ export class DiffPlannerService {
     return {
       toCreate,
       toUpdate,
+      toChangeDeck,
       toRewriteMarker,
       toOrphan,
       unchangedCards,

@@ -168,39 +168,28 @@ Obsidian 文件路径示例：
 本轮明确规则：
 
 - deck 会参与新增卡片时的创建
-- deck 不参与旧卡的自动移动
+- 普通同步会在旧卡 resolved deck 变化时自动迁移到新 deck
 
 也就是：
 
 1. 新卡 add 时写入当前解析出的 deck
-2. 已存在 note 的 update 不因为 deck 变化而自动 changeDeck
-3. 文件移动、文件夹调整、默认 deck 改变、文件级 deck 改变，都不会主动把旧卡迁移到新 deck
+2. 已存在 note 的字段 update 与 deck 迁移分离执行
+3. 文件移动、文件夹调整、默认 deck 改变、文件级 deck 改变后，普通同步会按最新规则迁移旧卡到新 deck
 
 实现级硬约束：
 
-1. deck 变化不能单独触发已有 note 进入 `toUpdate`
-2. 旧卡 update 路径中禁止因为 resolved deck 变化而执行 `changeDeck`
-3. `changeDeck` 只允许用于未来单独的 deck 迁移模块，本轮主链路中不启用
+1. deck 变化不能伪装成字段 update；需要进入独立的 deck 迁移计划
+2. 旧卡字段 update 路径与 `changeDeck` 路径分离执行
+3. `changeDeck` 在普通同步主链路中正式启用
 4. 新卡 `toCreate` 时，必须使用本轮解析出的最终 `resolvedDeck`
 
 ### 3.2 原因
 
-本轮按你的确认执行：
+本轮按新的产品要求执行：
 
-- 文件级 deck 最高
-- 旧卡不做自动移动
-- 先把 deck 解析逻辑与创建行为做稳
-- 避免 deck 规则调整后批量移动旧卡带来不可预期后果
-
-### 3.3 后续可扩展方向
-
-后续如果需要，可单独新增：
-
-- `syncDeckOnUpdate`
-- `moveExistingNotesToResolvedDeck`
-- 显式的 deck 迁移命令
-
-但本轮不做。
+1. deck 规则变化后，旧卡也必须在普通同步中按最新规则重梳理
+2. 规则变化不应再被“文件未改动”或“兼容 hash”静默吞掉
+3. rebuildIndex 仍保持只修索引与 marker，不承担迁移职责
 
 ## 四、领域与应用层设计
 
@@ -388,14 +377,18 @@ TARGET DECK: 数学::第一章
 `toUpdate` 中的卡片：
 
 - 只更新字段
-- 不自动移动 deck
+
+deck 迁移由独立的 `toChangeDeck` 路径负责：
+
+1. deck-only 变化进入 `toChangeDeck`
+2. 字段变化且 deck 变化时，同时执行 `updateNotes + changeDecks`
 
 补充实现要求：
 
-1. 当前 manual-sync 链路下，旧卡 deck 变化不能仅因为 `deck` 改变而进入 `toUpdate`
-2. `renderConfigHash` 不得因为 `deck` 变化而导致旧卡进入 update
-3. `AnkiBatchExecutor` 的 update 路径中，不得执行基于 resolved deck 的 `changeDeck`
-4. 如果当前代码中仍保留 update -> `changeDeck` 逻辑，本轮必须移除或显式短路掉
+1. 当前 manual-sync 链路下，旧卡 deck 变化不能仅因为 `deck` 改变而伪装成 `toUpdate`
+2. `renderConfigHash` 不得因为 `deck` 变化而导致旧卡进入字段 update
+3. `AnkiBatchExecutor` 必须在独立队列中执行基于 resolved deck 的 `changeDeck`
+4. 普通同步必须把规则变化后的旧卡迁移到新 deck
 
 ### 7.3 冲突告警
 
@@ -519,9 +512,9 @@ TARGET DECK: 数学::第一章
 1. 新卡使用解析出的 deck 创建
 2. 缺失 deck 时使用默认 deck
 3. deck 不存在时先创建 deck 再 add
-4. 旧卡 update 不自动 changeDeck
-5. 文件移动后，旧卡仍不自动迁移 deck
-6. 文件级 deck 改变后，旧卡仍不自动迁移 deck
+4. 旧卡 deck 变化时，普通同步会执行 `changeDeck`
+5. 文件移动后，普通同步会把旧卡迁移到新的 resolved deck
+6. 文件级 deck 改变后，普通同步会把旧卡迁移到新的 resolved deck
 
 ## 十、GitHub Agent 实施顺序
 
@@ -550,7 +543,7 @@ TARGET DECK: 数学::第一章
 2. YAML 冲突处理
 3. 文件夹映射规则
 4. 根目录 fallback
-5. update 不自动移动 deck
+5. 普通同步如何迁移旧卡 deck
 
 ### 阶段 3：实现服务层
 
@@ -592,6 +585,6 @@ npm run lint
 2. 文件夹可自动映射为 Anki 多级父子牌组
 3. 根目录文件正确回退到默认 deck
 4. YAML 与正文冲突时，YAML 生效且有告警
-5. 旧卡 update 不自动移动 deck
+5. 旧卡在普通同步中按最新规则迁移 deck
 6. 所有关键路径都有测试覆盖
 7. build、test、lint 通过

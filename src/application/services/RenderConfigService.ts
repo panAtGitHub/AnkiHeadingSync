@@ -9,14 +9,13 @@ export interface RenderPlan {
   deck: string;
   noteModel: string;
   renderConfigHash: string;
-  compatibleRenderConfigHashes: string[];
   warnings: DeckResolutionWarning[];
 }
 
 export class RenderConfigService {
   constructor(private readonly deckResolutionService = new DeckResolutionService()) {}
 
-  resolve(card: IndexedCard, settings: PluginSettings, compatibilityDecks: string[] = []): RenderPlan {
+  resolve(card: IndexedCard, settings: PluginSettings): RenderPlan {
     const noteModel = card.cardType === "basic" ? settings.qaNoteType : settings.clozeNoteType;
     const deckResolution = this.deckResolutionService.resolve(card, settings.defaultDeck, settings.folderDeckMode);
     const deck = deckResolution.resolvedDeck.value;
@@ -29,19 +28,11 @@ export class RenderConfigService {
       convertHighlightsToCloze: settings.convertHighlightsToCloze,
     };
     const renderConfigHash = hashString(JSON.stringify(renderConfigPayload));
-    const compatibleRenderConfigHashes = Array.from(new Set([
-      renderConfigHash,
-      ...compatibilityDecks.map((compatibilityDeck) => hashString(JSON.stringify({
-        ...renderConfigPayload,
-        deck: compatibilityDeck,
-      }))),
-    ]));
 
     return {
       deck,
       noteModel,
       renderConfigHash,
-      compatibleRenderConfigHashes,
       warnings: deckResolution.warnings,
     };
   }

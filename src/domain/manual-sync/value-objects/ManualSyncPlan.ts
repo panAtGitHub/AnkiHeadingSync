@@ -13,6 +13,7 @@ export interface PlannedCard {
 export interface ManualSyncPlan {
   toCreate: PlannedCard[];
   toUpdate: PlannedCard[];
+  toChangeDeck: PlannedCard[];
   toRewriteMarker: PlannedCard[];
   toOrphan: CardState[];
   unchangedCards: number;

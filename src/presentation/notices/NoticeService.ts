@@ -12,7 +12,7 @@ export class NoticeService {
   }
 
   showSyncSummary(prefix: string, result: ManualSyncResult): void {
-    const summary = `${prefix}: files ${result.scannedFiles}, cards ${result.scannedCards}, created ${result.created}, updated ${result.updated}, orphaned ${result.orphaned}, media ${result.uploadedMedia}, skipped ${result.skippedUnchangedCards}.`;
+    const summary = `${prefix}: files ${result.scannedFiles}, cards ${result.scannedCards}, created ${result.created}, updated ${result.updated}, migrated decks ${result.migratedDecks}, orphaned ${result.orphaned}, media ${result.uploadedMedia}, skipped ${result.skippedUnchangedCards}.`;
     const conflicts = result.markerWriteConflictFiles.length > 0
       ? ` Marker write conflicts: ${result.markerWriteConflictFiles.join(", ")}.`
       : "";
@@ -25,7 +25,7 @@ export class NoticeService {
   }
 
   showRebuildSummary(prefix: string, result: ManualSyncResult): void {
-    const summary = `${prefix}: files ${result.scannedFiles}, cards ${result.scannedCards}, orphaned ${result.orphaned}, rewritten markers ${result.rewrittenMarkers}, skipped ${result.skippedUnchangedCards}.`;
+    const summary = `${prefix}: files ${result.scannedFiles}, cards ${result.scannedCards}, migrated decks ${result.migratedDecks}, orphaned ${result.orphaned}, rewritten markers ${result.rewrittenMarkers}, skipped ${result.skippedUnchangedCards}.`;
     const conflicts = result.markerWriteConflictFiles.length > 0
       ? ` Marker write conflicts: ${result.markerWriteConflictFiles.join(", ")}.`
       : "";

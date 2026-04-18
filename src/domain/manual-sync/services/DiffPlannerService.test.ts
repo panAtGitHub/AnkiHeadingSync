@@ -37,6 +37,7 @@ describe("DiffPlannerService", () => {
     );
 
     expect(plan.toCreate).toHaveLength(1);
+    expect(plan.toChangeDeck).toHaveLength(0);
   });
 
   it("rewrites a missing marker without create or update when the restored card content is unchanged", () => {
@@ -97,6 +98,7 @@ describe("DiffPlannerService", () => {
 
     expect(plan.toCreate).toHaveLength(0);
     expect(plan.toUpdate).toHaveLength(0);
+    expect(plan.toChangeDeck).toHaveLength(0);
     expect(plan.toRewriteMarker.map((plannedCard) => plannedCard.card.cardId)).toEqual(["ahs_known"]);
     expect(plan.unchangedCards).toBe(1);
   });
@@ -172,6 +174,7 @@ describe("DiffPlannerService", () => {
     );
 
     expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toChangeDeck).toHaveLength(1);
     expect(plan.toRewriteMarker).toHaveLength(1);
   });
 
@@ -212,7 +215,7 @@ describe("DiffPlannerService", () => {
     expect(plan.toOrphan.map((card) => card.cardId)).toEqual(["ahs_missing"]);
   });
 
-  it("does not schedule update when only the resolved deck changed", () => {
+  it("schedules deck migration when only the resolved deck changed", () => {
     const service = new DiffPlannerService();
     const settings = createModule3Settings({ defaultDeck: "New::Deck" });
     const card = {
@@ -236,8 +239,7 @@ describe("DiffPlannerService", () => {
       tagsHint: [],
       markerState: "card-and-note" as const,
     };
-    const legacyRenderPlan = new RenderConfigService().resolve(card, settings, ["Old::Deck"]);
-    const legacyRenderConfigHash = legacyRenderPlan.compatibleRenderConfigHashes.find((hash) => hash !== legacyRenderPlan.renderConfigHash) ?? legacyRenderPlan.renderConfigHash;
+    const legacyRenderPlan = new RenderConfigService().resolve(card, createModule3Settings({ defaultDeck: "Old::Deck" }));
     const state = {
       files: {},
       cards: {
@@ -257,7 +259,7 @@ describe("DiffPlannerService", () => {
           contentEndLine: 2,
           rawBlockText: ["#### Prompt", "Body"].join("\n"),
           rawBlockHash: "hash-card",
-          renderConfigHash: legacyRenderConfigHash,
+          renderConfigHash: legacyRenderPlan.renderConfigHash,
           deck: "Old::Deck",
           deckWarnings: [],
           tagsHint: [],
@@ -271,6 +273,73 @@ describe("DiffPlannerService", () => {
     const plan = service.plan([card], state, ["example.md"], settings);
 
     expect(plan.toUpdate).toHaveLength(0);
-    expect(plan.unchangedCards).toBe(1);
+    expect(plan.toChangeDeck).toHaveLength(1);
+    expect(plan.unchangedCards).toBe(0);
+  });
+
+  it("does not trigger deck migration when only fields changed", () => {
+    const service = new DiffPlannerService();
+    const settings = createModule3Settings();
+    const card = {
+      cardId: "ahs_1",
+      noteId: 42,
+      markerNoteId: 42,
+      filePath: "example.md",
+      cardType: "basic" as const,
+      heading: "Prompt",
+      headingLevel: 4,
+      bodyMarkdown: "Updated Body",
+      blockStartOffset: 0,
+      blockEndOffset: 23,
+      blockStartLine: 1,
+      bodyStartLine: 2,
+      blockEndLine: 2,
+      contentEndLine: 2,
+      rawBlockText: ["#### Prompt", "Updated Body"].join("\n"),
+      rawBlockHash: "new-hash",
+      deckWarnings: [],
+      tagsHint: [],
+      markerState: "card-and-note" as const,
+    };
+    const existingRenderPlan = new RenderConfigService().resolve({
+      ...card,
+      bodyMarkdown: "Body",
+      rawBlockText: ["#### Prompt", "Body"].join("\n"),
+      rawBlockHash: "old-hash",
+    }, settings);
+    const state = {
+      files: {},
+      cards: {
+        ahs_1: {
+          cardId: "ahs_1",
+          noteId: 42,
+          filePath: "example.md",
+          heading: "Prompt",
+          headingLevel: 4,
+          bodyMarkdown: "Body",
+          cardType: "basic" as const,
+          blockStartOffset: 0,
+          blockEndOffset: 16,
+          blockStartLine: 1,
+          bodyStartLine: 2,
+          blockEndLine: 2,
+          contentEndLine: 2,
+          rawBlockText: ["#### Prompt", "Body"].join("\n"),
+          rawBlockHash: "old-hash",
+          renderConfigHash: existingRenderPlan.renderConfigHash,
+          deck: existingRenderPlan.deck,
+          deckWarnings: [],
+          tagsHint: [],
+          lastSyncedAt: 1,
+          orphan: false,
+        },
+      },
+      pendingWriteBack: [],
+    };
+
+    const plan = service.plan([card], state, ["example.md"], settings);
+
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toChangeDeck).toHaveLength(0);
   });
 });

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createEmptyPluginState } from "@/domain/manual-sync/entities/PluginState";
 import { createModule3Settings, FakeManualSyncVaultGateway } from "@/test-support/manualSyncFakes";
 
-import { FileIndexerService } from "./FileIndexerService";
+import { createDeckRulesFingerprint, FileIndexerService } from "./FileIndexerService";
 
 describe("FileIndexerService", () => {
   it("filters by path before reading file content", async () => {
@@ -35,6 +35,7 @@ describe("FileIndexerService", () => {
           filePath: "notes/one.md",
           fileHash: "hash-a",
           fileStamp: `1:${["#### One", "Body"].join("\n").length}`,
+          deckRulesFingerprint: createDeckRulesFingerprint(createModule3Settings()),
           lastIndexedAt: 1,
           cardIds: ["ahs_1"],
         },
@@ -73,5 +74,56 @@ describe("FileIndexerService", () => {
     expect(result.skippedUnchangedCards).toBe(1);
     expect(vaultGateway.readCalls).toEqual([]);
     expect(result.cards[0]).toMatchObject({ cardId: "ahs_1", noteId: 10 });
+  });
+
+  it("forces re-read when deck rules fingerprint changed even if file stamp is unchanged", async () => {
+    const content = ["#### One", "Body"].join("\n");
+    const vaultGateway = new FakeManualSyncVaultGateway({
+      "notes/one.md": content,
+    });
+    const service = new FileIndexerService(vaultGateway);
+    const state = {
+      files: {
+        "notes/one.md": {
+          filePath: "notes/one.md",
+          fileHash: "hash-a",
+          fileStamp: `1:${content.length}`,
+          deckRulesFingerprint: createDeckRulesFingerprint(createModule3Settings({ defaultDeck: "Old::Deck" })),
+          lastIndexedAt: 1,
+          cardIds: ["ahs_1"],
+        },
+      },
+      cards: {
+        ahs_1: {
+          cardId: "ahs_1",
+          noteId: 10,
+          filePath: "notes/one.md",
+          heading: "One",
+          headingLevel: 4,
+          bodyMarkdown: "Body",
+          cardType: "basic" as const,
+          blockStartOffset: 0,
+          blockEndOffset: 16,
+          blockStartLine: 1,
+          bodyStartLine: 2,
+          blockEndLine: 2,
+          contentEndLine: 2,
+          rawBlockText: content,
+          rawBlockHash: "hash-card",
+          renderConfigHash: "render-hash",
+          deck: "Old::Deck",
+          deckWarnings: [],
+          tagsHint: [],
+          lastSyncedAt: 1,
+          orphan: false,
+        },
+      },
+      pendingWriteBack: [],
+    };
+
+    const result = await service.indexVault(createModule3Settings({ defaultDeck: "New::Deck" }), state);
+
+    expect(result.skippedUnchangedFiles).toBe(0);
+    expect(vaultGateway.readCalls).toEqual(["notes/one.md"]);
   });
 });

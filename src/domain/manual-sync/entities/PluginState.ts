@@ -5,6 +5,7 @@ export interface FileState {
   filePath: string;
   fileHash: string;
   fileStamp: string;
+  deckRulesFingerprint?: string;
   lastIndexedAt: number;
   cardIds: string[];
 }

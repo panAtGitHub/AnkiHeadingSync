@@ -90,9 +90,9 @@
 
 ## 兼容与边界判断
 
-模块 5 明确要求：旧卡行为保持当前实现，不在本模块内改写旧卡 deck update 语义。
+该报告反映的是模块 5 实现前的历史差距。
 
-因此本轮不能回退到更早的 deck 迁移语义，也不能新增新的 old-card deck migration 逻辑。
+后续 deck-rule-migration 修复已经把产品语义更新为：普通同步会按最新 deck 规则迁移旧卡；只有 `rebuildIndex` 继续保持“不迁移 Anki deck”的边界。
 
 ## 本轮修复边界
 

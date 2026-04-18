@@ -5,6 +5,7 @@ import type { IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
 import type { IndexedFile } from "@/domain/manual-sync/entities/IndexedFile";
 import type { CardState, PendingWriteBackState, PluginState } from "@/domain/manual-sync/entities/PluginState";
 import { CardIndexingService } from "@/domain/manual-sync/services/CardIndexingService";
+import { hashString } from "@/domain/shared/hash";
 
 export interface FileIndexerResult {
   scopedFilePaths: string[];
@@ -79,6 +80,7 @@ export class FileIndexerService {
     const cards: IndexedCard[] = [];
     let skippedUnchangedFiles = 0;
     let skippedUnchangedCards = 0;
+    const deckRulesFingerprint = createDeckRulesFingerprint(settings);
 
     for (const ref of refs) {
       const fileStamp = createFileStamp(ref.mtime, ref.size);
@@ -92,6 +94,7 @@ export class FileIndexerService {
         hasPendingWriteBack ||
         !existingFileState ||
         existingFileState.fileStamp !== fileStamp ||
+        existingFileState.deckRulesFingerprint !== deckRulesFingerprint ||
         hasMissingKnownCard;
 
       if (!shouldRead) {
@@ -201,4 +204,16 @@ function restoreIndexedCard(card: CardState): IndexedCard {
 
 export function createFileStamp(mtime: number, size: number): string {
   return `${mtime}:${size}`;
+}
+
+const DECK_RULES_FINGERPRINT_VERSION = "deck-rules-v1";
+
+export function createDeckRulesFingerprint(settings: PluginSettings): string {
+  return hashString(JSON.stringify({
+    version: DECK_RULES_FINGERPRINT_VERSION,
+    defaultDeck: settings.defaultDeck,
+    fileDeckEnabled: settings.fileDeckEnabled,
+    fileDeckMarker: settings.fileDeckMarker,
+    folderDeckMode: settings.folderDeckMode,
+  }));
 }

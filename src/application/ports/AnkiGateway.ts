@@ -10,7 +10,7 @@ export interface AddAnkiNoteInput {
 
 export interface UpdateAnkiNoteInput {
   noteId: number;
-  deckName: string;
+  deckName?: string;
   fields: Record<string, string>;
 }
 

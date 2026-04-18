@@ -57,8 +57,8 @@
 
 1. `CardIndexingService` 只提取“文件级显式 deck 线索”
 2. `RenderConfigService` 调用 `DeckResolutionService` 解析最终 deck
-3. `DiffPlannerService` 保持当前旧卡行为，不额外改写 update / changeDeck 语义
-4. `AnkiBatchExecutor` 继续让 `toCreate` 使用 `resolvedDeck`
+3. `DiffPlannerService` 分离字段更新与 deck 迁移计划
+4. `AnkiBatchExecutor` 让 `toCreate` 使用 `resolvedDeck`，并在普通同步中执行 `changeDecks`
 
 ## 6. warnings
 

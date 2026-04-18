@@ -9,6 +9,7 @@ import type { PlannedCard, ManualSyncPlan } from "@/domain/manual-sync/value-obj
 export interface AnkiBatchExecutionResult {
   created: number;
   updated: number;
+  migratedDecks: number;
   uploadedMedia: number;
   markerWrites: PlannedCard[];
   resolvedNoteIds: Map<string, number | undefined>;
@@ -34,13 +35,19 @@ export class AnkiBatchExecutor {
     const markerWriteMap = new Map<string, PlannedCard>();
     let created = 0;
     let updated = 0;
+    let migratedDecks = 0;
 
-    const summaryIds = Array.from(new Set([...plan.toUpdate, ...plan.toRewriteMarker].flatMap((plannedCard) => plannedCard.noteId ? [plannedCard.noteId] : [])));
+    const summaryIds = Array.from(new Set([
+      ...plan.toUpdate,
+      ...plan.toRewriteMarker,
+      ...plan.toChangeDeck,
+    ].flatMap((plannedCard) => plannedCard.noteId ? [plannedCard.noteId] : [])));
     const noteSummaries = await this.batchScheduler.runCollectBatches(summaryIds, 100, 1, (batch) => this.ankiGateway.getNoteSummaries(batch));
     const noteSummariesById = new Map(noteSummaries.map((summary) => [summary.noteId, summary]));
 
     const addQueue: RenderedSyncCard[] = [];
     const updateQueue: Array<{ plannedCard: PlannedCard; renderedCard: RenderedSyncCard }> = [];
+    const changeDeckQueue: PlannedCard[] = [];
 
     for (const plannedCard of plan.toCreate) {
       addQueue.push(await this.requireRenderedCard(plannedCard, renderedCards, renderOnDemand));
@@ -71,8 +78,20 @@ export class AnkiBatchExecutor {
       markerWriteMap.set(plannedCard.card.cardId, plannedCard);
     }
 
+    for (const plannedCard of plan.toChangeDeck) {
+      if (!plannedCard.noteId || !noteSummariesById.has(plannedCard.noteId)) {
+        continue;
+      }
+
+      changeDeckQueue.push(plannedCard);
+      resolvedNoteIds.set(plannedCard.card.cardId, plannedCard.noteId);
+    }
+
     await this.batchScheduler.runVoidBatches(
-      Array.from(new Set(addQueue.map((card) => card.deck))),
+      Array.from(new Set([
+        ...addQueue.map((card) => card.deck),
+        ...changeDeckQueue.map((plannedCard) => plannedCard.deck),
+      ])),
       50,
       1,
       (batch) => this.ankiGateway.ensureDecks(batch),
@@ -114,7 +133,6 @@ export class AnkiBatchExecutor {
       await this.ankiGateway.updateNotes(
         await Promise.all(batch.map(async ({ plannedCard, renderedCard }) => ({
           noteId: plannedCard.noteId ?? 0,
-          deckName: renderedCard.deck,
           fields: await this.mapFields(renderedCard, noteFieldMappings, modelDetailsCache),
         }))),
       );
@@ -128,9 +146,45 @@ export class AnkiBatchExecutor {
       }
     }
 
+    const deckChangeInputs = new Map<string, Set<number>>();
+
+    for (const plannedCard of changeDeckQueue) {
+      const noteId = plannedCard.noteId;
+      if (!noteId) {
+        continue;
+      }
+
+      const summary = noteSummariesById.get(noteId);
+      if (!summary || summary.cardIds.length === 0) {
+        continue;
+      }
+
+      const cardIds = deckChangeInputs.get(plannedCard.deck) ?? new Set<number>();
+      for (const cardId of summary.cardIds) {
+        cardIds.add(cardId);
+      }
+      deckChangeInputs.set(plannedCard.deck, cardIds);
+    }
+
+    await this.batchScheduler.runVoidBatches(
+      Array.from(deckChangeInputs.entries()).map(([deckName, cardIds]) => ({
+        deckName,
+        cardIds: Array.from(cardIds),
+      })),
+      25,
+      1,
+      (batch) => this.ankiGateway.changeDecks(batch),
+    );
+
+    migratedDecks = changeDeckQueue.length;
+    for (const plannedCard of changeDeckQueue) {
+      touchedCardIds.add(plannedCard.card.cardId);
+    }
+
     return {
       created,
       updated,
+      migratedDecks,
       uploadedMedia,
       markerWrites: Array.from(markerWriteMap.values()).map((plannedCard) => ({
         ...plannedCard,
