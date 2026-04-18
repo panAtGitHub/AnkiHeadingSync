@@ -54,6 +54,8 @@ export class FileIndexerService {
       fileStamp,
       knownCards: stateIndex.cardsByFilePath.get(filePath) ?? [],
       pendingWriteBack: stateIndex.pendingByFilePath.get(filePath) ?? [],
+      fileDeckEnabled: settings.fileDeckEnabled,
+      fileDeckMarker: settings.fileDeckMarker,
     });
 
     return {
@@ -121,6 +123,8 @@ export class FileIndexerService {
         fileStamp,
         knownCards,
         pendingWriteBack,
+        fileDeckEnabled: settings.fileDeckEnabled,
+        fileDeckMarker: settings.fileDeckMarker,
       });
 
       indexedFiles.push(indexedFile);
@@ -188,6 +192,8 @@ function restoreIndexedCard(card: CardState): IndexedCard {
     rawBlockText: card.rawBlockText,
     rawBlockHash: card.rawBlockHash,
     deckHint: card.deckHint,
+    deckHintSource: card.deckHintSource,
+    deckWarnings: [...card.deckWarnings],
     tagsHint: card.tagsHint,
     markerState: card.noteId ? "card-and-note" : "card-only",
   };

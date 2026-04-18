@@ -36,6 +36,11 @@ describe("DataJsonPluginConfigRepository", () => {
     expect(settings.noteFieldMappings).toEqual({});
     expect(settings.scopeMode).toBe("all");
     expect(settings.includeFolders).toEqual(["cards"]);
+    expect(settings.fileDeckEnabled).toBe(false);
+    expect(settings.fileDeckMarker).toBe("TARGET DECK");
+    expect(settings.fileDeckTemplate).toBe("obsidian::filename");
+    expect(settings.fileDeckInsertLocation).toBe("body");
+    expect(settings.folderDeckMode).toBe("off");
   });
 
   it("persists note field mappings across save and reload", async () => {

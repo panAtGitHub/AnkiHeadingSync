@@ -16,8 +16,12 @@ export class NoticeService {
     const conflicts = result.markerWriteConflictFiles.length > 0
       ? ` Marker write conflicts: ${result.markerWriteConflictFiles.join(", ")}.`
       : "";
+    const warnings = result.warnings.length > 0 ? ` Warnings: ${result.warnings.length}.` : "";
 
-    this.info(`${summary}${conflicts}`);
+    this.info(`${summary}${conflicts}${warnings}`);
+    for (const warning of result.warnings.slice(0, 3)) {
+      this.info(warning.message);
+    }
   }
 
   showRebuildSummary(prefix: string, result: ManualSyncResult): void {
@@ -25,7 +29,11 @@ export class NoticeService {
     const conflicts = result.markerWriteConflictFiles.length > 0
       ? ` Marker write conflicts: ${result.markerWriteConflictFiles.join(", ")}.`
       : "";
+    const warnings = result.warnings.length > 0 ? ` Warnings: ${result.warnings.length}.` : "";
 
-    this.info(`${summary}${conflicts}`);
+    this.info(`${summary}${conflicts}${warnings}`);
+    for (const warning of result.warnings.slice(0, 3)) {
+      this.info(warning.message);
+    }
   }
 }

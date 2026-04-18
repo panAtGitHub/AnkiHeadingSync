@@ -1,3 +1,5 @@
+import type { DeckResolutionWarning } from "@/domain/manual-sync/value-objects/DeckResolution";
+
 export interface ManualSyncResult {
   scannedFiles: number;
   scannedCards: number;
@@ -8,4 +10,5 @@ export interface ManualSyncResult {
   skippedUnchangedCards: number;
   rewrittenMarkers: number;
   markerWriteConflictFiles: string[];
+  warnings: DeckResolutionWarning[];
 }

@@ -1,5 +1,6 @@
 import type { IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
 import type { CardState } from "@/domain/manual-sync/entities/PluginState";
+import type { DeckResolutionWarning } from "@/domain/manual-sync/value-objects/DeckResolution";
 
 export interface PlannedCard {
   card: IndexedCard;
@@ -15,4 +16,5 @@ export interface ManualSyncPlan {
   toRewriteMarker: PlannedCard[];
   toOrphan: CardState[];
   unchangedCards: number;
+  warnings: DeckResolutionWarning[];
 }

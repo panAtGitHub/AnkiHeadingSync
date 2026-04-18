@@ -1,6 +1,6 @@
 import { PluginSettingTab, Setting } from "obsidian";
 
-import type { ScopeMode } from "@/application/config/PluginSettings";
+import type { FileDeckInsertLocation, FolderDeckMode, ScopeMode } from "@/application/config/PluginSettings";
 import { createNoteFieldMappingKey, type NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
 import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
@@ -35,8 +35,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private folderTree: FolderTreeNode[] = [];
   private folderTreeStatus = FOLDER_TREE_STATUS_LOADING;
   private folderTreeLoadPromise: Promise<void> | null = null;
-  // removed cached 'hasLoadedFolderTree' so the settings UI can refresh
-  // the folder list when displayed (ensures newly-created Obsidian folders appear).
+  private hasLoadedFolderTree = false;
   private readonly expandedFolderPaths = new Set<string>();
 
   constructor(plugin: AnkiHeadingSyncPlugin) {
@@ -45,6 +44,12 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   declare plugin: AnkiHeadingSyncPlugin;
+
+  hide(): void {
+    super.hide();
+    this.hasLoadedFolderTree = false;
+    this.expandedFolderPaths.clear();
+  }
 
   display(): void {
     const { containerEl } = this;
@@ -62,14 +67,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
       });
 
-    new Setting(containerEl)
-      .setName("Default deck")
-      .setDesc("Used when a file does not define TARGET DECK")
-      .addText((text) => {
-        text.setValue(settings.defaultDeck).onChange((value) => {
-          void this.plugin.updateSettings({ defaultDeck: value });
-        });
-      });
+    this.renderDeckSection(containerEl, settings);
 
     new Setting(containerEl)
       .setName("QA heading level")
@@ -384,6 +382,121 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     return cardType === "basic" ? this.plugin.settings.qaNoteType : this.plugin.settings.clozeNoteType;
   }
 
+  private renderDeckSection(containerEl: HTMLElement, settings: AnkiHeadingSyncPlugin["settings"]): void {
+    containerEl.createEl("h3", { text: "默认牌组" });
+
+    new Setting(containerEl)
+      .setName("默认牌组")
+      .setDesc("优先级最低：当文件级 deck 与文件夹映射都未命中时使用。")
+      .addText((text) => {
+        text.setValue(settings.defaultDeck).onChange((value) => {
+          void this.plugin.updateSettings({ defaultDeck: value });
+        });
+      });
+
+    containerEl.createEl("h3", { text: "文件级自定义牌组" });
+
+    new Setting(containerEl)
+      .setName("开启文件级自定义牌组")
+      .setDesc("开启后，允许用统一 marker 在 YAML 或正文中为整篇笔记指定 deck。")
+      .addToggle((toggle) => {
+        toggle.setValue(settings.fileDeckEnabled).onChange(async (value) => {
+          await this.plugin.updateSettings({ fileDeckEnabled: value });
+          this.display();
+        });
+      });
+
+    if (settings.fileDeckEnabled) {
+      new Setting(containerEl)
+        .setName("牌组识别名")
+        .setDesc("YAML key 与正文 marker 共用同一个识别名。默认是 TARGET DECK。")
+        .addText((text) => {
+          text.setValue(settings.fileDeckMarker).onChange((value) => {
+            const nextValue = value.trim();
+            if (!nextValue) {
+              return;
+            }
+
+            void this.plugin.updateSettings({ fileDeckMarker: nextValue });
+          });
+        });
+
+      new Setting(containerEl)
+        .setName("默认牌组模板")
+        .setDesc("只支持 filename 变量，插入时会展开为当前文件名（不含 .md）。")
+        .addText((text) => {
+          text.setValue(settings.fileDeckTemplate).onChange((value) => {
+            const nextValue = value.trim();
+            if (!nextValue) {
+              return;
+            }
+
+            void this.plugin.updateSettings({ fileDeckTemplate: nextValue });
+          });
+        });
+
+      new Setting(containerEl)
+        .setName("模板插入位置")
+        .setDesc("选择将 deck 模板写入 YAML frontmatter 还是正文前部。")
+        .addDropdown((dropdown) => {
+          this.populateFileDeckInsertLocationDropdown(dropdown, settings.fileDeckInsertLocation);
+          dropdown.onChange((value) => {
+            if (value !== "yaml" && value !== "body") {
+              return;
+            }
+
+            void this.plugin.updateSettings({ fileDeckInsertLocation: value });
+          });
+        });
+
+      new Setting(containerEl)
+        .setName("向当前文件插入 deck 模板")
+        .setDesc("按当前 marker、模板和插入位置，把 deck 声明写入当前活动 Markdown 文件。")
+        .addButton((button) => {
+          button.setButtonText("插入 deck 模板").onClick(() => {
+            void this.plugin.insertDeckTemplateToCurrentFile();
+          });
+        });
+    }
+
+    containerEl.createEl("h3", { text: "高级：文件夹映射" });
+
+    new Setting(containerEl)
+      .setName("文件夹映射模式")
+      .setDesc("关闭 / 仅父文件夹 / 父文件夹加当前文件名。")
+      .addDropdown((dropdown) => {
+        this.populateFolderDeckModeDropdown(dropdown, settings.folderDeckMode);
+        dropdown.onChange((value) => {
+          if (value !== "off" && value !== "folder" && value !== "folder-and-file") {
+            return;
+          }
+
+          void this.plugin.updateSettings({ folderDeckMode: value });
+        });
+      });
+
+    containerEl.createEl("p", { text: "文件夹级映射示例：数学/第一章/第一节.md -> 数学::第一章" });
+    containerEl.createEl("p", { text: "文件夹及文件名级映射示例：数学/第一章/第一节.md -> 数学::第一章::第一节" });
+
+    containerEl.createEl("h3", { text: "最终优先级说明" });
+    containerEl.createEl("p", {
+      text: "最终 deck 优先级：文件级自定义牌组 > 文件夹映射 deck > 默认牌组。旧卡 deck 行为保持当前实现。",
+    });
+  }
+
+  private populateFileDeckInsertLocationDropdown(dropdown: SimpleDropdown, selectedValue: FileDeckInsertLocation): void {
+    dropdown.addOption("body", "正文前部");
+    dropdown.addOption("yaml", "YAML frontmatter");
+    dropdown.setValue(selectedValue);
+  }
+
+  private populateFolderDeckModeDropdown(dropdown: SimpleDropdown, selectedValue: FolderDeckMode): void {
+    dropdown.addOption("off", "关闭");
+    dropdown.addOption("folder", "文件夹级映射");
+    dropdown.addOption("folder-and-file", "文件夹及文件名级映射");
+    dropdown.setValue(selectedValue);
+  }
+
   private renderScopeSection(containerEl: HTMLElement, settings: AnkiHeadingSyncPlugin["settings"]): void {
     new Setting(containerEl)
       .setName("运行范围")
@@ -498,13 +611,11 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private ensureFolderTreeLoaded(): void {
-    if (this.folderTreeLoadPromise) {
+    if (this.hasLoadedFolderTree || this.folderTreeLoadPromise) {
       return;
     }
 
     this.folderTreeStatus = FOLDER_TREE_STATUS_LOADING;
-    // Always re-fetch the folder tree when requested (no permanent cache).
-    // Avoid concurrent loads using folderTreeLoadPromise.
     this.folderTreeLoadPromise = this.plugin
       .listFolderTree()
       .then((folderTree) => {
@@ -516,6 +627,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         this.folderTreeStatus = error instanceof Error ? error.message : "读取 vault 文件夹失败。";
       })
       .finally(() => {
+        this.hasLoadedFolderTree = true;
         this.folderTreeLoadPromise = null;
         this.display();
       });

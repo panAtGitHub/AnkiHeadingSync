@@ -58,6 +58,7 @@ describe("FileIndexerService", () => {
           rawBlockHash: "hash-card",
           renderConfigHash: "render-hash",
           deck: "Obsidian",
+          deckWarnings: [],
           tagsHint: [],
           lastSyncedAt: 1,
           orphan: false,

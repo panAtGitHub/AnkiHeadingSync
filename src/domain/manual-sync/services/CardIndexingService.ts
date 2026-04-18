@@ -5,6 +5,7 @@ import type { CardState, PendingWriteBackState } from "@/domain/manual-sync/enti
 import { hashString } from "@/domain/shared/hash";
 
 import { CardMarkerError, CardMarkerService } from "./CardMarkerService";
+import { DeckExtractionService } from "./DeckExtractionService";
 
 interface HeadingMatch {
   level: number;
@@ -27,13 +28,16 @@ export interface CardIndexingContext {
   fileStamp: string;
   knownCards: CardState[];
   pendingWriteBack: PendingWriteBackState[];
+  fileDeckEnabled?: boolean;
+  fileDeckMarker?: string;
 }
 
 const HEADING_REGEXP = /^(#{1,6})\s+(.*?)\s*$/;
-const TARGET_DECK_REGEXP = /^\s*TARGET DECK\s*:\s*(.+?)\s*$/i;
-
 export class CardIndexingService {
-  constructor(private readonly markerService = new CardMarkerService()) {}
+  constructor(
+    private readonly markerService = new CardMarkerService(),
+    private readonly deckExtractionService = new DeckExtractionService(),
+  ) {}
 
   index(sourceFile: SourceFile, context: CardIndexingContext): IndexedFile {
     validateHeadingPolicy(context.qaHeadingLevel, context.clozeHeadingLevel);
@@ -41,7 +45,9 @@ export class CardIndexingService {
     const lines = sourceFile.content.split(/\r?\n/);
     const lineStartOffsets = computeLineStartOffsets(sourceFile.content);
     const headings = collectHeadings(lines);
-    const targetDeck = extractTargetDeck(lines);
+    const extractedDeck = context.fileDeckEnabled
+      ? this.deckExtractionService.extract(sourceFile, context.fileDeckMarker ?? "TARGET DECK")
+      : { warnings: [] };
     const cards: IndexedCard[] = [];
     const knownCardsById = new Map(context.knownCards.map((card) => [card.cardId, card]));
     const knownCardsByBlockKey = groupKnownCardsByBlockKey(context.knownCards);
@@ -93,7 +99,9 @@ export class CardIndexingService {
         markerLine: marker.markerLine,
         rawBlockText,
         rawBlockHash,
-        deckHint: targetDeck,
+        deckHint: extractedDeck.explicitDeckHint,
+        deckHintSource: extractedDeck.explicitDeckSource,
+        deckWarnings: [...extractedDeck.warnings],
         tagsHint: [],
         markerState: marker.markerState,
         sourceContent: sourceFile.content,
@@ -212,30 +220,6 @@ function collectHeadings(lines: string[]): HeadingMatch[] {
   }
 
   return headings;
-}
-
-function extractTargetDeck(lines: string[]): string | undefined {
-  let fenceMarker: string | null = null;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
-      fenceMarker = fenceMarker ? null : trimmed.slice(0, 3);
-      continue;
-    }
-
-    if (fenceMarker) {
-      continue;
-    }
-
-    const match = line.match(TARGET_DECK_REGEXP);
-    if (match) {
-      return match[1].trim();
-    }
-  }
-
-  return undefined;
 }
 
 function resolveCardType(level: number, qaHeadingLevel: number, clozeHeadingLevel: number): IndexedCard["cardType"] | null {

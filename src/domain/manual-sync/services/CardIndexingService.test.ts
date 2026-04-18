@@ -151,6 +151,104 @@ describe("CardIndexingService", () => {
       ),
     ).toThrow("Multiple AHS markers");
   });
+
+  it("extracts YAML deck, prefers it over conflicting body deck, and stores a warning on indexed cards", () => {
+    const service = new CardIndexingService();
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: [
+          "---",
+          "TARGET DECK: YAML/Deck",
+          "---",
+          "",
+          "TARGET DECK: Body::Deck",
+          "",
+          "#### Prompt",
+          "Answer",
+        ].join("\n"),
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        fileStamp: "1:1",
+        knownCards: [],
+        pendingWriteBack: [],
+        fileDeckEnabled: true,
+        fileDeckMarker: "TARGET DECK",
+      },
+    );
+
+    expect(indexedFile.cards[0]).toMatchObject({
+      deckHint: "YAML::Deck",
+      deckHintSource: "frontmatter",
+    });
+    expect(indexedFile.cards[0]?.deckWarnings.map((warning) => warning.code)).toEqual(["deck_conflict_yaml_body"]);
+  });
+
+  it("extracts multiline body TARGET DECK while ignoring fenced code blocks", () => {
+    const service = new CardIndexingService();
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: [
+          "```md",
+          "TARGET DECK: Fake::Deck",
+          "```",
+          "",
+          "TARGET DECK",
+          "Real/Deck",
+          "",
+          "#### Prompt",
+          "Answer",
+        ].join("\n"),
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        fileStamp: "1:1",
+        knownCards: [],
+        pendingWriteBack: [],
+        fileDeckEnabled: true,
+        fileDeckMarker: "TARGET DECK",
+      },
+    );
+
+    expect(indexedFile.cards[0]).toMatchObject({
+      deckHint: "Real::Deck",
+      deckHintSource: "body",
+    });
+  });
+
+  it("skips explicit deck extraction when file-level deck mode is disabled", () => {
+    const service = new CardIndexingService();
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: [
+          "TARGET DECK: Scoped/Deck",
+          "",
+          "#### Prompt",
+          "Answer",
+        ].join("\n"),
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        fileStamp: "1:1",
+        knownCards: [],
+        pendingWriteBack: [],
+        fileDeckEnabled: false,
+        fileDeckMarker: "TARGET DECK",
+      },
+    );
+
+    expect(indexedFile.cards[0]?.deckHint).toBeUndefined();
+    expect(indexedFile.cards[0]?.deckWarnings).toEqual([]);
+  });
 });
 
 function createKnownCardState(overrides: Partial<CardState> = {}): CardState {
@@ -176,6 +274,8 @@ function createKnownCardState(overrides: Partial<CardState> = {}): CardState {
     renderConfigHash: overrides.renderConfigHash ?? "render-hash",
     deck: overrides.deck ?? "Obsidian",
     deckHint: overrides.deckHint,
+    deckHintSource: overrides.deckHintSource,
+    deckWarnings: overrides.deckWarnings ?? [],
     tagsHint: overrides.tagsHint ?? [],
     lastSyncedAt: overrides.lastSyncedAt ?? 1,
     orphan: overrides.orphan ?? false,

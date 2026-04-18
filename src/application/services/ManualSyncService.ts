@@ -98,6 +98,7 @@ export class ManualSyncService {
       skippedUnchangedCards: indexResult.skippedUnchangedCards,
       rewrittenMarkers: writeBackResult.writtenCardIds.length,
       markerWriteConflictFiles: writeBackResult.conflictFiles,
+      warnings: plan.warnings,
     };
   }
 
@@ -161,6 +162,7 @@ export class ManualSyncService {
       skippedUnchangedCards: indexResult.skippedUnchangedCards,
       rewrittenMarkers: writeBackResult.writtenCardIds.length,
       markerWriteConflictFiles: writeBackResult.conflictFiles,
+      warnings: plan.warnings,
     };
   }
 
@@ -219,6 +221,8 @@ export class ManualSyncService {
         renderConfigHash: renderPlan.renderConfigHash,
         deck: renderPlan.deck,
         deckHint: card.deckHint,
+        deckHintSource: card.deckHintSource,
+        deckWarnings: [...card.deckWarnings],
         tagsHint: card.tagsHint,
         lastSyncedAt: touchedCardIds.has(card.cardId) ? now : existingState?.lastSyncedAt ?? 0,
         orphan: false,

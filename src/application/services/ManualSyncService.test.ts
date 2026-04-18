@@ -21,6 +21,9 @@ describe("ManualSyncService", () => {
 
     expect(result.created).toBe(1);
     expect(result.updated).toBe(0);
+    expect(result.warnings).toEqual([]);
+    expect(ankiGateway.addedNotes[0]?.deckName).toBe("notes");
+    expect(ankiGateway.ensuredDecks).toEqual([["notes"]]);
     expect(vaultGateway.getFileContent("notes/example.md")).toContain("<!-- AHS:card=");
     expect(vaultGateway.getFileContent("notes/example.md")).toContain("note=9001");
     expect(stateRepository.savedState?.pendingWriteBack).toEqual([]);
@@ -118,6 +121,99 @@ describe("ManualSyncService", () => {
     ).toBe(true);
   });
 
+  it("uses YAML deck, emits conflict warning, and continues syncing when YAML and body deck declarations differ", async () => {
+    const vaultGateway = new FakeManualSyncVaultGateway({
+      "notes/example.md": [
+        "---",
+        "TARGET DECK: YAML/Deck",
+        "---",
+        "",
+        "TARGET DECK: Body::Deck",
+        "",
+        "#### Prompt",
+        "Answer",
+      ].join("\n"),
+    });
+    const stateRepository = new InMemoryPluginStateRepository();
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    const service = new ManualSyncService(vaultGateway, stateRepository, ankiGateway, undefined, undefined, undefined, undefined, undefined, undefined, () => 1234);
+
+    const result = await service.syncFile("notes/example.md", createModule3Settings());
+
+    expect(result.created).toBe(1);
+    expect(result.warnings.map((warning) => warning.code)).toEqual(["deck_conflict_yaml_body"]);
+    expect(ankiGateway.addedNotes[0]?.deckName).toBe("YAML::Deck");
+  });
+
+  it("maps folder hierarchy to nested Anki decks for new notes", async () => {
+    const vaultGateway = new FakeManualSyncVaultGateway({
+      "课程/数学/第一章/导数.md": ["#### Prompt", "Answer"].join("\n"),
+    });
+    const stateRepository = new InMemoryPluginStateRepository();
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    const service = new ManualSyncService(vaultGateway, stateRepository, ankiGateway, undefined, undefined, undefined, undefined, undefined, undefined, () => 1234);
+
+    await service.syncFile("课程/数学/第一章/导数.md", createModule3Settings());
+
+    expect(ankiGateway.addedNotes[0]?.deckName).toBe("课程::数学::第一章");
+    expect(ankiGateway.ensuredDecks).toEqual([["课程::数学::第一章"]]);
+  });
+
+  it("does not update or move an existing note when only the resolved deck changes", async () => {
+    const settings = createModule3Settings({ defaultDeck: "New::Deck" });
+    const vaultGateway = new FakeManualSyncVaultGateway({
+      "example.md": ["#### Prompt", "Answer", "<!-- AHS:card=ahs_known note=42 -->"].join("\n"),
+    });
+    const indexedCard = {
+      cardId: "ahs_known",
+      noteId: 42,
+      markerNoteId: 42,
+      filePath: "example.md",
+      cardType: "basic" as const,
+      heading: "Prompt",
+      headingLevel: 4,
+      bodyMarkdown: "Answer",
+      blockStartOffset: 0,
+      blockEndOffset: 16,
+      blockStartLine: 1,
+      bodyStartLine: 2,
+      blockEndLine: 3,
+      contentEndLine: 2,
+      markerLine: 3,
+      rawBlockText: ["#### Prompt", "Answer"].join("\n"),
+      rawBlockHash: hashString(["#### Prompt", "Answer"].join("\n")),
+      deckWarnings: [],
+      tagsHint: [],
+      markerState: "card-and-note" as const,
+    };
+    const renderPlan = new RenderConfigService().resolve(indexedCard, settings, ["Old::Deck"]);
+    const legacyRenderConfigHash = renderPlan.compatibleRenderConfigHashes.find((hash) => hash !== renderPlan.renderConfigHash) ?? renderPlan.renderConfigHash;
+    const stateRepository = new InMemoryPluginStateRepository({
+      files: {},
+      cards: {
+        ahs_known: createStoredSyncedCard(settings, {
+          filePath: "example.md",
+          deck: "Old::Deck",
+          renderConfigHash: legacyRenderConfigHash,
+        }),
+      },
+      pendingWriteBack: [],
+    });
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    ankiGateway.noteSummariesById.set(42, {
+      noteId: 42,
+      modelName: "Basic",
+      cardIds: [7001],
+    });
+    const service = new ManualSyncService(vaultGateway, stateRepository, ankiGateway, undefined, undefined, undefined, undefined, undefined, undefined, () => 1234);
+
+    const result = await service.syncFile("example.md", settings);
+
+    expect(result.updated).toBe(0);
+    expect(ankiGateway.updatedNotes).toHaveLength(0);
+    expect(ankiGateway.changedDecks).toEqual([]);
+  });
+
   it("skips current file sync when the file is outside the configured scope", async () => {
     const vaultGateway = new FakeManualSyncVaultGateway({
       "outside/example.md": ["#### Prompt", "Answer"].join("\n"),
@@ -165,6 +261,8 @@ function createStoredSyncedCard(settings: PluginSettings, overrides: Partial<Car
     rawBlockText,
     rawBlockHash,
     deckHint: overrides.deckHint,
+    deckHintSource: overrides.deckHintSource,
+    deckWarnings: overrides.deckWarnings ?? [],
     tagsHint: overrides.tagsHint ?? [],
     markerState: "card-and-note" as const,
   };
@@ -190,6 +288,8 @@ function createStoredSyncedCard(settings: PluginSettings, overrides: Partial<Car
     renderConfigHash: overrides.renderConfigHash ?? renderPlan.renderConfigHash,
     deck: overrides.deck ?? renderPlan.deck,
     deckHint: indexedCard.deckHint,
+    deckHintSource: indexedCard.deckHintSource,
+    deckWarnings: [...indexedCard.deckWarnings],
     tagsHint: indexedCard.tagsHint,
     lastSyncedAt: overrides.lastSyncedAt ?? 1,
     orphan: overrides.orphan ?? false,

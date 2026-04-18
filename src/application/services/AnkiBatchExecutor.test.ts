@@ -41,6 +41,7 @@ describe("AnkiBatchExecutor", () => {
       toRewriteMarker: [],
       toOrphan: [],
       unchangedCards: 0,
+      warnings: [],
     };
 
     const result = await executor.execute(
@@ -54,13 +55,49 @@ describe("AnkiBatchExecutor", () => {
     expect(result.updated).toBe(1);
     expect(ankiGateway.getModelDetailsCalls).toEqual(["Basic"]);
   });
+
+  it("ensures decks for adds and does not move existing notes to another deck on update", async () => {
+    const ankiGateway = new CountingAnkiGateway();
+    ankiGateway.noteSummariesById.set(300, {
+      noteId: 300,
+      modelName: "Basic",
+      cardIds: [700],
+    });
+
+    const executor = new AnkiBatchExecutor(ankiGateway);
+    const createCard = createPlannedCard("ahs_create", undefined, "Folder::Deck");
+    const updateCard = createPlannedCard("ahs_update", 300, "Changed::Deck");
+    const renderedCards = new Map<string, RenderedSyncCard>([
+      [createCard.card.cardId, createRenderedSyncCard(createCard)],
+      [updateCard.card.cardId, createRenderedSyncCard(updateCard)],
+    ]);
+
+    await executor.execute(
+      {
+        toCreate: [createCard],
+        toUpdate: [updateCard],
+        toRewriteMarker: [],
+        toOrphan: [],
+        unchangedCards: 0,
+        warnings: [],
+      },
+      renderedCards,
+      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      createModule3Settings().noteFieldMappings,
+    );
+
+    expect(ankiGateway.ensuredDecks).toEqual([["Folder::Deck"]]);
+    expect(ankiGateway.changedDecks).toEqual([]);
+    expect(ankiGateway.addedNotes[0]?.deckName).toBe("Folder::Deck");
+    expect(ankiGateway.updatedNotes[0]?.deckName).toBe("Changed::Deck");
+  });
 });
 
-function createPlannedCard(cardId: string, noteId?: number): PlannedCard {
+function createPlannedCard(cardId: string, noteId?: number, deck = "Obsidian"): PlannedCard {
   return {
     card: createIndexedCard(cardId, noteId),
     noteId,
-    deck: "Obsidian",
+    deck,
     noteModel: "Basic",
     renderConfigHash: "render-config",
   };
@@ -99,6 +136,7 @@ function createIndexedCard(cardId: string, noteId?: number): IndexedCard {
     contentEndLine: 2,
     rawBlockText: `#### Heading ${cardId}\nBody ${cardId}`,
     rawBlockHash: `hash-${cardId}`,
+    deckWarnings: [],
     tagsHint: [],
     markerState: noteId ? "card-and-note" : "card-only",
   };

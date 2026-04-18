@@ -26,6 +26,7 @@ describe("DiffPlannerService", () => {
           contentEndLine: 2,
           rawBlockText: ["#### Prompt", "Body"].join("\n"),
           rawBlockHash: "hash-card",
+          deckWarnings: [],
           tagsHint: [],
           markerState: "card-only",
         },
@@ -57,6 +58,7 @@ describe("DiffPlannerService", () => {
       contentEndLine: 2,
       rawBlockText: ["#### Prompt", "Body"].join("\n"),
       rawBlockHash: "hash-card",
+      deckWarnings: [],
       tagsHint: [],
       markerState: "missing" as const,
     };
@@ -82,6 +84,7 @@ describe("DiffPlannerService", () => {
           rawBlockHash: "hash-card",
           renderConfigHash: renderPlan.renderConfigHash,
           deck: renderPlan.deck,
+          deckWarnings: [],
           tagsHint: [],
           lastSyncedAt: 1,
           orphan: false,
@@ -121,6 +124,7 @@ describe("DiffPlannerService", () => {
           rawBlockHash: "old-hash",
           renderConfigHash: "old-render",
           deck: "Old",
+          deckWarnings: [],
           tagsHint: [],
           lastSyncedAt: 1,
           orphan: false,
@@ -157,6 +161,7 @@ describe("DiffPlannerService", () => {
           contentEndLine: 2,
           rawBlockText: ["#### Prompt", "Body"].join("\n"),
           rawBlockHash: "hash-card",
+          deckWarnings: [],
           tagsHint: [],
           markerState: "card-and-note",
         },
@@ -193,6 +198,7 @@ describe("DiffPlannerService", () => {
           rawBlockHash: "hash-card",
           renderConfigHash: "render-hash",
           deck: "Obsidian",
+          deckWarnings: [],
           tagsHint: [],
           lastSyncedAt: 1,
           orphan: false,
@@ -204,5 +210,67 @@ describe("DiffPlannerService", () => {
     const plan = service.plan([], state, ["notes/example.md"], createModule3Settings());
 
     expect(plan.toOrphan.map((card) => card.cardId)).toEqual(["ahs_missing"]);
+  });
+
+  it("does not schedule update when only the resolved deck changed", () => {
+    const service = new DiffPlannerService();
+    const settings = createModule3Settings({ defaultDeck: "New::Deck" });
+    const card = {
+      cardId: "ahs_1",
+      noteId: 42,
+      markerNoteId: 42,
+      filePath: "example.md",
+      cardType: "basic" as const,
+      heading: "Prompt",
+      headingLevel: 4,
+      bodyMarkdown: "Body",
+      blockStartOffset: 0,
+      blockEndOffset: 16,
+      blockStartLine: 1,
+      bodyStartLine: 2,
+      blockEndLine: 2,
+      contentEndLine: 2,
+      rawBlockText: ["#### Prompt", "Body"].join("\n"),
+      rawBlockHash: "hash-card",
+      deckWarnings: [],
+      tagsHint: [],
+      markerState: "card-and-note" as const,
+    };
+    const legacyRenderPlan = new RenderConfigService().resolve(card, settings, ["Old::Deck"]);
+    const legacyRenderConfigHash = legacyRenderPlan.compatibleRenderConfigHashes.find((hash) => hash !== legacyRenderPlan.renderConfigHash) ?? legacyRenderPlan.renderConfigHash;
+    const state = {
+      files: {},
+      cards: {
+        ahs_1: {
+          cardId: "ahs_1",
+          noteId: 42,
+          filePath: "example.md",
+          heading: "Prompt",
+          headingLevel: 4,
+          bodyMarkdown: "Body",
+          cardType: "basic" as const,
+          blockStartOffset: 0,
+          blockEndOffset: 16,
+          blockStartLine: 1,
+          bodyStartLine: 2,
+          blockEndLine: 2,
+          contentEndLine: 2,
+          rawBlockText: ["#### Prompt", "Body"].join("\n"),
+          rawBlockHash: "hash-card",
+          renderConfigHash: legacyRenderConfigHash,
+          deck: "Old::Deck",
+          deckWarnings: [],
+          tagsHint: [],
+          lastSyncedAt: 1,
+          orphan: false,
+        },
+      },
+      pendingWriteBack: [],
+    };
+
+    const plan = service.plan([card], state, ["example.md"], settings);
+
+    expect(plan.toUpdate).toHaveLength(0);
+    expect(plan.unchangedCards).toBe(1);
   });
 });

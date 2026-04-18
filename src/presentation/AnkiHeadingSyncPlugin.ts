@@ -2,6 +2,7 @@ import { Plugin } from "obsidian";
 
 import { DEFAULT_SETTINGS, type PluginSettings } from "@/application/config/PluginSettings";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
+import { DeckTemplateInsertionService } from "@/application/services/DeckTemplateInsertionService";
 import { ManualSyncCurrentFileUseCase } from "@/application/use-cases/ManualSyncCurrentFileUseCase";
 import { RebuildCardIndexUseCase } from "@/application/use-cases/RebuildCardIndexUseCase";
 import { ManualSyncVaultUseCase } from "@/application/use-cases/ManualSyncVaultUseCase";
@@ -22,6 +23,7 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
 
   private readonly noticeService = new NoticeService();
   private readonly ankiGateway = new AnkiConnectGateway(() => this.settings.ankiConnectUrl);
+  private readonly deckTemplateInsertionService = new DeckTemplateInsertionService();
 
   private syncCurrentFileUseCase?: ManualSyncCurrentFileUseCase;
   private syncVaultUseCase?: ManualSyncVaultUseCase;
@@ -141,6 +143,46 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
     } catch (error) {
       console.error("Card index rebuild failed.", error);
       this.noticeService.error(error instanceof Error ? error.message : "Card index rebuild failed.");
+    }
+  }
+
+  async insertDeckTemplateToCurrentFile(): Promise<void> {
+    const activeFile = this.app.workspace.getActiveFile();
+
+    if (!activeFile || activeFile.extension.toLowerCase() !== "md") {
+      this.noticeService.error("No active Markdown file is available for deck template insertion.");
+      return;
+    }
+
+    if (!this.vaultGateway) {
+      this.noticeService.error("Vault gateway is not initialized.");
+      return;
+    }
+
+    try {
+      const sourceFile = await this.vaultGateway.readMarkdownFile(activeFile.path);
+      if (!sourceFile) {
+        this.noticeService.error(`Markdown file not found: ${activeFile.path}`);
+        return;
+      }
+
+      const insertionResult = this.deckTemplateInsertionService.insert(
+        sourceFile,
+        this.settings.fileDeckMarker,
+        this.settings.fileDeckTemplate,
+        this.settings.fileDeckInsertLocation,
+      );
+
+      if (insertionResult.nextContent === insertionResult.expectedContent) {
+        this.noticeService.info("当前文件中的 deck 模板已是最新，无需重复写入。");
+        return;
+      }
+
+      await this.vaultGateway.replaceMarkdownFile(activeFile.path, insertionResult.expectedContent, insertionResult.nextContent);
+      this.noticeService.info(`已向当前文件写入 deck 模板：${insertionResult.insertedDeck}`);
+    } catch (error) {
+      console.error("Deck template insertion failed.", error);
+      this.noticeService.error(error instanceof Error ? error.message : "Deck template insertion failed.");
     }
   }
 }

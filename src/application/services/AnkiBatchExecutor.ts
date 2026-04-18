@@ -72,7 +72,7 @@ export class AnkiBatchExecutor {
     }
 
     await this.batchScheduler.runVoidBatches(
-      Array.from(new Set([...addQueue, ...updateQueue.map((entry) => entry.renderedCard)].map((card) => card.deck))),
+      Array.from(new Set(addQueue.map((card) => card.deck))),
       50,
       1,
       (batch) => this.ankiGateway.ensureDecks(batch),
@@ -127,30 +127,6 @@ export class AnkiBatchExecutor {
         resolvedNoteIds.set(plannedCard.card.cardId, plannedCard.noteId);
       }
     }
-
-    const deckChanges = new Map<string, number[]>();
-    for (const { plannedCard } of updateQueue) {
-      const noteId = plannedCard.noteId;
-      if (!noteId) {
-        continue;
-      }
-
-      const summary = noteSummariesById.get(noteId);
-      if (!summary || summary.cardIds.length === 0) {
-        continue;
-      }
-
-      const cardIds = deckChanges.get(plannedCard.deck) ?? [];
-      cardIds.push(...summary.cardIds);
-      deckChanges.set(plannedCard.deck, cardIds);
-    }
-
-    await this.batchScheduler.runVoidBatches(
-      Array.from(deckChanges.entries()).map(([deckName, cardIds]) => ({ deckName, cardIds })),
-      25,
-      1,
-      (batch) => this.ankiGateway.changeDecks(batch),
-    );
 
     return {
       created,

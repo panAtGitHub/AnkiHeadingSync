@@ -25,4 +25,28 @@ describe("PluginSettings", () => {
       }),
     ).toThrow("Scope mode must be one of all, include, or exclude.");
   });
+
+  it("includes module 5 defaults", () => {
+    expect(DEFAULT_SETTINGS.fileDeckEnabled).toBe(false);
+    expect(DEFAULT_SETTINGS.fileDeckMarker).toBe("TARGET DECK");
+    expect(DEFAULT_SETTINGS.fileDeckTemplate).toBe("obsidian::filename");
+    expect(DEFAULT_SETTINGS.fileDeckInsertLocation).toBe("body");
+    expect(DEFAULT_SETTINGS.folderDeckMode).toBe("off");
+  });
+
+  it("rejects invalid module 5 enum values", () => {
+    expect(() =>
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        fileDeckInsertLocation: "middle" as never,
+      }),
+    ).toThrow("File deck insert location must be yaml or body.");
+
+    expect(() =>
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        folderDeckMode: "tree" as never,
+      }),
+    ).toThrow("Folder deck mode must be off, folder, or folder-and-file.");
+  });
 });

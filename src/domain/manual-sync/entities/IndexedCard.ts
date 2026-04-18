@@ -1,5 +1,6 @@
 import type { CardType } from "@/domain/card/entities/RenderedFields";
 import type { MarkerState } from "@/domain/manual-sync/entities/AhsMarker";
+import type { DeckResolutionWarning, DeckResolutionSource } from "@/domain/manual-sync/value-objects/DeckResolution";
 
 export interface IndexedCard {
   cardId: string;
@@ -20,6 +21,8 @@ export interface IndexedCard {
   rawBlockText: string;
   rawBlockHash: string;
   deckHint?: string;
+  deckHintSource?: Extract<DeckResolutionSource, "frontmatter" | "body">;
+  deckWarnings: DeckResolutionWarning[];
   tagsHint: string[];
   markerState: MarkerState;
   sourceContent?: string;

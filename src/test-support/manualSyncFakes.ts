@@ -208,6 +208,11 @@ export class FakeManualSyncAnkiGateway implements AnkiGateway {
 export function createModule3Settings(overrides: Partial<PluginSettings> = {}): PluginSettings {
   return {
     ...DEFAULT_SETTINGS,
+    fileDeckEnabled: true,
+    fileDeckMarker: "TARGET DECK",
+    fileDeckTemplate: "obsidian::filename",
+    fileDeckInsertLocation: "body",
+    folderDeckMode: "folder",
     noteFieldMappings: {
       "basic:Basic": {
         cardType: "basic",

@@ -124,6 +124,7 @@ const {
 
   class HoistedFakeTextComponent {
     public value = "";
+    private onChangeHandler?: (value: string) => void | Promise<void>;
 
     setPlaceholder(value: string): this {
       void value;
@@ -136,13 +137,19 @@ const {
     }
 
     onChange(callback: (value: string) => void | Promise<void>): this {
-      void callback;
+      this.onChangeHandler = callback;
       return this;
+    }
+
+    async triggerChange(value: string): Promise<void> {
+      this.value = value;
+      await this.onChangeHandler?.(value);
     }
   }
 
   class HoistedFakeToggleComponent {
     public value = false;
+    private onChangeHandler?: (value: boolean) => void | Promise<void>;
 
     setValue(value: boolean): this {
       this.value = value;
@@ -150,8 +157,13 @@ const {
     }
 
     onChange(callback: (value: boolean) => void | Promise<void>): this {
-      void callback;
+      this.onChangeHandler = callback;
       return this;
+    }
+
+    async triggerChange(value: boolean): Promise<void> {
+      this.value = value;
+      await this.onChangeHandler?.(value);
     }
   }
 
@@ -219,6 +231,10 @@ const {
       public readonly app: unknown,
       public readonly plugin: unknown,
     ) {}
+
+    hide(): void {
+      return;
+    }
   }
 
   return {
@@ -242,9 +258,19 @@ type FakeSettingInstance = InstanceType<typeof FakeSetting>;
 type FakeButtonComponentInstance = InstanceType<typeof FakeButtonComponent>;
 type FakeDropdownComponentInstance = InstanceType<typeof FakeDropdownComponent>;
 type FakeElementInstance = InstanceType<typeof FakeElement>;
+type FakeTextComponentInstance = {
+  value: string;
+  triggerChange(value: string): Promise<void>;
+};
+type FakeToggleComponentInstance = {
+  value: boolean;
+  triggerChange(value: boolean): Promise<void>;
+};
 
 class FakePlugin {
   public readonly app = {};
+  public listFolderTreeCalls = 0;
+  public insertDeckTemplateCalls = 0;
   public settings = {
     ...DEFAULT_SETTINGS,
     qaNoteType: "Custom Basic",
@@ -300,7 +326,12 @@ class FakePlugin {
   }
 
   async listFolderTree() {
+    this.listFolderTreeCalls += 1;
     return this.folderTree;
+  }
+
+  async insertDeckTemplateToCurrentFile(): Promise<void> {
+    this.insertDeckTemplateCalls += 1;
   }
 }
 
@@ -336,6 +367,26 @@ function getDropdown(setting: FakeSettingInstance): FakeDropdownComponentInstanc
   }
 
   return dropdown;
+}
+
+function getText(setting: FakeSettingInstance): FakeTextComponentInstance {
+  const text = setting.controls.find((control: unknown) => typeof control === "object" && control !== null && "triggerChange" in (control as Record<string, unknown>) && "value" in (control as Record<string, unknown>) && !(control instanceof FakeDropdownComponent) && !(control instanceof FakeButtonComponent));
+
+  if (!text) {
+    throw new Error(`Text control not found for setting: ${setting.name}`);
+  }
+
+  return text as FakeTextComponentInstance;
+}
+
+function getToggle(setting: FakeSettingInstance): FakeToggleComponentInstance {
+  const toggle = setting.controls.find((control: unknown) => typeof control === "object" && control !== null && "triggerChange" in (control as Record<string, unknown>) && "value" in (control as Record<string, unknown>) && !(control instanceof FakeDropdownComponent) && !(control instanceof FakeButtonComponent) && typeof (control as { value?: unknown }).value === "boolean");
+
+  if (!toggle) {
+    throw new Error(`Toggle not found for setting: ${setting.name}`);
+  }
+
+  return toggle as FakeToggleComponentInstance;
 }
 
 function queryCheckboxByPath(containerEl: FakeContainerElInstance, folderPath: string): FakeElementInstance | undefined {
@@ -476,6 +527,22 @@ describe("AnkiHeadingSyncSettingTab", () => {
     expect(queryCheckboxByPath(container, "notes")).toBeUndefined();
   });
 
+  it("loads the current folder tree when the settings page first opens", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = {
+      ...plugin.settings,
+      scopeMode: "include",
+    };
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await flushAsync();
+    tab.display();
+
+    expect(plugin.listFolderTreeCalls).toBe(1);
+    expect(getCheckboxByPath(tab.containerEl as unknown as FakeContainerElInstance, "notes")).toBeDefined();
+  });
+
   it("shows the folder tree as a collapsed hierarchy and reveals children after expanding a parent", async () => {
     const plugin = new FakePlugin();
     plugin.settings = {
@@ -510,6 +577,127 @@ describe("AnkiHeadingSyncSettingTab", () => {
     expect(container.textNodes).toContain("empty");
   });
 
+  it("reloads folder tree after the settings tab is reopened and shows newly created folders", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = {
+      ...plugin.settings,
+      scopeMode: "include",
+    };
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+    const container = tab.containerEl as unknown as FakeContainerElInstance;
+
+    tab.display();
+    await flushAsync();
+    tab.display();
+
+    expect(plugin.listFolderTreeCalls).toBe(1);
+    expect(queryCheckboxByPath(container, "notes/new-folder")).toBeUndefined();
+
+    plugin.folderTree = [
+      {
+        path: "notes",
+        name: "notes",
+        children: [
+          {
+            path: "notes/sub",
+            name: "sub",
+            children: [],
+          },
+          {
+            path: "notes/other",
+            name: "other",
+            children: [],
+          },
+          {
+            path: "notes/new-folder",
+            name: "new-folder",
+            children: [],
+          },
+        ],
+      },
+      {
+        path: "empty",
+        name: "empty",
+        children: [],
+      },
+    ];
+
+    tab.hide();
+    tab.display();
+    await flushAsync();
+    tab.display();
+
+    expect(plugin.listFolderTreeCalls).toBe(2);
+
+    await getFolderToggle(container, "notes").trigger("click");
+
+    const newFolderCheckbox = getCheckboxByPath(container, "notes/new-folder");
+    const newFolderRow = getFolderRow(container, "notes/new-folder");
+
+    expect(newFolderCheckbox.checked).toBe(false);
+    expect(newFolderRow.dataset.folderDepth).toBe("1");
+    expect(newFolderRow.style.paddingLeft).toBe("18px");
+  });
+
+  it("keeps existing folder selections after reloading the folder tree on reopen", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = {
+      ...plugin.settings,
+      scopeMode: "include",
+      includeFolders: ["notes/sub"],
+    };
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+    const container = tab.containerEl as unknown as FakeContainerElInstance;
+
+    tab.display();
+    await flushAsync();
+    tab.display();
+    await getFolderToggle(container, "notes").trigger("click");
+
+    expect(getCheckboxByPath(container, "notes/sub").checked).toBe(true);
+    expect(getCheckboxByPath(container, "notes").indeterminate).toBe(true);
+
+    plugin.folderTree = [
+      {
+        path: "notes",
+        name: "notes",
+        children: [
+          {
+            path: "notes/sub",
+            name: "sub",
+            children: [],
+          },
+          {
+            path: "notes/other",
+            name: "other",
+            children: [],
+          },
+          {
+            path: "notes/new-folder",
+            name: "new-folder",
+            children: [],
+          },
+        ],
+      },
+      {
+        path: "empty",
+        name: "empty",
+        children: [],
+      },
+    ];
+
+    tab.hide();
+    tab.display();
+    await flushAsync();
+    tab.display();
+    await getFolderToggle(container, "notes").trigger("click");
+
+    expect(plugin.settings.includeFolders).toEqual(["notes/sub"]);
+    expect(getCheckboxByPath(container, "notes/sub").checked).toBe(true);
+    expect(getCheckboxByPath(container, "notes").indeterminate).toBe(true);
+    expect(getCheckboxByPath(container, "notes/new-folder").checked).toBe(false);
+  });
+
   it("switches scope mode and saves compressed folder selections from the tree", async () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
@@ -531,5 +719,59 @@ describe("AnkiHeadingSyncSettingTab", () => {
     await flushAsync();
 
     expect(queryCheckboxByPath(container, "notes")).toBeUndefined();
+  });
+
+  it("saves and rehydrates module 5 deck settings", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+    const container = tab.containerEl as unknown as FakeContainerElInstance;
+
+    tab.display();
+
+    expect(container.textNodes).toContain("默认牌组");
+    expect(container.textNodes).toContain("文件级自定义牌组");
+    expect(container.textNodes).toContain("高级：文件夹映射");
+    expect(container.textNodes).toContain("最终优先级说明");
+
+    await getToggle(findSetting(container, "开启文件级自定义牌组")).triggerChange(true);
+    await flushAsync();
+
+    await getText(findSetting(container, "牌组识别名")).triggerChange("MY DECK");
+    await getText(findSetting(container, "默认牌组模板")).triggerChange("vault::filename");
+    await getDropdown(findSetting(container, "模板插入位置")).triggerChange("yaml");
+    await getDropdown(findSetting(container, "文件夹映射模式")).triggerChange("folder-and-file");
+    await getText(findSetting(container, "默认牌组")).triggerChange("Deck::Default");
+    await flushAsync();
+
+    expect(plugin.settings.fileDeckEnabled).toBe(true);
+    expect(plugin.settings.fileDeckMarker).toBe("MY DECK");
+    expect(plugin.settings.fileDeckTemplate).toBe("vault::filename");
+    expect(plugin.settings.fileDeckInsertLocation).toBe("yaml");
+    expect(plugin.settings.folderDeckMode).toBe("folder-and-file");
+    expect(plugin.settings.defaultDeck).toBe("Deck::Default");
+
+    tab.display();
+
+    expect(getToggle(findSetting(container, "开启文件级自定义牌组")).value).toBe(true);
+    expect(getText(findSetting(container, "牌组识别名")).value).toBe("MY DECK");
+    expect(getText(findSetting(container, "默认牌组模板")).value).toBe("vault::filename");
+    expect(getDropdown(findSetting(container, "模板插入位置")).value).toBe("yaml");
+    expect(getDropdown(findSetting(container, "文件夹映射模式")).value).toBe("folder-and-file");
+    expect(getText(findSetting(container, "默认牌组")).value).toBe("Deck::Default");
+  });
+
+  it("exposes the deck template insertion action when file deck mode is enabled", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = {
+      ...plugin.settings,
+      fileDeckEnabled: true,
+    };
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+    const container = tab.containerEl as unknown as FakeContainerElInstance;
+
+    tab.display();
+    await getButton(findSetting(container, "向当前文件插入 deck 模板")).click();
+
+    expect(plugin.insertDeckTemplateCalls).toBe(1);
   });
 });

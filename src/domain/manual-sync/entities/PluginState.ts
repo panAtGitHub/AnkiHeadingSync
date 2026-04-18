@@ -1,4 +1,5 @@
 import type { CardType } from "@/domain/card/entities/RenderedFields";
+import type { DeckResolutionWarning, DeckResolutionSource } from "@/domain/manual-sync/value-objects/DeckResolution";
 
 export interface FileState {
   filePath: string;
@@ -28,6 +29,8 @@ export interface CardState {
   renderConfigHash: string;
   deck: string;
   deckHint?: string;
+  deckHintSource?: Extract<DeckResolutionSource, "frontmatter" | "body">;
+  deckWarnings: DeckResolutionWarning[];
   tagsHint: string[];
   lastSyncedAt: number;
   orphan: boolean;

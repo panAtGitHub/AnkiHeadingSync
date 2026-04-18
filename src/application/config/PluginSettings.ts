@@ -1,6 +1,8 @@
 import type { NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
 
 export type ScopeMode = "all" | "include" | "exclude";
+export type FileDeckInsertLocation = "yaml" | "body";
+export type FolderDeckMode = "off" | "folder" | "folder-and-file";
 
 export interface PluginSettings {
   qaHeadingLevel: number;
@@ -9,6 +11,11 @@ export interface PluginSettings {
   clozeNoteType: string;
   noteFieldMappings: Record<string, NoteModelFieldMapping>;
   defaultDeck: string;
+  fileDeckEnabled: boolean;
+  fileDeckMarker: string;
+  fileDeckTemplate: string;
+  fileDeckInsertLocation: FileDeckInsertLocation;
+  folderDeckMode: FolderDeckMode;
   scopeMode: ScopeMode;
   includeFolders: string[];
   excludeFolders: string[];
@@ -24,6 +31,11 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   clozeNoteType: "Cloze",
   noteFieldMappings: {},
   defaultDeck: "Obsidian",
+  fileDeckEnabled: false,
+  fileDeckMarker: "TARGET DECK",
+  fileDeckTemplate: "obsidian::filename",
+  fileDeckInsertLocation: "body",
+  folderDeckMode: "off",
   scopeMode: "all",
   includeFolders: [],
   excludeFolders: [],
@@ -57,6 +69,26 @@ export function validatePluginSettings(settings: PluginSettings): void {
 
   if (!settings.defaultDeck.trim()) {
     throw new Error("Default deck is required.");
+  }
+
+  if (typeof settings.fileDeckEnabled !== "boolean") {
+    throw new Error("File deck enabled must be a boolean.");
+  }
+
+  if (typeof settings.fileDeckMarker !== "string") {
+    throw new Error("File deck marker must be a string.");
+  }
+
+  if (typeof settings.fileDeckTemplate !== "string") {
+    throw new Error("File deck template must be a string.");
+  }
+
+  if (settings.fileDeckInsertLocation !== "yaml" && settings.fileDeckInsertLocation !== "body") {
+    throw new Error("File deck insert location must be yaml or body.");
+  }
+
+  if (settings.folderDeckMode !== "off" && settings.folderDeckMode !== "folder" && settings.folderDeckMode !== "folder-and-file") {
+    throw new Error("Folder deck mode must be off, folder, or folder-and-file.");
   }
 
   if (settings.scopeMode !== "all" && settings.scopeMode !== "include" && settings.scopeMode !== "exclude") {
