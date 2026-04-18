@@ -31,6 +31,7 @@ class InMemorySyncRegistryRepository implements SyncRegistryRepository {
 class FakeVaultGateway implements VaultGateway {
   public readonly files = new Map<string, string>();
   public failReplace = false;
+  public replaceCalls: Array<{ path: string; expectedContent: string; nextContent: string }> = [];
 
   constructor(initialFiles: Record<string, string> = {}) {
     for (const [path, content] of Object.entries(initialFiles)) {
@@ -60,6 +61,8 @@ class FakeVaultGateway implements VaultGateway {
   }
 
   async replaceMarkdownFile(path: string, expectedContent: string, nextContent: string): Promise<void> {
+    this.replaceCalls.push({ path, expectedContent, nextContent });
+
     if (this.failReplace) {
       throw new Error(`Markdown file changed before AHS write-back: ${path}`);
     }
@@ -289,6 +292,194 @@ describe("ExecuteSyncPlanUseCase", () => {
       legacyCardKey: card.key,
       noteId: 9001,
     });
+  });
+
+  it("writes multiple newly created cards in the same file with a single replace call", async () => {
+    const sourceContent = ["###### 试验的卡片12", "卡片1", "", "###### 试验233", "卡片2"].join("\n");
+    const vaultGateway = new FakeVaultGateway({
+      "notes/current.md": sourceContent,
+    });
+    const ankiGateway = new FakeAnkiGateway();
+    const repository = new InMemorySyncRegistryRepository();
+    const firstCard = createCard({
+      key: createCardKey("card-1"),
+      heading: "试验的卡片12",
+      bodyMarkdown: "卡片1",
+      renderedFields: { title: "试验的卡片12", body: "卡片1" },
+      fields: { title: "试验的卡片12", body: "卡片1" },
+      contentHash: createContentHash("hash-card-1"),
+      source: {
+        filePath: "notes/current.md",
+        sourceContent,
+        headingLine: 1,
+        blockStartLine: 1,
+        bodyStartLine: 2,
+        blockEndLine: 3,
+        contentEndLine: 2,
+        headingLevel: 6,
+        headingText: "试验的卡片12",
+      },
+    });
+    const secondCard = createCard({
+      key: createCardKey("card-2"),
+      heading: "试验233",
+      bodyMarkdown: "卡片2",
+      renderedFields: { title: "试验233", body: "卡片2" },
+      fields: { title: "试验233", body: "卡片2" },
+      contentHash: createContentHash("hash-card-2"),
+      source: {
+        filePath: "notes/current.md",
+        sourceContent,
+        headingLine: 4,
+        blockStartLine: 4,
+        bodyStartLine: 5,
+        blockEndLine: 5,
+        contentEndLine: 5,
+        headingLevel: 6,
+        headingText: "试验233",
+      },
+    });
+    const useCase = new ExecuteSyncPlanUseCase(ankiGateway, repository, vaultGateway, undefined, () => 1234);
+
+    await useCase.execute(createResult({
+      cards: [firstCard, secondCard],
+      plan: {
+        toCreateDecks: [createDeckName("Deck")],
+        toAdd: [firstCard, secondCard],
+        toUpdate: [],
+        toMarkOrphan: [],
+      },
+    }));
+
+    expect(ankiGateway.addedNotes).toHaveLength(2);
+    expect(vaultGateway.replaceCalls).toHaveLength(1);
+    expect(vaultGateway.files.get("notes/current.md")).toBe([
+      "###### 试验的卡片12",
+      "卡片1",
+      "<!-- AHS:9001 -->",
+      "",
+      "###### 试验233",
+      "卡片2",
+      "<!-- AHS:9002 -->",
+    ].join("\n"));
+    expect(repository.savedRegistry?.findByNoteId(9001)).toMatchObject({ identityMode: "embedded-note-id" });
+    expect(repository.savedRegistry?.findByNoteId(9002)).toMatchObject({ identityMode: "embedded-note-id" });
+    expect(repository.savedRegistry?.list().some((record) => record.identityMode === "pending-note-id-write")).toBe(false);
+  });
+
+  it("marks all same-file writes pending when the batch replace fails", async () => {
+    const sourceContent = ["###### 卡片1", "正文1", "", "###### 卡片2", "正文2"].join("\n");
+    const vaultGateway = new FakeVaultGateway({ "notes/current.md": sourceContent });
+    vaultGateway.failReplace = true;
+    const ankiGateway = new FakeAnkiGateway();
+    const repository = new InMemorySyncRegistryRepository();
+    const firstCard = createCard({
+      key: createCardKey("batch-fail-1"),
+      contentHash: createContentHash("hash-batch-fail-1"),
+      source: {
+        filePath: "notes/current.md",
+        sourceContent,
+        headingLine: 1,
+        blockStartLine: 1,
+        bodyStartLine: 2,
+        blockEndLine: 3,
+        contentEndLine: 2,
+        headingLevel: 6,
+        headingText: "卡片1",
+      },
+    });
+    const secondCard = createCard({
+      key: createCardKey("batch-fail-2"),
+      contentHash: createContentHash("hash-batch-fail-2"),
+      source: {
+        filePath: "notes/current.md",
+        sourceContent,
+        headingLine: 4,
+        blockStartLine: 4,
+        bodyStartLine: 5,
+        blockEndLine: 5,
+        contentEndLine: 5,
+        headingLevel: 6,
+        headingText: "卡片2",
+      },
+    });
+    const useCase = new ExecuteSyncPlanUseCase(ankiGateway, repository, vaultGateway, undefined, () => 1234);
+
+    await useCase.execute(createResult({
+      cards: [firstCard, secondCard],
+      plan: {
+        toCreateDecks: [createDeckName("Deck")],
+        toAdd: [firstCard, secondCard],
+        toUpdate: [],
+        toMarkOrphan: [],
+      },
+    }));
+
+    expect(ankiGateway.addedNotes).toHaveLength(2);
+    expect(vaultGateway.files.get("notes/current.md")).toBe(sourceContent);
+    expect(repository.savedRegistry?.get(firstCard.key)).toMatchObject({ identityMode: "pending-note-id-write", noteId: 9001 });
+    expect(repository.savedRegistry?.get(secondCard.key)).toMatchObject({ identityMode: "pending-note-id-write", noteId: 9002 });
+  });
+
+  it("flushes recreate-and-insert writes for the same file together", async () => {
+    const sourceContent = ["###### 卡片1", "正文1", "<!-- AHS:42 -->", "", "###### 卡片2", "正文2"].join("\n");
+    const vaultGateway = new FakeVaultGateway({ "notes/current.md": sourceContent });
+    const ankiGateway = new FakeAnkiGateway();
+    const repository = new InMemorySyncRegistryRepository();
+    const recreatedCard = createCard({
+      key: createCardKey("recreate-card"),
+      embeddedNoteId: 42,
+      contentHash: createContentHash("hash-recreate"),
+      source: {
+        filePath: "notes/current.md",
+        sourceContent,
+        headingLine: 1,
+        blockStartLine: 1,
+        bodyStartLine: 2,
+        blockEndLine: 3,
+        contentEndLine: 2,
+        markerLine: 3,
+        headingLevel: 6,
+        headingText: "卡片1",
+      },
+    });
+    const newCard = createCard({
+      key: createCardKey("new-card"),
+      contentHash: createContentHash("hash-new-card"),
+      source: {
+        filePath: "notes/current.md",
+        sourceContent,
+        headingLine: 5,
+        blockStartLine: 5,
+        bodyStartLine: 6,
+        blockEndLine: 6,
+        contentEndLine: 6,
+        headingLevel: 6,
+        headingText: "卡片2",
+      },
+    });
+    const useCase = new ExecuteSyncPlanUseCase(ankiGateway, repository, vaultGateway, undefined, () => 1234);
+
+    await useCase.execute(createResult({
+      cards: [recreatedCard, newCard],
+      plan: {
+        toCreateDecks: [createDeckName("Deck")],
+        toAdd: [newCard],
+        toUpdate: [{ card: recreatedCard, noteId: 42 }],
+        toMarkOrphan: [],
+      },
+    }));
+
+    expect(vaultGateway.replaceCalls).toHaveLength(1);
+    expect(vaultGateway.files.get("notes/current.md")).toBe([
+      "###### 卡片1",
+      "正文1",
+      "<!-- AHS:9002 -->",
+      "",
+      "###### 卡片2",
+      "正文2",
+      "<!-- AHS:9001 -->",
+    ].join("\n"));
   });
 
   it.each([

@@ -7,8 +7,8 @@
     "markdown-it": "^14.1.0"
   },
   "scripts": {
-    "dev": "node scripts/stage-plugin-dist.mjs && node esbuild.config.mjs",
-    "build": "tsc --noEmit --skipLibCheck && node scripts/stage-plugin-dist.mjs && node esbuild.config.mjs production",
+    "dev": "node scripts/stage-plugin-dist.mjs dist && node esbuild.config.mjs",
+    "build": "tsc --noEmit --skipLibCheck && node scripts/stage-plugin-dist.mjs obsidian && node esbuild.config.mjs production",
     "lint": "eslint \"src/**/*.ts\" \"main.ts\" \"vitest.config.ts\" \"esbuild.config.mjs\" \"eslint.config.mjs\"",
     "test": "vitest run"
   },

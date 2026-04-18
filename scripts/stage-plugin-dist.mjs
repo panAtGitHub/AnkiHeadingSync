@@ -1,26 +1,30 @@
-import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { OBSIDIAN_PLUGIN_DIR } from "./obsidian-plugin-path.mjs";
+
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(scriptDir, "..");
-const distDir = join(rootDir, "dist");
-const pluginDistDir = join(distDir, "plugin");
+const target = process.argv[2] === "obsidian" ? "obsidian" : "dist";
+const outputDir = target === "obsidian" ? OBSIDIAN_PLUGIN_DIR : join(rootDir, "dist", "plugin");
 
-await mkdir(pluginDistDir, { recursive: true });
-await rm(join(distDir, "main.js"), { force: true });
+await mkdir(outputDir, { recursive: true });
 
 await Promise.all([
-  copyFile(join(rootDir, "manifest.json"), join(pluginDistDir, "manifest.json")),
-  copyFile(join(rootDir, "versions.json"), join(pluginDistDir, "versions.json")),
+  copyFile(join(rootDir, "manifest.json"), join(outputDir, "manifest.json")),
+  copyFile(join(rootDir, "versions.json"), join(outputDir, "versions.json")),
 ]);
 
 await writeFile(
-  join(pluginDistDir, "README.md"),
+  join(outputDir, "README.md"),
   [
-    "Anki Heading Sync — Obsidian plugin distribution package",
+    "Anki Heading Sync — Obsidian plugin package",
     "",
-    "Build output lives in this folder so it can be synced directly into an Obsidian plugin directory.",
+    target === "obsidian"
+      ? `npm run build deploys this plugin package directly to ${OBSIDIAN_PLUGIN_DIR}.`
+      : "Development output lives in this folder for local inspection.",
+    "This build flow only overwrites plugin package files and does not touch data.json.",
     "",
     "Included files:",
     "- manifest.json",

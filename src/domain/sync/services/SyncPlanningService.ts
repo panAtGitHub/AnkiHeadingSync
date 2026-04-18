@@ -23,6 +23,17 @@ export class SyncPlanningService {
         }
 
         seenEmbeddedNoteIds.add(card.embeddedNoteId);
+      }
+
+      const existingRecord = registry.get(card.key);
+
+      if (existingRecord?.identityMode === "pending-note-id-write") {
+        toUpdate.push({ card, noteId: existingRecord.noteId });
+        createDecks.set(card.deck, card.deck);
+        continue;
+      }
+
+      if (card.embeddedNoteId) {
         const existingEmbeddedRecord = registry.findByNoteId(card.embeddedNoteId);
 
         if (!existingEmbeddedRecord) {
@@ -39,15 +50,13 @@ export class SyncPlanningService {
         continue;
       }
 
-      const existingRecord = registry.get(card.key);
-
       if (!existingRecord) {
         toAdd.push(card);
         createDecks.set(card.deck, card.deck);
         continue;
       }
 
-      if (existingRecord.identityMode === "pending-note-id-write" || existingRecord.sourceHash !== card.contentHash || existingRecord.orphan) {
+      if (existingRecord.sourceHash !== card.contentHash || existingRecord.orphan) {
         toUpdate.push({ card, noteId: existingRecord.noteId });
         createDecks.set(card.deck, card.deck);
       }

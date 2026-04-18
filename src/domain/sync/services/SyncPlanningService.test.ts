@@ -166,4 +166,30 @@ describe("SyncPlanningService", () => {
 
     expect(plan.toUpdate).toEqual([{ card, noteId: 100 }]);
   });
+
+  it("prefers pending note-id-write over a stale embedded marker", () => {
+    const service = new SyncPlanningService();
+    const card = createCard({
+      embeddedNoteId: 42,
+      source: {
+        ...createCard().source,
+        sourceContent: ["#### Prompt", "Answer", "<!-- AHS:42 -->"].join("\n"),
+        blockEndLine: 3,
+        contentEndLine: 2,
+        markerLine: 3,
+      },
+    });
+    const registry = new SyncRegistry([
+      createRecord({
+        cardKey: card.key,
+        identityMode: "pending-note-id-write",
+        noteId: 9001,
+        legacyCardKey: card.key,
+      }),
+    ]);
+
+    const plan = service.plan([card], registry, ["notes/example.md"]);
+
+    expect(plan.toUpdate).toEqual([{ card, noteId: 9001 }]);
+  });
 });

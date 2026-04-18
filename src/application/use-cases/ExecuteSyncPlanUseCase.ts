@@ -1,4 +1,4 @@
-import { HeadingSyncMarkerService } from "@/application/services/HeadingSyncMarkerService";
+import { HeadingSyncMarkerService, type MarkerWriteRequest } from "@/application/services/HeadingSyncMarkerService";
 import type { AnkiGateway } from "@/application/ports/AnkiGateway";
 import type { SyncRegistryRepository } from "@/application/ports/SyncRegistryRepository";
 import type { VaultGateway } from "@/application/ports/VaultGateway";
@@ -24,6 +24,7 @@ export class ExecuteSyncPlanUseCase {
     const modelDetailsCache = new Map<string, Awaited<ReturnType<AnkiGateway["getModelDetails"]>>>();
     const noteSummaries = await this.loadNoteSummaries(scanAndPlanResult.plan.toUpdate.map((entry) => entry.noteId));
     const timestamp = this.now();
+    const markerWrites: MarkerWriteRequest[] = [];
 
     for (const card of scanAndPlanResult.cards) {
       const modelDetails = await this.getModelDetails(modelDetailsCache, card.noteModel);
@@ -43,7 +44,7 @@ export class ExecuteSyncPlanUseCase {
 
     for (const card of scanAndPlanResult.plan.toAdd) {
       const noteId = await this.addNote(card, modelDetailsCache, scanAndPlanResult);
-      await this.writeBackNewMarker(card, noteId, syncRegistry, timestamp);
+      markerWrites.push(this.createMarkerWriteRequest(card, noteId, "insert"));
     }
 
     for (const entry of scanAndPlanResult.plan.toUpdate) {
@@ -52,17 +53,38 @@ export class ExecuteSyncPlanUseCase {
         : syncRegistry.get(entry.card.key);
 
       if (entry.card.embeddedNoteId) {
-        await this.updateEmbeddedCard(entry.card, entry.noteId, noteSummaries.get(entry.noteId), syncRegistry, timestamp, modelDetailsCache, scanAndPlanResult);
+        const markerWrite = await this.updateEmbeddedCard(
+          entry.card,
+          entry.noteId,
+          noteSummaries.get(entry.noteId),
+          syncRegistry,
+          timestamp,
+          modelDetailsCache,
+          scanAndPlanResult,
+        );
+        if (markerWrite) {
+          markerWrites.push(markerWrite);
+        }
         continue;
       }
 
       if (existingRecord?.identityMode === "pending-note-id-write") {
-        await this.retryPendingMarkerWrite(entry.card, existingRecord, noteSummaries.get(entry.noteId), syncRegistry, timestamp, modelDetailsCache, scanAndPlanResult);
+        markerWrites.push(
+          await this.retryPendingMarkerWrite(
+            entry.card,
+            existingRecord,
+            noteSummaries.get(entry.noteId),
+            modelDetailsCache,
+            scanAndPlanResult,
+          ),
+        );
         continue;
       }
 
       await this.updateLegacyCard(entry.card, entry.noteId, existingRecord, syncRegistry, timestamp, modelDetailsCache, scanAndPlanResult);
     }
+
+    await this.flushMarkerWrites(markerWrites, syncRegistry, timestamp);
 
     const mutatedCardKeys = new Set(syncCards.map((card) => card.key));
     for (const card of scanAndPlanResult.cards) {
@@ -123,28 +145,25 @@ export class ExecuteSyncPlanUseCase {
     timestamp: number,
     modelDetailsCache: Map<string, Awaited<ReturnType<AnkiGateway["getModelDetails"]>>>,
     scanAndPlanResult: ScanAndPlanResult,
-  ): Promise<void> {
+  ): Promise<MarkerWriteRequest | undefined> {
     if (!noteSummary) {
       const recreatedNoteId = await this.addNote(card, modelDetailsCache, scanAndPlanResult);
-      await this.writeMarker(card, recreatedNoteId);
-      syncRegistry.recordSync(this.createEmbeddedRecord(card, recreatedNoteId, timestamp));
-      return;
+      return this.createMarkerWriteRequest(card, recreatedNoteId, "replace");
     }
 
     this.assertModelMatches(card, noteSummary.modelName, noteId);
     await this.updateExistingNote(card, noteId, modelDetailsCache, scanAndPlanResult);
     syncRegistry.recordSync(this.createEmbeddedRecord(card, noteId, timestamp));
+    return undefined;
   }
 
   private async retryPendingMarkerWrite(
     card: Card,
     existingRecord: SyncRecord,
     noteSummary: Awaited<ReturnType<AnkiGateway["getNoteSummaries"]>>[number] | undefined,
-    syncRegistry: SyncRegistry,
-    timestamp: number,
     modelDetailsCache: Map<string, Awaited<ReturnType<AnkiGateway["getModelDetails"]>>>,
     scanAndPlanResult: ScanAndPlanResult,
-  ): Promise<void> {
+  ): Promise<MarkerWriteRequest> {
     let noteId = existingRecord.noteId;
 
     if (!noteSummary) {
@@ -153,12 +172,7 @@ export class ExecuteSyncPlanUseCase {
       await this.updateExistingNote(card, noteId, modelDetailsCache, scanAndPlanResult);
     }
 
-    try {
-      await this.writeMarker(card, noteId);
-      syncRegistry.recordSync(this.createEmbeddedRecord(card, noteId, timestamp));
-    } catch {
-      syncRegistry.recordSync(this.createPendingRecord(card, noteId, timestamp));
-    }
+    return this.createMarkerWriteRequest(card, noteId, card.source.markerLine ? "replace" : "insert");
   }
 
   private async updateLegacyCard(
@@ -183,15 +197,6 @@ export class ExecuteSyncPlanUseCase {
     });
   }
 
-  private async writeBackNewMarker(card: Card, noteId: number, syncRegistry: SyncRegistry, timestamp: number): Promise<void> {
-    try {
-      await this.writeMarker(card, noteId);
-      syncRegistry.recordSync(this.createEmbeddedRecord(card, noteId, timestamp));
-    } catch {
-      syncRegistry.recordSync(this.createPendingRecord(card, noteId, timestamp));
-    }
-  }
-
   private createEmbeddedRecord(card: Card, noteId: number, timestamp: number): SyncRecord {
     return {
       cardKey: card.key,
@@ -199,6 +204,18 @@ export class ExecuteSyncPlanUseCase {
       noteId,
       filePath: card.source.filePath,
       sourceHash: card.contentHash,
+      lastSyncedAt: timestamp,
+      orphan: false,
+    };
+  }
+
+  private createEmbeddedRecordFromWrite(write: MarkerWriteRequest, timestamp: number): SyncRecord {
+    return {
+      cardKey: write.cardKey,
+      identityMode: "embedded-note-id",
+      noteId: write.noteId,
+      filePath: write.filePath,
+      sourceHash: write.sourceHash,
       lastSyncedAt: timestamp,
       orphan: false,
     };
@@ -212,6 +229,19 @@ export class ExecuteSyncPlanUseCase {
       noteId,
       filePath: card.source.filePath,
       sourceHash: card.contentHash,
+      lastSyncedAt: timestamp,
+      orphan: false,
+    };
+  }
+
+  private createPendingRecordFromWrite(write: MarkerWriteRequest, timestamp: number): SyncRecord {
+    return {
+      cardKey: write.cardKey,
+      identityMode: "pending-note-id-write",
+      legacyCardKey: write.cardKey,
+      noteId: write.noteId,
+      filePath: write.filePath,
+      sourceHash: write.sourceHash,
       lastSyncedAt: timestamp,
       orphan: false,
     };
@@ -246,14 +276,50 @@ export class ExecuteSyncPlanUseCase {
     });
   }
 
-  private async writeMarker(card: Card, noteId: number): Promise<void> {
-    const expectedContent = card.source.sourceContent;
-    if (!expectedContent) {
-      throw new Error(`Missing scanned source content for ${card.source.filePath}.`);
+  private createMarkerWriteRequest(card: Card, noteId: number, mode: MarkerWriteRequest["mode"]): MarkerWriteRequest {
+    return {
+      cardKey: card.key,
+      filePath: card.source.filePath,
+      noteId,
+      location: card.source,
+      mode,
+      sourceHash: card.contentHash,
+    };
+  }
+
+  private async flushMarkerWrites(writes: MarkerWriteRequest[], syncRegistry: SyncRegistry, timestamp: number): Promise<void> {
+    const writesByFile = new Map<string, MarkerWriteRequest[]>();
+
+    for (const write of writes) {
+      const fileWrites = writesByFile.get(write.filePath);
+      if (fileWrites) {
+        fileWrites.push(write);
+        continue;
+      }
+
+      writesByFile.set(write.filePath, [write]);
     }
 
-    const nextContent = this.headingSyncMarkerService.apply(card.source, noteId);
-    await this.vaultGateway.replaceMarkdownFile(card.source.filePath, expectedContent, nextContent);
+    for (const [filePath, fileWrites] of writesByFile.entries()) {
+      const sourceContent = fileWrites[0]?.location.sourceContent;
+      if (!sourceContent) {
+        throw new Error(`Missing scanned source content for ${filePath}.`);
+      }
+
+      const nextContent = this.headingSyncMarkerService.applyBatch(sourceContent, fileWrites);
+
+      try {
+        await this.vaultGateway.replaceMarkdownFile(filePath, sourceContent, nextContent);
+
+        for (const write of fileWrites) {
+          syncRegistry.recordSync(this.createEmbeddedRecordFromWrite(write, timestamp));
+        }
+      } catch {
+        for (const write of fileWrites) {
+          syncRegistry.recordSync(this.createPendingRecordFromWrite(write, timestamp));
+        }
+      }
+    }
   }
 
   private assertModelMatches(card: Card, actualModelName: string, noteId: number): void {
