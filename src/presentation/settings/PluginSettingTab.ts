@@ -35,7 +35,9 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private folderTree: FolderTreeNode[] = [];
   private folderTreeStatus = FOLDER_TREE_STATUS_LOADING;
   private folderTreeLoadPromise: Promise<void> | null = null;
-  private hasLoadedFolderTree = false;
+  // removed cached 'hasLoadedFolderTree' so the settings UI can refresh
+  // the folder list when displayed (ensures newly-created Obsidian folders appear).
+  private readonly expandedFolderPaths = new Set<string>();
 
   constructor(plugin: AnkiHeadingSyncPlugin) {
     super(plugin.app, plugin);
@@ -423,42 +425,86 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const selectedFolders = settings.scopeMode === "include" ? settings.includeFolders : settings.excludeFolders;
     const selectionTree = buildFolderTreeSelection(this.folderTree, selectedFolders);
     const treeContainer = scopeContainer.createDiv();
+    treeContainer.style.marginTop = "8px";
+    treeContainer.style.display = "flex";
+    treeContainer.style.flexDirection = "column";
+    treeContainer.style.gap = "2px";
 
     for (const node of selectionTree) {
-      this.renderFolderNode(treeContainer, node, settings.scopeMode);
+      this.renderFolderNode(treeContainer, node, settings.scopeMode, 0);
     }
   }
 
-  private renderFolderNode(containerEl: HTMLElement, node: FolderTreeSelectionNode, scopeMode: ScopeMode): void {
+  private renderFolderNode(containerEl: HTMLElement, node: FolderTreeSelectionNode, scopeMode: ScopeMode, depth: number): void {
     const row = containerEl.createDiv();
+    row.dataset.folderRow = node.path;
+    row.dataset.folderDepth = String(depth);
+    row.style.display = "flex";
+    row.style.alignItems = "center";
+    row.style.gap = "6px";
+    row.style.minHeight = "24px";
+    row.style.paddingLeft = `${depth * 18}px`;
+
+    const hasChildren = node.children.length > 0;
+    const expanded = hasChildren && this.expandedFolderPaths.has(node.path);
+    const toggleControl = row.createEl(hasChildren ? "button" : "span");
+    toggleControl.dataset.folderToggle = node.path;
+    toggleControl.textContent = hasChildren ? (expanded ? "▾" : "▸") : "";
+    toggleControl.style.width = "18px";
+    toggleControl.style.display = "inline-flex";
+    toggleControl.style.alignItems = "center";
+    toggleControl.style.justifyContent = "center";
+    toggleControl.style.flexShrink = "0";
+    toggleControl.style.padding = "0";
+    toggleControl.style.border = "0";
+    toggleControl.style.background = "transparent";
+    toggleControl.style.color = "var(--text-muted)";
+    toggleControl.style.cursor = hasChildren ? "pointer" : "default";
+
+    if (hasChildren) {
+      toggleControl.setAttr("aria-label", expanded ? `收起 ${node.name}` : `展开 ${node.name}`);
+      toggleControl.setAttr("aria-expanded", String(expanded));
+      toggleControl.addEventListener("click", () => {
+        this.toggleFolderExpanded(node.path);
+      });
+    }
+
     const checkbox = row.createEl("input") as HTMLInputElement;
     checkbox.type = "checkbox";
     checkbox.checked = node.checked;
     checkbox.indeterminate = node.indeterminate;
     checkbox.dataset.folderPath = node.path;
+    checkbox.style.margin = "0";
     checkbox.addEventListener("change", () => {
       void this.updateFolderSelection(scopeMode, node.path, checkbox.checked);
     });
 
     const label = row.createEl("span", { text: node.name });
     label.dataset.folderPathLabel = node.path;
+    label.style.userSelect = "none";
 
-    if (node.children.length === 0) {
+    if (!hasChildren || !expanded) {
       return;
     }
 
     const childrenContainer = containerEl.createDiv();
+    childrenContainer.dataset.folderChildren = node.path;
+    childrenContainer.style.display = "flex";
+    childrenContainer.style.flexDirection = "column";
+    childrenContainer.style.gap = "2px";
     for (const child of node.children) {
-      this.renderFolderNode(childrenContainer, child, scopeMode);
+      this.renderFolderNode(childrenContainer, child, scopeMode, depth + 1);
     }
   }
 
   private ensureFolderTreeLoaded(): void {
-    if (this.hasLoadedFolderTree || this.folderTreeLoadPromise) {
+    if (this.folderTreeLoadPromise) {
       return;
     }
 
     this.folderTreeStatus = FOLDER_TREE_STATUS_LOADING;
+    // Always re-fetch the folder tree when requested (no permanent cache).
+    // Avoid concurrent loads using folderTreeLoadPromise.
     this.folderTreeLoadPromise = this.plugin
       .listFolderTree()
       .then((folderTree) => {
@@ -470,7 +516,6 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         this.folderTreeStatus = error instanceof Error ? error.message : "读取 vault 文件夹失败。";
       })
       .finally(() => {
-        this.hasLoadedFolderTree = true;
         this.folderTreeLoadPromise = null;
         this.display();
       });
@@ -486,6 +531,16 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const nextSelection = toggleFolderTreeSelection(this.folderTree, currentSelection, folderPath, checked);
 
     await this.plugin.updateSettings(scopeMode === "include" ? { includeFolders: nextSelection } : { excludeFolders: nextSelection });
+    this.display();
+  }
+
+  private toggleFolderExpanded(folderPath: string): void {
+    if (this.expandedFolderPaths.has(folderPath)) {
+      this.expandedFolderPaths.delete(folderPath);
+    } else {
+      this.expandedFolderPaths.add(folderPath);
+    }
+
     this.display();
   }
 }

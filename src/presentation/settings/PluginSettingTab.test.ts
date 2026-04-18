@@ -13,11 +13,13 @@ const {
   class HoistedFakeElement {
     public readonly children: HoistedFakeElement[] = [];
     public readonly dataset: Record<string, string> = {};
+    public readonly style: Record<string, string> = {};
     public checked = false;
     public indeterminate = false;
     public type = "";
     public value = "";
     public text = "";
+    public textContent = "";
 
     private readonly listeners = new Map<string, Array<() => void | Promise<void>>>();
 
@@ -349,6 +351,28 @@ function getCheckboxByPath(containerEl: FakeContainerElInstance, folderPath: str
   return checkbox;
 }
 
+function queryFolderToggle(containerEl: FakeContainerElInstance, folderPath: string): FakeElementInstance | undefined {
+  return findElement(containerEl, (element) => element.dataset.folderToggle === folderPath);
+}
+
+function getFolderToggle(containerEl: FakeContainerElInstance, folderPath: string): FakeElementInstance {
+  const toggle = queryFolderToggle(containerEl, folderPath);
+  if (!toggle) {
+    throw new Error(`Toggle not found for folder path: ${folderPath}`);
+  }
+
+  return toggle;
+}
+
+function getFolderRow(containerEl: FakeContainerElInstance, folderPath: string): FakeElementInstance {
+  const row = findElement(containerEl, (element) => element.dataset.folderRow === folderPath);
+  if (!row) {
+    throw new Error(`Row not found for folder path: ${folderPath}`);
+  }
+
+  return row;
+}
+
 function findElement(
   root: FakeElementInstance,
   predicate: (element: FakeElementInstance) => boolean,
@@ -452,7 +476,7 @@ describe("AnkiHeadingSyncSettingTab", () => {
     expect(queryCheckboxByPath(container, "notes")).toBeUndefined();
   });
 
-  it("shows the folder tree in include mode and rehydrates saved selections after redisplay", async () => {
+  it("shows the folder tree as a collapsed hierarchy and reveals children after expanding a parent", async () => {
     const plugin = new FakePlugin();
     plugin.settings = {
       ...plugin.settings,
@@ -467,11 +491,22 @@ describe("AnkiHeadingSyncSettingTab", () => {
     tab.display();
 
     const parentCheckbox = getCheckboxByPath(container, "notes");
-    const childCheckbox = getCheckboxByPath(container, "notes/sub");
 
     expect(parentCheckbox.checked).toBe(false);
     expect(parentCheckbox.indeterminate).toBe(true);
+    expect(queryCheckboxByPath(container, "notes/sub")).toBeUndefined();
+
+    await getFolderToggle(container, "notes").trigger("click");
+
+    const childCheckbox = getCheckboxByPath(container, "notes/sub");
+    const parentRow = getFolderRow(container, "notes");
+    const childRow = getFolderRow(container, "notes/sub");
+
     expect(childCheckbox.checked).toBe(true);
+    expect(parentRow.dataset.folderDepth).toBe("0");
+    expect(childRow.dataset.folderDepth).toBe("1");
+    expect(parentRow.style.paddingLeft).toBe("0px");
+    expect(childRow.style.paddingLeft).toBe("18px");
     expect(container.textNodes).toContain("empty");
   });
 
