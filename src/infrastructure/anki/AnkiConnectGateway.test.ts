@@ -112,8 +112,16 @@ describe("AnkiConnectGateway", () => {
       json: {
         error: null,
         result: {
-          Empty: { total_in_deck: 0 },
-          Busy: { total_in_deck: 3 },
+          "1651445861967": {
+            deck_id: 1651445861967,
+            name: "Empty",
+            total_in_deck: 0,
+          },
+          "1651445861968": {
+            deck_id: 1651445861968,
+            name: "Busy",
+            total_in_deck: 3,
+          },
         },
       },
     });
@@ -139,7 +147,11 @@ describe("AnkiConnectGateway", () => {
       json: {
         error: null,
         result: {
-          Empty: { total_in_deck: 0 },
+          "1651445861967": {
+            deck_id: 1651445861967,
+            name: "Empty",
+            total_in_deck: 0,
+          },
         },
       },
     });
@@ -175,9 +187,20 @@ describe("AnkiConnectGateway", () => {
       json: {
         error: null,
         result: {
-          Broken: {},
-          WrongType: { total_in_deck: "0" },
-          Empty: { total_in_deck: 0 },
+          "1651445861967": {
+            deck_id: 1651445861967,
+            name: "Broken",
+          },
+          "1651445861968": {
+            deck_id: 1651445861968,
+            name: "WrongType",
+            total_in_deck: "0",
+          },
+          "1651445861969": {
+            deck_id: 1651445861969,
+            name: "Empty",
+            total_in_deck: 0,
+          },
         },
       },
     });
@@ -189,6 +212,79 @@ describe("AnkiConnectGateway", () => {
       { deckName: "Broken", noteCount: undefined },
       { deckName: "WrongType", noteCount: undefined },
       { deckName: "Empty", noteCount: 0 },
+    ]);
+  });
+
+  it("matches deck stats by the value.name field when top-level keys are deck ids", async () => {
+    requestUrlMock.mockResolvedValue({
+      json: {
+        error: null,
+        result: {
+          "1651445861967": {
+            deck_id: 1651445861967,
+            name: "Scoped::Empty",
+            total_in_deck: 0,
+          },
+          "1651445861968": {
+            deck_id: 1651445861968,
+            name: "Scoped::Busy",
+            total_in_deck: 7,
+          },
+        },
+      },
+    });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    const stats = await gateway.getDeckStats(["Scoped::Empty", "Scoped::Busy"]);
+
+    expect(stats).toEqual([
+      { deckName: "Scoped::Empty", noteCount: 0 },
+      { deckName: "Scoped::Busy", noteCount: 7 },
+    ]);
+  });
+
+  it("treats partial deck-id keyed responses as unknown for unmatched deck names", async () => {
+    requestUrlMock.mockResolvedValue({
+      json: {
+        error: null,
+        result: {
+          "1651445861967": {
+            deck_id: 1651445861967,
+            name: "Scoped::Empty",
+            total_in_deck: 0,
+          },
+        },
+      },
+    });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    const stats = await gateway.getDeckStats(["Scoped::Empty", "Scoped::Missing", "Scoped::Busy"]);
+
+    expect(stats).toEqual([
+      { deckName: "Scoped::Empty", noteCount: 0 },
+      { deckName: "Scoped::Missing", noteCount: undefined },
+      { deckName: "Scoped::Busy", noteCount: undefined },
+    ]);
+  });
+
+  it("treats deck-id keyed stats without a matching name as unknown", async () => {
+    requestUrlMock.mockResolvedValue({
+      json: {
+        error: null,
+        result: {
+          "1651445861967": {
+            deck_id: 1651445861967,
+            total_in_deck: 0,
+          },
+        },
+      },
+    });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    const stats = await gateway.getDeckStats(["Scoped::Empty"]);
+
+    expect(stats).toEqual([
+      { deckName: "Scoped::Empty", noteCount: undefined },
     ]);
   });
 

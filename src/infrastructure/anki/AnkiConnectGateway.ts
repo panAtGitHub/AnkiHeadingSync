@@ -16,6 +16,8 @@ interface NoteInfo {
 }
 
 interface RawDeckStats {
+  deck_id?: number;
+  name?: string;
   total_in_deck?: number;
 }
 
@@ -247,15 +249,23 @@ function extractDeckNoteCount(rawStats: unknown, deckName: string): number | und
     return undefined;
   }
 
-  const rawDeckStat = (rawStats as Record<string, unknown>)[deckName];
-  if (!rawDeckStat || typeof rawDeckStat !== "object") {
+  for (const rawDeckStat of Object.values(rawStats as Record<string, unknown>)) {
+    if (!rawDeckStat || typeof rawDeckStat !== "object") {
+      continue;
+    }
+
+    const deckStat = rawDeckStat as RawDeckStats;
+    if (deckStat.name !== deckName) {
+      continue;
+    }
+
+    const totalInDeck = deckStat.total_in_deck;
+    if (typeof totalInDeck === "number" && Number.isFinite(totalInDeck)) {
+      return totalInDeck;
+    }
+
     return undefined;
   }
 
-  const totalInDeck = (rawDeckStat as RawDeckStats).total_in_deck;
-  if (typeof totalInDeck !== "number" || !Number.isFinite(totalInDeck)) {
-    return undefined;
-  }
-
-  return totalInDeck;
+  return undefined;
 }

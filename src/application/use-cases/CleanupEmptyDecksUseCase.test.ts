@@ -70,6 +70,19 @@ describe("CleanupEmptyDecksUseCase", () => {
     expect(candidates).toEqual(["Empty"]);
   });
 
+  it("includes only decks explicitly confirmed with zero notes", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    ankiGateway.listedDeckNames = ["Empty A", "Busy", "Unknown", "Empty B"];
+    ankiGateway.deckStatsByName.set("Empty A", { deckName: "Empty A", noteCount: 0 });
+    ankiGateway.deckStatsByName.set("Busy", { deckName: "Busy", noteCount: 2 });
+    ankiGateway.deckStatsByName.set("Empty B", { deckName: "Empty B", noteCount: 0 });
+    const useCase = new CleanupEmptyDecksUseCase(ankiGateway);
+
+    const candidates = await useCase.listCandidates();
+
+    expect(candidates).toEqual(["Empty A", "Empty B"]);
+  });
+
   it("returns zero candidates when Anki returns no stats for the listed decks", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     ankiGateway.listedDeckNames = ["Deck A", "Deck B", "Deck C"];
