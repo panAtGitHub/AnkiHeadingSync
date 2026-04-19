@@ -10,7 +10,7 @@ import { MarkdownWriteBackService } from "@/application/services/MarkdownWriteBa
 import { RenderConfigService } from "@/application/services/RenderConfigService";
 import { ScanScopeService } from "@/application/services/ScanScopeService";
 import type { IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
-import type { PluginState } from "@/domain/manual-sync/entities/PluginState";
+import { toNoteIdKey, type CardState, type PluginState } from "@/domain/manual-sync/entities/PluginState";
 import type { RenderedSyncCard } from "@/domain/manual-sync/entities/RenderedSyncCard";
 import { DiffPlannerService } from "@/domain/manual-sync/services/DiffPlannerService";
 import { ManualCardRenderer, type ManualCardRenderContext } from "@/domain/manual-sync/services/ManualCardRenderer";
@@ -64,10 +64,7 @@ export class ManualSyncService {
     const indexResult = await this.fileIndexerService.indexVault(settings, state, true);
     const plan = this.diffPlannerService.plan(indexResult.cards, state, indexResult.scopedFilePaths, settings);
     const indexedFilesByPath = new Map(indexResult.indexedFiles.map((file) => [file.filePath, file]));
-    const markerWrites = [
-      ...plan.toRewriteMarker,
-      ...plan.toCreate.filter((plannedCard) => plannedCard.card.markerState === "missing"),
-    ];
+    const markerWrites = plan.toRewriteMarker.filter((plannedCard) => plannedCard.noteId !== undefined);
 
     const writeBackResult = await this.markdownWriteBackService.write(markerWrites, indexedFilesByPath);
     const nextState = this.buildNextState(
@@ -75,7 +72,7 @@ export class ManualSyncService {
       indexResult.cards,
       indexResult.indexedFiles,
       settings,
-      new Set(writeBackResult.writtenCardIds),
+      new Set(writeBackResult.writtenSyncKeys),
       new Map(),
       plan.toOrphan,
     );
@@ -98,7 +95,7 @@ export class ManualSyncService {
       orphaned: plan.toOrphan.length,
       uploadedMedia: 0,
       skippedUnchangedCards: indexResult.skippedUnchangedCards,
-      rewrittenMarkers: writeBackResult.writtenCardIds.length,
+      rewrittenMarkers: writeBackResult.writtenSyncKeys.length,
       markerWriteConflictFiles: writeBackResult.conflictFiles,
       warnings: plan.warnings,
     };
@@ -118,8 +115,8 @@ export class ManualSyncService {
     const renderedCards = new Map<string, RenderedSyncCard>();
 
     for (const plannedCard of [...plan.toCreate, ...plan.toUpdate]) {
-      if (!renderedCards.has(plannedCard.card.cardId)) {
-        renderedCards.set(plannedCard.card.cardId, this.renderer.render(plannedCard, renderContext));
+      if (!renderedCards.has(plannedCard.card.syncKey)) {
+        renderedCards.set(plannedCard.card.syncKey, this.renderer.render(plannedCard, renderContext));
       }
     }
 
@@ -138,7 +135,7 @@ export class ManualSyncService {
       indexResult.cards,
       indexResult.indexedFiles,
       settings,
-      new Set([...executionResult.touchedCardIds, ...writeBackResult.writtenCardIds]),
+      new Set([...executionResult.touchedSyncKeys, ...writeBackResult.writtenSyncKeys]),
       executionResult.resolvedNoteIds,
       plan.toOrphan,
     );
@@ -163,7 +160,7 @@ export class ManualSyncService {
       orphaned: plan.toOrphan.length,
       uploadedMedia: executionResult.uploadedMedia,
       skippedUnchangedCards: indexResult.skippedUnchangedCards,
-      rewrittenMarkers: writeBackResult.writtenCardIds.length,
+      rewrittenMarkers: writeBackResult.writtenSyncKeys.length,
       markerWriteConflictFiles: writeBackResult.conflictFiles,
       warnings: plan.warnings,
     };
@@ -174,22 +171,48 @@ export class ManualSyncService {
     cards: IndexedCard[],
     indexedFiles: Array<{ filePath: string; fileHash: string; fileStamp: string; content?: string; cards: IndexedCard[] }>,
     settings: PluginSettings,
-    touchedCardIds: Set<string>,
+    touchedSyncKeys: Set<string>,
     resolvedNoteIds: Map<string, number | undefined>,
-    orphanCards: Array<{ cardId: string }>,
+    orphanCards: CardState[],
   ): PluginState {
     const now = this.now();
     const deckRulesFingerprint = createDeckRulesFingerprint(settings);
+    const scopedFilePaths = new Set(indexedFiles.filter((indexedFile) => indexedFile.content !== undefined).map((indexedFile) => indexedFile.filePath));
     const nextState: PluginState = {
       files: { ...previousState.files },
       cards: { ...previousState.cards },
       pendingWriteBack: [...previousState.pendingWriteBack],
     };
 
+    for (const filePath of scopedFilePaths) {
+      delete nextState.files[filePath];
+    }
+
+    for (const [noteKey, cardState] of Object.entries(nextState.cards)) {
+      if (scopedFilePaths.has(cardState.filePath)) {
+        delete nextState.cards[noteKey];
+      }
+    }
+
+    const resolvedNoteIdsBySyncKey = new Map<string, number>();
+
+    for (const card of cards) {
+      const noteId = resolvedNoteIds.get(card.syncKey) ?? card.noteId;
+      if (noteId === undefined) {
+        continue;
+      }
+
+      resolvedNoteIdsBySyncKey.set(card.syncKey, noteId);
+    }
+
     for (const indexedFile of indexedFiles) {
       if (indexedFile.content === undefined) {
         continue;
       }
+
+      const noteIds = Array.from(new Set(indexedFile.cards
+        .map((card) => resolvedNoteIdsBySyncKey.get(card.syncKey))
+        .filter((noteId): noteId is number => noteId !== undefined)));
 
       nextState.files[indexedFile.filePath] = {
         filePath: indexedFile.filePath,
@@ -197,17 +220,20 @@ export class ManualSyncService {
         fileStamp: indexedFile.fileStamp,
         deckRulesFingerprint,
         lastIndexedAt: now,
-        cardIds: indexedFile.cards.map((card) => card.cardId),
+        noteIds,
       };
     }
 
     for (const card of cards) {
-      const existingState = previousState.cards[card.cardId];
-      const renderPlan = this.renderConfigService.resolve(card, settings);
-      const noteId = resolvedNoteIds.get(card.cardId) ?? existingState?.noteId ?? card.noteId;
+      const noteId = resolvedNoteIdsBySyncKey.get(card.syncKey);
+      if (noteId === undefined) {
+        continue;
+      }
 
-      nextState.cards[card.cardId] = {
-        cardId: card.cardId,
+      const existingState = previousState.cards[toNoteIdKey(noteId)] ?? (card.noteId !== undefined ? previousState.cards[toNoteIdKey(card.noteId)] : undefined);
+      const renderPlan = this.renderConfigService.resolve(card, settings);
+
+      nextState.cards[toNoteIdKey(noteId)] = {
         noteId,
         filePath: card.filePath,
         heading: card.heading,
@@ -229,19 +255,14 @@ export class ManualSyncService {
         deckHintSource: card.deckHintSource,
         deckWarnings: [...card.deckWarnings],
         tagsHint: card.tagsHint,
-        lastSyncedAt: touchedCardIds.has(card.cardId) ? now : existingState?.lastSyncedAt ?? 0,
+        lastSyncedAt: touchedSyncKeys.has(card.syncKey) ? now : existingState?.lastSyncedAt ?? 0,
         orphan: false,
       };
     }
 
     for (const orphanCard of orphanCards) {
-      const existing = nextState.cards[orphanCard.cardId];
-      if (!existing) {
-        continue;
-      }
-
-      nextState.cards[orphanCard.cardId] = {
-        ...existing,
+      nextState.cards[toNoteIdKey(orphanCard.noteId)] = {
+        ...orphanCard,
         orphan: true,
       };
     }

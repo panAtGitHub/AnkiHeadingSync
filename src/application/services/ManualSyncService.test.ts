@@ -28,8 +28,7 @@ describe("ManualSyncService", () => {
     expect(ankiGateway.ensuredDecks).toEqual([["notes"]]);
     expect(ankiGateway.deletedNotes).toEqual([]);
     expect(ankiGateway.deletedDecks).toEqual([]);
-    expect(vaultGateway.getFileContent("notes/example.md")).toContain("<!-- AHS:card=");
-    expect(vaultGateway.getFileContent("notes/example.md")).toContain("note=9001");
+    expect(vaultGateway.getFileContent("notes/example.md")).toContain("<!--ID: 9001-->");
     expect(stateRepository.savedState?.pendingWriteBack).toEqual([]);
     expect(Object.values(stateRepository.savedState?.cards ?? {})).toHaveLength(1);
   });
@@ -47,10 +46,10 @@ describe("ManualSyncService", () => {
 
     expect(result.markerWriteConflictFiles).toEqual(["notes/example.md"]);
     expect(stateRepository.savedState?.pendingWriteBack).toHaveLength(1);
-    expect(stateRepository.savedState?.pendingWriteBack[0]).toMatchObject({ filePath: "notes/example.md", noteId: 9001 });
+    expect(stateRepository.savedState?.pendingWriteBack[0]).toMatchObject({ filePath: "notes/example.md", targetNoteId: 9001 });
   });
 
-  it("rebuilds the card index and writes card-only markers without calling Anki", async () => {
+  it("rebuilds the card index without writing unresolved ID markers or calling Anki", async () => {
     const vaultGateway = new FakeManualSyncVaultGateway({
       "notes/example.md": ["#### Prompt", "Answer"].join("\n"),
     });
@@ -61,14 +60,13 @@ describe("ManualSyncService", () => {
     const result = await service.rebuildIndex(createModule3Settings());
 
     expect(result.created).toBe(0);
-    expect(result.rewrittenMarkers).toBe(1);
+    expect(result.rewrittenMarkers).toBe(0);
     expect(result.migratedDecks).toBe(0);
     expect(ankiGateway.addedNotes).toHaveLength(0);
     expect(ankiGateway.changedDecks).toEqual([]);
     expect(ankiGateway.deletedNotes).toEqual([]);
     expect(ankiGateway.deletedDecks).toEqual([]);
-    expect(vaultGateway.getFileContent("notes/example.md")).toContain("<!-- AHS:card=");
-    expect(vaultGateway.getFileContent("notes/example.md")).not.toContain("note=");
+    expect(vaultGateway.getFileContent("notes/example.md")).toBe(["#### Prompt", "Answer"].join("\n"));
   });
 
   it("rebuildIndex does not migrate decks even when deck rules changed", async () => {
@@ -86,11 +84,11 @@ describe("ManualSyncService", () => {
           fileStamp: `1:${content.length}`,
           deckRulesFingerprint: createDeckRulesFingerprint(oldSettings),
           lastIndexedAt: 1,
-          cardIds: ["ahs_known"],
+          noteIds: [42],
         },
       },
       cards: {
-        ahs_known: createStoredSyncedCard(oldSettings, {
+        "42": createStoredSyncedCard(oldSettings, {
           filePath: "课程/数学/第一章/导数.md",
           deck: "Old::Deck",
         }),
@@ -115,7 +113,7 @@ describe("ManualSyncService", () => {
     const stateRepository = new InMemoryPluginStateRepository({
       files: {},
       cards: {
-        ahs_known: storedCard,
+        "42": storedCard,
       },
       pendingWriteBack: [],
     });
@@ -134,7 +132,7 @@ describe("ManualSyncService", () => {
     expect(result.rewrittenMarkers).toBe(1);
     expect(ankiGateway.addedNotes).toHaveLength(0);
     expect(ankiGateway.updatedNotes).toHaveLength(0);
-    expect(vaultGateway.getFileContent("notes/example.md")).toContain("<!-- AHS:card=ahs_known note=42 -->");
+    expect(vaultGateway.getFileContent("notes/example.md")).toContain("<!--ID: 42-->");
   });
 
   it("creates a new Anki note when marker was deleted and the card content changed", async () => {
@@ -145,7 +143,7 @@ describe("ManualSyncService", () => {
     const stateRepository = new InMemoryPluginStateRepository({
       files: {},
       cards: {
-        ahs_known: createStoredSyncedCard(settings),
+        "42": createStoredSyncedCard(settings),
       },
       pendingWriteBack: [],
     });
@@ -156,12 +154,10 @@ describe("ManualSyncService", () => {
 
     expect(result.created).toBe(1);
     expect(ankiGateway.addedNotes).toHaveLength(1);
-    expect(vaultGateway.getFileContent("notes/example.md")).toContain("note=9001");
-    expect(vaultGateway.getFileContent("notes/example.md")).not.toContain("AHS:card=ahs_known note=42");
-    expect(stateRepository.savedState?.cards.ahs_known?.orphan).toBe(true);
-    expect(
-      Object.values(stateRepository.savedState?.cards ?? {}).some((card) => card.cardId !== "ahs_known" && card.noteId === 9001 && !card.orphan),
-    ).toBe(true);
+    expect(vaultGateway.getFileContent("notes/example.md")).toContain("<!--ID: 9001-->");
+    expect(vaultGateway.getFileContent("notes/example.md")).not.toContain("<!--ID: 42-->");
+    expect(stateRepository.savedState?.cards["42"]?.orphan).toBe(true);
+    expect(stateRepository.savedState?.cards["9001"]?.orphan).toBe(false);
   });
 
   it("uses YAML deck, emits conflict warning, and continues syncing when YAML and body deck declarations differ", async () => {
@@ -205,12 +201,13 @@ describe("ManualSyncService", () => {
   it("migrates an existing note when only the resolved deck changes", async () => {
     const settings = createModule3Settings({ defaultDeck: "New::Deck" });
     const vaultGateway = new FakeManualSyncVaultGateway({
-      "example.md": ["#### Prompt", "Answer", "<!-- AHS:card=ahs_known note=42 -->"].join("\n"),
+      "example.md": ["#### Prompt", "Answer", "<!--ID: 42-->"] .join("\n"),
     });
     const indexedCard = {
-      cardId: "ahs_known",
       noteId: 42,
-      markerNoteId: 42,
+      syncKey: "example.md\u00001\u0000hash-card",
+      idMarkerState: "present-valid" as const,
+      noteIdSource: "marker" as const,
       filePath: "example.md",
       cardType: "basic" as const,
       heading: "Prompt",
@@ -227,14 +224,13 @@ describe("ManualSyncService", () => {
       rawBlockHash: hashString(["#### Prompt", "Answer"].join("\n")),
       deckWarnings: [],
       tagsHint: [],
-      markerState: "card-and-note" as const,
     };
     const oldSettings = createModule3Settings({ defaultDeck: "Old::Deck" });
     const renderPlan = new RenderConfigService().resolve(indexedCard, oldSettings);
     const stateRepository = new InMemoryPluginStateRepository({
       files: {},
       cards: {
-        ahs_known: createStoredSyncedCard(settings, {
+        "42": createStoredSyncedCard(settings, {
           filePath: "example.md",
           deck: "Old::Deck",
           renderConfigHash: renderPlan.renderConfigHash,
@@ -262,21 +258,21 @@ describe("ManualSyncService", () => {
     const oldSettings = createModule3Settings({ folderDeckMode: "off", defaultDeck: "Default::Deck" });
     const newSettings = createModule3Settings({ folderDeckMode: "folder", defaultDeck: "Default::Deck" });
     const vaultGateway = new FakeManualSyncVaultGateway({
-      "课程/数学/第一章/导数.md": ["#### Prompt", "Answer", "<!-- AHS:card=ahs_known note=42 -->"].join("\n"),
+      "课程/数学/第一章/导数.md": ["#### Prompt", "Answer", "<!--ID: 42-->"] .join("\n"),
     });
     const stateRepository = new InMemoryPluginStateRepository({
       files: {
         "课程/数学/第一章/导数.md": {
           filePath: "课程/数学/第一章/导数.md",
           fileHash: "hash-a",
-          fileStamp: `1:${["#### Prompt", "Answer", "<!-- AHS:card=ahs_known note=42 -->"].join("\n").length}`,
+          fileStamp: `1:${["#### Prompt", "Answer", "<!--ID: 42-->"] .join("\n").length}`,
           deckRulesFingerprint: createDeckRulesFingerprint(oldSettings),
           lastIndexedAt: 1,
-          cardIds: ["ahs_known"],
+          noteIds: [42],
         },
       },
       cards: {
-        ahs_known: createStoredSyncedCard(oldSettings, {
+        "42": createStoredSyncedCard(oldSettings, {
           filePath: "课程/数学/第一章/导数.md",
           deck: "Default::Deck",
         }),
@@ -298,12 +294,12 @@ describe("ManualSyncService", () => {
     expect(result.migratedDecks).toBe(1);
     expect(vaultGateway.readCalls).toEqual(["课程/数学/第一章/导数.md"]);
     expect(ankiGateway.changedDecks).toEqual([{ deckName: "课程::数学::第一章", cardIds: [7001] }]);
-    expect(stateRepository.savedState?.cards.ahs_known?.deck).toBe("课程::数学::第一章");
+    expect(stateRepository.savedState?.cards["42"]?.deck).toBe("课程::数学::第一章");
     expect(stateRepository.savedState?.files["课程/数学/第一章/导数.md"]?.deckRulesFingerprint).toBe(createDeckRulesFingerprint(newSettings));
   });
 
   it("ordinary sync re-evaluates unchanged files when default deck changed and migrates root-level notes", async () => {
-    const content = ["#### Prompt", "Answer", "<!-- AHS:card=ahs_known note=42 -->"].join("\n");
+    const content = ["#### Prompt", "Answer", "<!--ID: 42-->"] .join("\n");
     const oldSettings = createModule3Settings({ defaultDeck: "Old::Deck", folderDeckMode: "off" });
     const newSettings = createModule3Settings({ defaultDeck: "New::Deck", folderDeckMode: "off" });
     const vaultGateway = new FakeManualSyncVaultGateway({
@@ -317,11 +313,11 @@ describe("ManualSyncService", () => {
           fileStamp: `1:${content.length}`,
           deckRulesFingerprint: createDeckRulesFingerprint(oldSettings),
           lastIndexedAt: 1,
-          cardIds: ["ahs_known"],
+          noteIds: [42],
         },
       },
       cards: {
-        ahs_known: createStoredSyncedCard(oldSettings, {
+        "42": createStoredSyncedCard(oldSettings, {
           filePath: "example.md",
           deck: "Old::Deck",
         }),
@@ -343,7 +339,7 @@ describe("ManualSyncService", () => {
   });
 
   it("ordinary sync re-evaluates unchanged files when file deck marker changes and migrates old notes", async () => {
-    const content = ["MY DECK: Scoped::Deck", "", "#### Prompt", "Answer", "<!-- AHS:card=ahs_known note=42 -->"].join("\n");
+    const content = ["MY DECK: Scoped::Deck", "", "#### Prompt", "Answer", "<!--ID: 42-->"] .join("\n");
     const oldSettings = createModule3Settings({ fileDeckMarker: "TARGET DECK", defaultDeck: "Default::Deck" });
     const newSettings = createModule3Settings({ fileDeckMarker: "MY DECK", defaultDeck: "Default::Deck" });
     const vaultGateway = new FakeManualSyncVaultGateway({
@@ -357,11 +353,11 @@ describe("ManualSyncService", () => {
           fileStamp: `1:${content.length}`,
           deckRulesFingerprint: createDeckRulesFingerprint(oldSettings),
           lastIndexedAt: 1,
-          cardIds: ["ahs_known"],
+          noteIds: [42],
         },
       },
       cards: {
-        ahs_known: createStoredSyncedCard(oldSettings, {
+        "42": createStoredSyncedCard(oldSettings, {
           deck: "notes",
         }),
       },
@@ -384,7 +380,7 @@ describe("ManualSyncService", () => {
   });
 
   it("ordinary sync re-evaluates unchanged files when file-level deck is enabled and migrates old notes", async () => {
-    const content = ["TARGET DECK: Scoped::Deck", "", "#### Prompt", "Answer", "<!-- AHS:card=ahs_known note=42 -->"].join("\n");
+    const content = ["TARGET DECK: Scoped::Deck", "", "#### Prompt", "Answer", "<!--ID: 42-->"] .join("\n");
     const oldSettings = createModule3Settings({ fileDeckEnabled: false, defaultDeck: "Default::Deck" });
     const newSettings = createModule3Settings({ fileDeckEnabled: true, defaultDeck: "Default::Deck" });
     const vaultGateway = new FakeManualSyncVaultGateway({
@@ -398,11 +394,11 @@ describe("ManualSyncService", () => {
           fileStamp: `1:${content.length}`,
           deckRulesFingerprint: createDeckRulesFingerprint(oldSettings),
           lastIndexedAt: 1,
-          cardIds: ["ahs_known"],
+          noteIds: [42],
         },
       },
       cards: {
-        ahs_known: createStoredSyncedCard(oldSettings, {
+        "42": createStoredSyncedCard(oldSettings, {
           deck: "notes",
         }),
       },
@@ -450,10 +446,12 @@ function createStoredSyncedCard(settings: PluginSettings, overrides: Partial<Car
   const bodyMarkdown = overrides.bodyMarkdown ?? "Answer";
   const rawBlockText = overrides.rawBlockText ?? [`#### ${heading}`, bodyMarkdown].join("\n");
   const rawBlockHash = overrides.rawBlockHash ?? hashString(rawBlockText);
+  const noteId = overrides.noteId ?? 42;
   const indexedCard = {
-    cardId: overrides.cardId ?? "ahs_known",
-    noteId: overrides.noteId ?? 42,
-    markerNoteId: overrides.noteId ?? 42,
+    noteId,
+    syncKey: `${overrides.filePath ?? "notes/example.md"}\u0000${overrides.blockStartLine ?? 1}\u0000${rawBlockHash}`,
+    idMarkerState: "present-valid" as const,
+    noteIdSource: "marker" as const,
     filePath: overrides.filePath ?? "notes/example.md",
     cardType: overrides.cardType ?? "basic",
     heading,
@@ -472,12 +470,10 @@ function createStoredSyncedCard(settings: PluginSettings, overrides: Partial<Car
     deckHintSource: overrides.deckHintSource,
     deckWarnings: overrides.deckWarnings ?? [],
     tagsHint: overrides.tagsHint ?? [],
-    markerState: "card-and-note" as const,
   };
   const renderPlan = new RenderConfigService().resolve(indexedCard, settings);
 
   return {
-    cardId: indexedCard.cardId,
     noteId: indexedCard.noteId,
     filePath: indexedCard.filePath,
     heading: indexedCard.heading,

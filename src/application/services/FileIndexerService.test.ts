@@ -37,12 +37,11 @@ describe("FileIndexerService", () => {
           fileStamp: `1:${["#### One", "Body"].join("\n").length}`,
           deckRulesFingerprint: createDeckRulesFingerprint(createModule3Settings()),
           lastIndexedAt: 1,
-          cardIds: ["ahs_1"],
+          noteIds: [10],
         },
       },
       cards: {
-        ahs_1: {
-          cardId: "ahs_1",
+        "10": {
           noteId: 10,
           filePath: "notes/one.md",
           heading: "One",
@@ -73,7 +72,7 @@ describe("FileIndexerService", () => {
     expect(result.skippedUnchangedFiles).toBe(1);
     expect(result.skippedUnchangedCards).toBe(1);
     expect(vaultGateway.readCalls).toEqual([]);
-    expect(result.cards[0]).toMatchObject({ cardId: "ahs_1", noteId: 10 });
+    expect(result.cards[0]).toMatchObject({ noteId: 10, noteIdSource: "marker", idMarkerState: "present-valid" });
   });
 
   it("forces re-read when deck rules fingerprint changed even if file stamp is unchanged", async () => {
@@ -90,12 +89,11 @@ describe("FileIndexerService", () => {
           fileStamp: `1:${content.length}`,
           deckRulesFingerprint: createDeckRulesFingerprint(createModule3Settings({ defaultDeck: "Old::Deck" })),
           lastIndexedAt: 1,
-          cardIds: ["ahs_1"],
+          noteIds: [10],
         },
       },
       cards: {
-        ahs_1: {
-          cardId: "ahs_1",
+        "10": {
           noteId: 10,
           filePath: "notes/one.md",
           heading: "One",

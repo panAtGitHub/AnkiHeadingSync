@@ -1,10 +1,10 @@
 import type { SourceFile } from "@/domain/card/entities/SourceFile";
-import type { IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
+import { createIndexedCardSyncKey, type IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
 import type { IndexedFile } from "@/domain/manual-sync/entities/IndexedFile";
-import type { CardState, PendingWriteBackState } from "@/domain/manual-sync/entities/PluginState";
+import { createPendingWriteBackKey, type CardState, type PendingWriteBackState } from "@/domain/manual-sync/entities/PluginState";
 import { hashString } from "@/domain/shared/hash";
 
-import { CardMarkerError, CardMarkerService } from "./CardMarkerService";
+import { CardMarkerService } from "./CardMarkerService";
 import { DeckExtractionService } from "./DeckExtractionService";
 
 interface HeadingMatch {
@@ -15,11 +15,10 @@ interface HeadingMatch {
 
 interface MarkerExtractionResult {
   bodyLines: string[];
-  markerCardId?: string;
   markerNoteId?: number;
   contentEndLine: number;
   markerLine?: number;
-  markerState: IndexedCard["markerState"];
+  idMarkerState: IndexedCard["idMarkerState"];
 }
 
 export interface CardIndexingContext {
@@ -49,10 +48,9 @@ export class CardIndexingService {
       ? this.deckExtractionService.extract(sourceFile, context.fileDeckMarker ?? "TARGET DECK")
       : { warnings: [] };
     const cards: IndexedCard[] = [];
-    const knownCardsById = new Map(context.knownCards.map((card) => [card.cardId, card]));
     const knownCardsByBlockKey = groupKnownCardsByBlockKey(context.knownCards);
-    const pendingByCardId = new Map(context.pendingWriteBack.map((pending) => [pending.cardId, pending]));
-    const usedCardIds = new Set<string>();
+    const pendingByBlockKey = groupPendingWriteBackByBlockKey(context.pendingWriteBack);
+    const usedNoteIds = new Set<number>();
 
     for (let headingIndex = 0; headingIndex < headings.length; headingIndex += 1) {
       const heading = headings[headingIndex];
@@ -70,21 +68,23 @@ export class CardIndexingService {
       const rawBlockHash = hashString(rawBlockText);
       const resolvedIdentity = this.resolveIdentity(
         sourceFile.path,
+        heading.lineIndex + 1,
         rawBlockHash,
-        marker.markerCardId,
         marker.markerNoteId,
-        knownCardsById,
         knownCardsByBlockKey,
-        pendingByCardId,
-        usedCardIds,
+        pendingByBlockKey,
+        usedNoteIds,
       );
 
-      usedCardIds.add(resolvedIdentity.cardId);
+      if (resolvedIdentity.noteId !== undefined) {
+        usedNoteIds.add(resolvedIdentity.noteId);
+      }
 
       cards.push({
-        cardId: resolvedIdentity.cardId,
         noteId: resolvedIdentity.noteId,
-        markerNoteId: marker.markerNoteId,
+        syncKey: createIndexedCardSyncKey(sourceFile.path, heading.lineIndex + 1, rawBlockHash),
+        idMarkerState: marker.idMarkerState,
+        noteIdSource: resolvedIdentity.noteIdSource,
         filePath: sourceFile.path,
         cardType,
         heading: heading.text,
@@ -103,7 +103,6 @@ export class CardIndexingService {
         deckHintSource: extractedDeck.explicitDeckSource,
         deckWarnings: [...extractedDeck.warnings],
         tagsHint: [],
-        markerState: marker.markerState,
         sourceContent: sourceFile.content,
       });
     }
@@ -119,49 +118,49 @@ export class CardIndexingService {
 
   private resolveIdentity(
     filePath: string,
+    blockStartLine: number,
     rawBlockHash: string,
-    markerCardId: string | undefined,
     markerNoteId: number | undefined,
-    knownCardsById: Map<string, CardState>,
     knownCardsByBlockKey: Map<string, CardState[]>,
-    pendingByCardId: Map<string, PendingWriteBackState>,
-    usedCardIds: Set<string>,
-  ): { cardId: string; noteId?: number } {
-    if (markerCardId) {
-      const pending = pendingByCardId.get(markerCardId);
-      const known = knownCardsById.get(markerCardId);
-
-      if (pending && pending.noteId !== undefined) {
-        return {
-          cardId: markerCardId,
-          noteId: pending.noteId,
-        };
-      }
-
-      if (known) {
-        return {
-          cardId: markerCardId,
-          noteId: known.noteId,
-        };
+    pendingByBlockKey: Map<string, PendingWriteBackState[]>,
+    usedNoteIds: Set<number>,
+  ): { noteId?: number; noteIdSource?: IndexedCard["noteIdSource"] } {
+    if (markerNoteId !== undefined) {
+      if (usedNoteIds.has(markerNoteId)) {
+        return {};
       }
 
       return {
-        cardId: markerCardId,
         noteId: markerNoteId,
+        noteIdSource: "marker",
       };
     }
 
     const knownMatches = knownCardsByBlockKey.get(createKnownCardBlockKey(filePath, rawBlockHash)) ?? [];
-    if (knownMatches.length === 1 && !usedCardIds.has(knownMatches[0].cardId)) {
+    if (knownMatches.length === 1) {
+      if (usedNoteIds.has(knownMatches[0].noteId)) {
+        return {};
+      }
+
       return {
-        cardId: knownMatches[0].cardId,
         noteId: knownMatches[0].noteId,
+        noteIdSource: "state-recovery",
       };
     }
 
-    return {
-      cardId: this.markerService.generateCardId(),
-    };
+    const pendingMatches = pendingByBlockKey.get(createPendingWriteBackKey(filePath, blockStartLine, rawBlockHash)) ?? [];
+    if (pendingMatches.length === 1) {
+      if (usedNoteIds.has(pendingMatches[0].targetNoteId)) {
+        return {};
+      }
+
+      return {
+        noteId: pendingMatches[0].targetNoteId,
+        noteIdSource: "pending-writeback",
+      };
+    }
+
+    return {};
   }
 }
 
@@ -181,6 +180,23 @@ function groupKnownCardsByBlockKey(knownCards: CardState[]): Map<string, CardSta
     }
 
     grouped.set(key, [card]);
+  }
+
+  return grouped;
+}
+
+function groupPendingWriteBackByBlockKey(pendingWriteBack: PendingWriteBackState[]): Map<string, PendingWriteBackState[]> {
+  const grouped = new Map<string, PendingWriteBackState[]>();
+
+  for (const pending of pendingWriteBack) {
+    const key = createPendingWriteBackKey(pending.filePath, pending.blockStartLine, pending.rawBlockHash);
+    const entries = grouped.get(key);
+    if (entries) {
+      entries.push(pending);
+      continue;
+    }
+
+    grouped.set(key, [pending]);
   }
 
   return grouped;
@@ -282,63 +298,37 @@ function extractMarker(
   headingLine: number,
   markerService: CardMarkerService,
 ): MarkerExtractionResult {
-  const candidates = bodyLines
-    .map((line, index) => ({ line, index }))
-    .filter(({ line }) => markerService.isCandidate(line));
-  const validMarkers = candidates
-    .map(({ line, index }) => markerService.parse(line, bodyStartLine + index))
-    .filter((marker): marker is NonNullable<typeof marker> => Boolean(marker));
-
-  if (validMarkers.length > 1) {
-    throw new CardMarkerError(`Multiple AHS markers found in heading block at line ${headingLine}.`);
-  }
-
   let lastNonEmptyIndex = bodyLines.length - 1;
   while (lastNonEmptyIndex >= 0 && !bodyLines[lastNonEmptyIndex].trim()) {
     lastNonEmptyIndex -= 1;
   }
 
   if (lastNonEmptyIndex < 0) {
-    if (candidates.length > 0) {
-      throw new CardMarkerError(`Invalid AHS marker found in heading block at line ${headingLine}.`);
-    }
-
     return {
       bodyLines,
       contentEndLine: headingLine,
-      markerState: "missing",
+      idMarkerState: "missing",
     };
   }
 
   const lastLine = bodyLines[lastNonEmptyIndex];
-  const lastMarker = markerService.parse(lastLine, bodyStartLine + lastNonEmptyIndex);
-
-  if (lastMarker) {
-    for (const candidate of candidates) {
-      if (candidate.index !== lastNonEmptyIndex) {
-        throw new CardMarkerError(`Multiple or misplaced AHS markers found in heading block at line ${headingLine}.`);
-      }
-    }
-
-    const nextBodyLines = bodyLines.filter((_line, index) => index !== lastNonEmptyIndex);
+  if (!markerService.isCandidate(lastLine)) {
     return {
-      bodyLines: nextBodyLines,
-      markerCardId: lastMarker.cardId,
-      markerNoteId: lastMarker.noteId,
-      contentEndLine: findContentEndLine(nextBodyLines, bodyStartLine, headingLine),
-      markerLine: bodyStartLine + lastNonEmptyIndex,
-      markerState: lastMarker.noteId ? "card-and-note" : "card-only",
+      bodyLines,
+      contentEndLine: findContentEndLine(bodyLines, bodyStartLine, headingLine),
+      idMarkerState: "missing",
     };
   }
 
-  if (candidates.length > 0) {
-    throw new CardMarkerError(`Invalid AHS marker found in heading block at line ${headingLine}.`);
-  }
+  const parsedMarker = markerService.parse(lastLine, bodyStartLine + lastNonEmptyIndex);
+  const nextBodyLines = bodyLines.filter((_line, index) => index !== lastNonEmptyIndex);
 
   return {
-    bodyLines,
-    contentEndLine: findContentEndLine(bodyLines, bodyStartLine, headingLine),
-    markerState: "missing",
+    bodyLines: nextBodyLines,
+    markerNoteId: parsedMarker?.noteId,
+    contentEndLine: findContentEndLine(nextBodyLines, bodyStartLine, headingLine),
+    markerLine: bodyStartLine + lastNonEmptyIndex,
+    idMarkerState: parsedMarker ? "present-valid" : "present-invalid",
   };
 }
 

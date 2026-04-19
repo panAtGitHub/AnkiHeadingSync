@@ -6,7 +6,7 @@ import { hashString } from "@/domain/shared/hash";
 import { CardIndexingService } from "./CardIndexingService";
 
 describe("CardIndexingService", () => {
-  it("generates cardId for a missing marker and excludes the marker from body text", () => {
+  it("leaves noteId unresolved for a missing marker and excludes it from body text", () => {
     const service = new CardIndexingService();
     const indexedFile = service.index(
       {
@@ -24,12 +24,12 @@ describe("CardIndexingService", () => {
     );
 
     expect(indexedFile.cards).toHaveLength(1);
-    expect(indexedFile.cards[0]?.cardId.startsWith("ahs_")).toBe(true);
-    expect(indexedFile.cards[0]?.markerState).toBe("missing");
+    expect(indexedFile.cards[0]?.noteId).toBeUndefined();
+    expect(indexedFile.cards[0]?.idMarkerState).toBe("missing");
     expect(indexedFile.cards[0]?.bodyMarkdown).toBe("Answer");
   });
 
-  it("reuses cardId and noteId when marker is missing but the same file has a unique raw block hash match", () => {
+  it("recovers noteId when the same file has a unique raw block hash match", () => {
     const service = new CardIndexingService();
     const rawBlockText = ["#### Prompt", "Answer"].join("\n");
     const indexedFile = service.index(
@@ -48,9 +48,9 @@ describe("CardIndexingService", () => {
     );
 
     expect(indexedFile.cards[0]).toMatchObject({
-      cardId: "ahs_known",
       noteId: 42,
-      markerState: "missing",
+      idMarkerState: "missing",
+      noteIdSource: "state-recovery",
     });
   });
 
@@ -72,11 +72,10 @@ describe("CardIndexingService", () => {
       },
     );
 
-    expect(indexedFile.cards[0]?.cardId).not.toBe("ahs_known");
     expect(indexedFile.cards[0]?.noteId).toBeUndefined();
   });
 
-  it("does not reuse card identity when multiple same-file candidates share the same raw block hash", () => {
+  it("does not reuse noteId when multiple same-file candidates share the same raw block hash", () => {
     const service = new CardIndexingService();
     const rawBlockText = ["#### Prompt", "Answer"].join("\n");
     const rawBlockHash = hashString(rawBlockText);
@@ -91,19 +90,17 @@ describe("CardIndexingService", () => {
         clozeHeadingLevel: 5,
         fileStamp: "1:1",
         knownCards: [
-          createKnownCardState({ cardId: "ahs_known", rawBlockHash }),
-          createKnownCardState({ cardId: "ahs_other", noteId: 99, rawBlockHash }),
+          createKnownCardState({ noteId: 42, rawBlockHash }),
+          createKnownCardState({ noteId: 99, rawBlockHash }),
         ],
         pendingWriteBack: [],
       },
     );
 
-    expect(indexedFile.cards[0]?.cardId).not.toBe("ahs_known");
-    expect(indexedFile.cards[0]?.cardId).not.toBe("ahs_other");
     expect(indexedFile.cards[0]?.noteId).toBeUndefined();
   });
 
-  it("restores noteId from the marker cardId before considering hash-based recovery", () => {
+  it("prefers a trailing ID marker before considering hash-based recovery", () => {
     const service = new CardIndexingService();
     const rawBlockText = ["#### Prompt", "Answer"].join("\n");
     const rawBlockHash = hashString(rawBlockText);
@@ -111,70 +108,73 @@ describe("CardIndexingService", () => {
       {
         path: "notes/example.md",
         basename: "example",
-        content: ["#### Prompt", "Answer", "<!-- AHS:card=ahs_known -->"].join("\n"),
+        content: ["#### Prompt", "Answer", "<!--ID: 42-->"].join("\n"),
       },
       {
         qaHeadingLevel: 4,
         clozeHeadingLevel: 5,
         fileStamp: "1:1",
         knownCards: [
-          createKnownCardState({ cardId: "ahs_known", rawBlockHash }),
-          createKnownCardState({ cardId: "ahs_hash_match", noteId: 99, rawBlockHash }),
+          createKnownCardState({ noteId: 99, rawBlockHash }),
         ],
         pendingWriteBack: [],
       },
     );
 
     expect(indexedFile.cards[0]).toMatchObject({
-      cardId: "ahs_known",
       noteId: 42,
+      noteIdSource: "marker",
+      idMarkerState: "present-valid",
     });
   });
 
-  it("prefers a known card with cleared noteId over a stale marker noteId", () => {
+  it("recovers noteId from state when the trailing ID marker is invalid", () => {
     const service = new CardIndexingService();
+    const rawBlockText = ["#### Prompt", "Answer"].join("\n");
     const indexedFile = service.index(
       {
         path: "notes/example.md",
         basename: "example",
-        content: ["#### Prompt", "Answer", "<!-- AHS:card=ahs_known note=42 -->"].join("\n"),
+        content: ["#### Prompt", "Answer", "<!--ID: invalid-->"].join("\n"),
       },
       {
         qaHeadingLevel: 4,
         clozeHeadingLevel: 5,
         fileStamp: "1:1",
-        knownCards: [createKnownCardState({ cardId: "ahs_known", noteId: undefined })],
+        knownCards: [createKnownCardState({ rawBlockHash: hashString(rawBlockText) })],
         pendingWriteBack: [],
       },
     );
 
     expect(indexedFile.cards[0]).toMatchObject({
-      cardId: "ahs_known",
-      noteId: undefined,
-      markerNoteId: 42,
-      markerState: "card-and-note",
+      noteId: 42,
+      noteIdSource: "state-recovery",
+      idMarkerState: "present-invalid",
     });
   });
 
-  it("rejects misplaced or multiple markers inside a single heading block", () => {
+  it("does not treat a non-trailing ID marker as the marker slot", () => {
     const service = new CardIndexingService();
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: ["#### Prompt", "<!--ID: 42-->", "Answer"].join("\n"),
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        fileStamp: "1:1",
+        knownCards: [],
+        pendingWriteBack: [],
+      },
+    );
 
-    expect(() =>
-      service.index(
-        {
-          path: "notes/example.md",
-          basename: "example",
-          content: ["#### Prompt", "<!-- AHS:card=ahs_1 -->", "Answer", "<!-- AHS:card=ahs_2 -->"].join("\n"),
-        },
-        {
-          qaHeadingLevel: 4,
-          clozeHeadingLevel: 5,
-          fileStamp: "1:1",
-          knownCards: [],
-          pendingWriteBack: [],
-        },
-      ),
-    ).toThrow("Multiple AHS markers");
+    expect(indexedFile.cards[0]).toMatchObject({
+      noteId: undefined,
+      idMarkerState: "missing",
+      bodyMarkdown: "<!--ID: 42-->\nAnswer",
+    });
   });
 
   it("extracts YAML deck, prefers it over conflicting body deck, and stores a warning on indexed cards", () => {
@@ -280,8 +280,7 @@ function createKnownCardState(overrides: Partial<CardState> = {}): CardState {
   const rawBlockText = overrides.rawBlockText ?? ["#### Prompt", "Answer"].join("\n");
 
   return {
-    cardId: overrides.cardId ?? "ahs_known",
-    noteId: Object.prototype.hasOwnProperty.call(overrides, "noteId") ? overrides.noteId : 42,
+    noteId: overrides.noteId ?? 42,
     filePath: overrides.filePath ?? "notes/example.md",
     heading: overrides.heading ?? "Prompt",
     headingLevel: overrides.headingLevel ?? 4,

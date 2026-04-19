@@ -6,7 +6,7 @@ import type { PlannedCard } from "@/domain/manual-sync/value-objects/ManualSyncP
 import { CardMarkerService, type MarkerWriteRequest } from "@/domain/manual-sync/services/CardMarkerService";
 
 export interface MarkdownWriteBackResult {
-  writtenCardIds: string[];
+  writtenSyncKeys: string[];
   conflictFiles: string[];
   failureFiles: Array<{ filePath: string; message: string }>;
   pendingEntries: PendingWriteBackState[];
@@ -20,7 +20,7 @@ export class MarkdownWriteBackService {
 
   async write(plannedCards: PlannedCard[], indexedFilesByPath: Map<string, IndexedFile>): Promise<MarkdownWriteBackResult> {
     const plannedByFile = new Map<string, PlannedCard[]>();
-    const writtenCardIds: string[] = [];
+    const writtenSyncKeys: string[] = [];
     const conflictFiles: string[] = [];
     const failureFiles: Array<{ filePath: string; message: string }> = [];
     const pendingEntries: PendingWriteBackState[] = [];
@@ -52,7 +52,7 @@ export class MarkdownWriteBackService {
         );
 
         await this.vaultGateway.replaceMarkdownFile(filePath, sourceContent, nextContent);
-        writtenCardIds.push(...fileCards.map((plannedCard) => plannedCard.card.cardId));
+        writtenSyncKeys.push(...fileCards.map((plannedCard) => plannedCard.card.syncKey));
       } catch (error) {
         pendingEntries.push(...fileCards.map((plannedCard) => this.createPendingEntry(filePath, plannedCard, indexedFile.fileHash)));
 
@@ -69,7 +69,7 @@ export class MarkdownWriteBackService {
     }
 
     return {
-      writtenCardIds,
+      writtenSyncKeys,
       conflictFiles,
       failureFiles,
       pendingEntries,
@@ -79,8 +79,7 @@ export class MarkdownWriteBackService {
   private toWriteRequest(plannedCard: PlannedCard, sourceContent: string): MarkerWriteRequest {
     return {
       filePath: plannedCard.card.filePath,
-      cardId: plannedCard.card.cardId,
-      noteId: plannedCard.noteId,
+      noteId: requireNoteId(plannedCard),
       blockStartLine: plannedCard.card.blockStartLine,
       contentEndLine: plannedCard.card.contentEndLine,
       blockEndLine: plannedCard.card.blockEndLine,
@@ -90,13 +89,23 @@ export class MarkdownWriteBackService {
   }
 
   private createPendingEntry(filePath: string, plannedCard: PlannedCard, expectedFileHash: string): PendingWriteBackState {
+    const noteId = requireNoteId(plannedCard);
+
     return {
       filePath,
-      cardId: plannedCard.card.cardId,
-      noteId: plannedCard.noteId,
+      blockStartLine: plannedCard.card.blockStartLine,
       expectedFileHash,
-      targetMarker: this.markerService.create(plannedCard.card.cardId, plannedCard.noteId).raw,
+      targetMarker: this.markerService.create(noteId).raw,
       rawBlockHash: plannedCard.card.rawBlockHash,
+      targetNoteId: noteId,
     };
   }
+}
+
+function requireNoteId(plannedCard: PlannedCard): number {
+  if (plannedCard.noteId === undefined) {
+    throw new Error(`Cannot write marker without noteId for block ${plannedCard.card.filePath}:${plannedCard.card.blockStartLine}.`);
+  }
+
+  return plannedCard.noteId;
 }

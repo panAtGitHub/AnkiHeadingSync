@@ -1,11 +1,12 @@
 import type { CardType } from "@/domain/card/entities/RenderedFields";
-import type { MarkerState } from "@/domain/manual-sync/entities/AhsMarker";
+import type { IdMarkerState, NoteIdSource } from "@/domain/manual-sync/entities/IdMarker";
 import type { DeckResolutionWarning, DeckResolutionSource } from "@/domain/manual-sync/value-objects/DeckResolution";
 
 export interface IndexedCard {
-  cardId: string;
   noteId?: number;
-  markerNoteId?: number;
+  syncKey: string;
+  idMarkerState: IdMarkerState;
+  noteIdSource?: NoteIdSource;
   filePath: string;
   cardType: CardType;
   heading: string;
@@ -24,6 +25,9 @@ export interface IndexedCard {
   deckHintSource?: Extract<DeckResolutionSource, "frontmatter" | "body">;
   deckWarnings: DeckResolutionWarning[];
   tagsHint: string[];
-  markerState: MarkerState;
   sourceContent?: string;
+}
+
+export function createIndexedCardSyncKey(filePath: string, blockStartLine: number, rawBlockHash: string): string {
+  return `${filePath}\u0000${blockStartLine}\u0000${rawBlockHash}`;
 }

@@ -17,11 +17,11 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
     const content = [
       "#### Prompt",
       "Answer",
-      "<!-- AHS:card=ahs_1 note=41 -->",
+      "<!--ID: 41-->",
       "",
       "#### Prompt 2",
       "Answer 2",
-      "<!-- AHS:card=ahs_2 -->",
+      "<!--ID: 42-->",
     ].join("\n");
     const vaultGateway = new FakeManualSyncVaultGateway({
       [filePath]: content,
@@ -34,12 +34,11 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
           fileStamp: `1:${content.length}`,
           deckRulesFingerprint: createDeckRulesFingerprint(settings),
           lastIndexedAt: 1,
-          cardIds: ["ahs_1", "ahs_2"],
+          noteIds: [41, 42],
         },
       },
       cards: {
-        ahs_1: createStoredSyncedCard(settings, {
-          cardId: "ahs_1",
+        "41": createStoredSyncedCard(settings, {
           noteId: 41,
           filePath,
           bodyMarkdown: "Answer",
@@ -48,9 +47,8 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
           blockEndLine: 4,
           markerLine: 3,
         }),
-        ahs_2: createStoredSyncedCard(settings, {
-          cardId: "ahs_2",
-          noteId: undefined,
+        "42": createStoredSyncedCard(settings, {
+          noteId: 42,
           filePath,
           heading: "Prompt 2",
           bodyMarkdown: "Answer 2",
@@ -65,11 +63,11 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
       pendingWriteBack: [
         {
           filePath,
-          cardId: "ahs_1",
-          noteId: 41,
+          blockStartLine: 1,
           expectedFileHash: hashString(content),
-          targetMarker: "<!-- AHS:card=ahs_1 note=41 -->",
+          targetMarker: "<!--ID: 41-->",
           rawBlockHash: hashString(["#### Prompt", "Answer"].join("\n")),
+          targetNoteId: 41,
         },
       ],
     });
@@ -80,13 +78,13 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
 
     expect(result).toMatchObject({
       trackedCards: 2,
-      deletedNotes: 1,
+      deletedNotes: 2,
       removedMarkers: 2,
       deletedLocalRecords: 2,
       conflictFiles: [],
       failureFiles: [],
     });
-    expect(ankiGateway.deletedNotes).toEqual([[41]]);
+    expect(ankiGateway.deletedNotes).toEqual([[41, 42]]);
     expect(vaultGateway.getFileContent(filePath)).toBe([
       "#### Prompt",
       "Answer",
@@ -95,8 +93,8 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
       "Answer 2",
     ].join("\n"));
     expect(stateRepository.savedState?.files[filePath]).toBeUndefined();
-    expect(stateRepository.savedState?.cards.ahs_1).toBeUndefined();
-    expect(stateRepository.savedState?.cards.ahs_2).toBeUndefined();
+    expect(stateRepository.savedState?.cards["41"]).toBeUndefined();
+    expect(stateRepository.savedState?.cards["42"]).toBeUndefined();
     expect(stateRepository.savedState?.pendingWriteBack).toEqual([]);
 
     const manualSyncService = new ManualSyncService(vaultGateway, stateRepository, ankiGateway, undefined, undefined, undefined, undefined, undefined, undefined, () => 2000);
@@ -104,52 +102,8 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
 
     expect(syncResult.created).toBe(2);
     expect(ankiGateway.addedNotes).toHaveLength(2);
-    expect(vaultGateway.getFileContent(filePath)).toContain("note=9001");
-    expect(vaultGateway.getFileContent(filePath)).toContain("note=9002");
-  });
-
-  it("cleans local records and markers without deleting Anki notes when noteId is missing", async () => {
-    const settings = createModule3Settings();
-    const filePath = "notes/local-only.md";
-    const content = [
-      "#### Prompt",
-      "Answer",
-      "<!-- AHS:card=ahs_local -->",
-    ].join("\n");
-    const vaultGateway = new FakeManualSyncVaultGateway({
-      [filePath]: content,
-    });
-    const stateRepository = new InMemoryPluginStateRepository({
-      files: {
-        [filePath]: {
-          filePath,
-          fileHash: hashString(content),
-          fileStamp: `1:${content.length}`,
-          deckRulesFingerprint: createDeckRulesFingerprint(settings),
-          lastIndexedAt: 1,
-          cardIds: ["ahs_local"],
-        },
-      },
-      cards: {
-        ahs_local: createStoredSyncedCard(settings, {
-          cardId: "ahs_local",
-          noteId: undefined,
-          filePath,
-          markerLine: 3,
-        }),
-      },
-      pendingWriteBack: [],
-    });
-    const ankiGateway = new FakeManualSyncAnkiGateway();
-    const useCase = new ClearCurrentFileSyncedCardsUseCase(stateRepository, ankiGateway, vaultGateway);
-
-    const result = await useCase.execute(filePath);
-
-    expect(result.deletedNotes).toBe(0);
-    expect(result.removedMarkers).toBe(1);
-    expect(result.deletedLocalRecords).toBe(1);
-    expect(ankiGateway.deletedNotes).toEqual([]);
-    expect(vaultGateway.getFileContent(filePath)).toBe(["#### Prompt", "Answer"].join("\n"));
+    expect(vaultGateway.getFileContent(filePath)).toContain("<!--ID: 9001-->");
+    expect(vaultGateway.getFileContent(filePath)).toContain("<!--ID: 9002-->");
   });
 
   it("returns an empty result when the file has no tracked synced cards", async () => {
@@ -177,7 +131,7 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
     const content = [
       "#### Prompt",
       "Answer",
-      "<!-- AHS:card=ahs_conflict note=42 -->",
+      "<!--ID: 42-->",
     ].join("\n");
     const vaultGateway = new FakeManualSyncVaultGateway({
       [filePath]: content,
@@ -191,12 +145,11 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
           fileStamp: `1:${content.length}`,
           deckRulesFingerprint: createDeckRulesFingerprint(settings),
           lastIndexedAt: 1,
-          cardIds: ["ahs_conflict"],
+          noteIds: [42],
         },
       },
       cards: {
-        ahs_conflict: createStoredSyncedCard(settings, {
-          cardId: "ahs_conflict",
+        "42": createStoredSyncedCard(settings, {
           noteId: 42,
           filePath,
           markerLine: 3,
@@ -205,11 +158,11 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
       pendingWriteBack: [
         {
           filePath,
-          cardId: "ahs_conflict",
-          noteId: 42,
+          blockStartLine: 1,
           expectedFileHash: hashString(content),
-          targetMarker: "<!-- AHS:card=ahs_conflict note=42 -->",
+          targetMarker: "<!--ID: 42-->",
           rawBlockHash: hashString(["#### Prompt", "Answer"].join("\n")),
+          targetNoteId: 42,
         },
       ],
     });
@@ -220,13 +173,13 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
 
     expect(result.deletedNotes).toBe(1);
     expect(result.removedMarkers).toBe(0);
-    expect(result.deletedLocalRecords).toBe(0);
+  expect(result.deletedLocalRecords).toBe(1);
     expect(result.conflictFiles).toEqual([filePath]);
     expect(ankiGateway.deletedNotes).toEqual([[42]]);
     expect(stateRepository.savedState?.files[filePath]).toBeUndefined();
-    expect(stateRepository.savedState?.cards.ahs_conflict?.noteId).toBeUndefined();
+  expect(stateRepository.savedState?.cards["42"]).toBeUndefined();
     expect(stateRepository.savedState?.pendingWriteBack).toEqual([]);
-    expect(vaultGateway.getFileContent(filePath)).toContain("note=42");
+  expect(vaultGateway.getFileContent(filePath)).toContain("<!--ID: 42-->");
 
     vaultGateway.conflictPaths.delete(filePath);
     const manualSyncService = new ManualSyncService(vaultGateway, stateRepository, ankiGateway, undefined, undefined, undefined, undefined, undefined, undefined, () => 3000);
@@ -234,8 +187,8 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
 
     expect(syncResult.created).toBe(1);
     expect(ankiGateway.addedNotes).toHaveLength(1);
-    expect(vaultGateway.getFileContent(filePath)).toContain("note=9001");
-    expect(vaultGateway.getFileContent(filePath)).not.toContain("note=42");
+    expect(vaultGateway.getFileContent(filePath)).toContain("<!--ID: 9001-->");
+    expect(vaultGateway.getFileContent(filePath)).not.toContain("<!--ID: 42-->");
   });
 });
 
@@ -244,10 +197,12 @@ function createStoredSyncedCard(settings: PluginSettings, overrides: Partial<Car
   const bodyMarkdown = overrides.bodyMarkdown ?? "Answer";
   const rawBlockText = overrides.rawBlockText ?? [`#### ${heading}`, bodyMarkdown].join("\n");
   const rawBlockHash = overrides.rawBlockHash ?? hashString(rawBlockText);
+  const noteId = overrides.noteId ?? 42;
   const indexedCard = {
-    cardId: overrides.cardId ?? "ahs_known",
-    noteId: overrides.noteId,
-    markerNoteId: overrides.noteId,
+    noteId,
+    syncKey: `${overrides.filePath ?? "notes/example.md"}\u0000${overrides.blockStartLine ?? 1}\u0000${rawBlockHash}`,
+    idMarkerState: "present-valid" as const,
+    noteIdSource: "marker" as const,
     filePath: overrides.filePath ?? "notes/example.md",
     cardType: overrides.cardType ?? "basic",
     heading,
@@ -266,12 +221,10 @@ function createStoredSyncedCard(settings: PluginSettings, overrides: Partial<Car
     deckHintSource: overrides.deckHintSource,
     deckWarnings: overrides.deckWarnings ?? [],
     tagsHint: overrides.tagsHint ?? [],
-    markerState: overrides.noteId ? "card-and-note" as const : "card-only" as const,
   };
   const renderPlan = new RenderConfigService().resolve(indexedCard, settings);
 
   return {
-    cardId: indexedCard.cardId,
     noteId: indexedCard.noteId,
     filePath: indexedCard.filePath,
     heading: indexedCard.heading,

@@ -2,7 +2,7 @@ import type { AnkiGateway } from "@/application/ports/AnkiGateway";
 import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
 import type { PluginStateRepository } from "@/application/ports/PluginStateRepository";
 import { MarkdownMarkerRemovalService } from "@/application/services/MarkdownMarkerRemovalService";
-import type { CardState, PluginState } from "@/domain/manual-sync/entities/PluginState";
+import { toNoteIdKey, type CardState, type PluginState } from "@/domain/manual-sync/entities/PluginState";
 
 import type { ClearCurrentFileSyncedCardsResult } from "./cleanupResetTypes";
 
@@ -41,17 +41,17 @@ export class ClearCurrentFileSyncedCardsUseCase {
 
     const markerRemovalResult = await this.markdownMarkerRemovalService.remove(
       filePath,
-      trackedCards.map((card) => ({ cardId: card.cardId })),
+      trackedCards.map((card) => ({ noteId: card.noteId })),
     );
 
-    const nextState = buildNextState(state, filePath, trackedCards, markerRemovalResult.conflictFiles.length > 0 || markerRemovalResult.failureFiles.length > 0);
+    const nextState = buildNextState(state, filePath, trackedCards);
     await this.pluginStateRepository.save(nextState);
 
     return {
       trackedCards: trackedCards.length,
       deletedNotes: noteIds.length,
       removedMarkers: markerRemovalResult.removedMarkers,
-      deletedLocalRecords: markerRemovalResult.conflictFiles.length === 0 && markerRemovalResult.failureFiles.length === 0 ? trackedCards.length : 0,
+      deletedLocalRecords: trackedCards.length,
       conflictFiles: markerRemovalResult.conflictFiles,
       failureFiles: markerRemovalResult.failureFiles,
     };
@@ -59,39 +59,32 @@ export class ClearCurrentFileSyncedCardsUseCase {
 }
 
 function collectTrackedCards(state: PluginState, filePath: string): CardState[] {
-  const trackedCardIds = new Set<string>();
+  const trackedNoteKeys = new Set<string>();
 
-  for (const cardId of state.files[filePath]?.cardIds ?? []) {
-    if (state.cards[cardId]) {
-      trackedCardIds.add(cardId);
+  for (const noteId of state.files[filePath]?.noteIds ?? []) {
+    const noteKey = toNoteIdKey(noteId);
+    if (state.cards[noteKey]) {
+      trackedNoteKeys.add(noteKey);
     }
   }
 
   for (const card of Object.values(state.cards)) {
     if (card.filePath === filePath) {
-      trackedCardIds.add(card.cardId);
+      trackedNoteKeys.add(toNoteIdKey(card.noteId));
     }
   }
 
-  return Array.from(trackedCardIds)
-    .map((cardId) => state.cards[cardId])
+  return Array.from(trackedNoteKeys)
+    .map((noteKey) => state.cards[noteKey])
     .filter((card): card is CardState => Boolean(card));
 }
 
-function buildNextState(state: PluginState, filePath: string, trackedCards: CardState[], keepSanitizedCards: boolean): PluginState {
-  const trackedCardIds = new Set(trackedCards.map((card) => card.cardId));
+function buildNextState(state: PluginState, filePath: string, trackedCards: CardState[]): PluginState {
+  const trackedNoteKeys = new Set(trackedCards.map((card) => toNoteIdKey(card.noteId)));
   const nextCards = { ...state.cards };
 
   for (const trackedCard of trackedCards) {
-    if (!keepSanitizedCards) {
-      delete nextCards[trackedCard.cardId];
-      continue;
-    }
-
-    nextCards[trackedCard.cardId] = {
-      ...trackedCard,
-      noteId: undefined,
-    };
+    delete nextCards[toNoteIdKey(trackedCard.noteId)];
   }
 
   const nextFiles = { ...state.files };
@@ -100,6 +93,6 @@ function buildNextState(state: PluginState, filePath: string, trackedCards: Card
   return {
     files: nextFiles,
     cards: nextCards,
-    pendingWriteBack: state.pendingWriteBack.filter((pending) => pending.filePath !== filePath && !trackedCardIds.has(pending.cardId)),
+    pendingWriteBack: state.pendingWriteBack.filter((pending) => pending.filePath !== filePath && !trackedNoteKeys.has(toNoteIdKey(pending.targetNoteId))),
   };
 }

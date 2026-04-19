@@ -27,13 +27,13 @@ describe("AnkiBatchExecutor", () => {
     });
 
     const executor = new AnkiBatchExecutor(ankiGateway);
-    const createOne = createPlannedCard("ahs_1");
-    const createTwo = createPlannedCard("ahs_2");
-    const updateOne = createPlannedCard("ahs_3", 300);
+    const createOne = createPlannedCard("sync-1");
+    const createTwo = createPlannedCard("sync-2");
+    const updateOne = createPlannedCard("sync-3", 300);
     const renderedCards = new Map<string, RenderedSyncCard>([
-      [createOne.card.cardId, createRenderedSyncCard(createOne)],
-      [createTwo.card.cardId, createRenderedSyncCard(createTwo)],
-      [updateOne.card.cardId, createRenderedSyncCard(updateOne)],
+      [createOne.card.syncKey, createRenderedSyncCard(createOne)],
+      [createTwo.card.syncKey, createRenderedSyncCard(createTwo)],
+      [updateOne.card.syncKey, createRenderedSyncCard(updateOne)],
     ]);
     const plan: ManualSyncPlan = {
       toCreate: [createOne, createTwo],
@@ -66,13 +66,13 @@ describe("AnkiBatchExecutor", () => {
     });
 
     const executor = new AnkiBatchExecutor(ankiGateway);
-    const createCard = createPlannedCard("ahs_create", undefined, "Folder::Deck");
-    const updateCard = createPlannedCard("ahs_update", 300, "Changed::Deck");
-    const changeDeckCard = createPlannedCard("ahs_migrate", 300, "Changed::Deck");
+    const createCard = createPlannedCard("sync-create", undefined, "Folder::Deck");
+    const updateCard = createPlannedCard("sync-update", 300, "Changed::Deck");
+    const changeDeckCard = createPlannedCard("sync-migrate", 300, "Changed::Deck");
     const renderedCards = new Map<string, RenderedSyncCard>([
-      [createCard.card.cardId, createRenderedSyncCard(createCard)],
-      [updateCard.card.cardId, createRenderedSyncCard(updateCard)],
-      [changeDeckCard.card.cardId, createRenderedSyncCard(changeDeckCard)],
+      [createCard.card.syncKey, createRenderedSyncCard(createCard)],
+      [updateCard.card.syncKey, createRenderedSyncCard(updateCard)],
+      [changeDeckCard.card.syncKey, createRenderedSyncCard(changeDeckCard)],
     ]);
 
     const result = await executor.execute(
@@ -98,9 +98,9 @@ describe("AnkiBatchExecutor", () => {
   });
 });
 
-function createPlannedCard(cardId: string, noteId?: number, deck = "Obsidian"): PlannedCard {
+function createPlannedCard(syncKey: string, noteId?: number, deck = "Obsidian"): PlannedCard {
   return {
-    card: createIndexedCard(cardId, noteId),
+    card: createIndexedCard(syncKey, noteId),
     noteId,
     deck,
     noteModel: "Basic",
@@ -123,26 +123,26 @@ function createRenderedSyncCard(plannedCard: PlannedCard): RenderedSyncCard {
   };
 }
 
-function createIndexedCard(cardId: string, noteId?: number): IndexedCard {
+function createIndexedCard(syncKey: string, noteId?: number): IndexedCard {
   return {
-    cardId,
     noteId,
-    markerNoteId: noteId,
+    syncKey,
+    idMarkerState: noteId ? "present-valid" : "missing",
+    noteIdSource: noteId ? "marker" : undefined,
     filePath: "notes/example.md",
     cardType: "basic",
-    heading: `Heading ${cardId}`,
+    heading: `Heading ${syncKey}`,
     headingLevel: 4,
-    bodyMarkdown: `Body ${cardId}`,
+    bodyMarkdown: `Body ${syncKey}`,
     blockStartOffset: 0,
     blockEndOffset: 10,
     blockStartLine: 1,
     bodyStartLine: 2,
     blockEndLine: 2,
     contentEndLine: 2,
-    rawBlockText: `#### Heading ${cardId}\nBody ${cardId}`,
-    rawBlockHash: `hash-${cardId}`,
+    rawBlockText: `#### Heading ${syncKey}\nBody ${syncKey}`,
+    rawBlockHash: `hash-${syncKey}`,
     deckWarnings: [],
     tagsHint: [],
-    markerState: noteId ? "card-and-note" : "card-only",
   };
 }

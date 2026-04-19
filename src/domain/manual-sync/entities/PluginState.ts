@@ -7,12 +7,11 @@ export interface FileState {
   fileStamp: string;
   deckRulesFingerprint?: string;
   lastIndexedAt: number;
-  cardIds: string[];
+  noteIds: number[];
 }
 
 export interface CardState {
-  cardId: string;
-  noteId?: number;
+  noteId: number;
   filePath: string;
   heading: string;
   headingLevel: number;
@@ -39,11 +38,11 @@ export interface CardState {
 
 export interface PendingWriteBackState {
   filePath: string;
-  cardId: string;
-  noteId?: number;
+  blockStartLine: number;
   expectedFileHash: string;
   targetMarker: string;
   rawBlockHash: string;
+  targetNoteId: number;
 }
 
 export interface PluginState {
@@ -58,4 +57,12 @@ export function createEmptyPluginState(): PluginState {
     cards: {},
     pendingWriteBack: [],
   };
+}
+
+export function toNoteIdKey(noteId: number): string {
+  return String(noteId);
+}
+
+export function createPendingWriteBackKey(filePath: string, blockStartLine: number, rawBlockHash: string): string {
+  return `${filePath}\u0000${blockStartLine}\u0000${rawBlockHash}`;
 }

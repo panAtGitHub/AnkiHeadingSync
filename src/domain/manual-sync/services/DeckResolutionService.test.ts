@@ -76,9 +76,10 @@ describe("DeckResolutionService", () => {
 
 function createIndexedCard(overrides: Partial<IndexedCard> = {}): IndexedCard {
   return {
-    cardId: overrides.cardId ?? "ahs_1",
     noteId: overrides.noteId,
-    markerNoteId: overrides.markerNoteId,
+    syncKey: overrides.syncKey ?? "notes/example.md\u00001\u0000hash-1",
+    idMarkerState: overrides.idMarkerState ?? "missing",
+    noteIdSource: overrides.noteIdSource,
     filePath: overrides.filePath ?? "notes/example.md",
     cardType: overrides.cardType ?? "basic",
     heading: overrides.heading ?? "Prompt",
@@ -97,7 +98,6 @@ function createIndexedCard(overrides: Partial<IndexedCard> = {}): IndexedCard {
     deckHintSource: overrides.deckHintSource,
     deckWarnings: overrides.deckWarnings ?? [],
     tagsHint: overrides.tagsHint ?? [],
-    markerState: overrides.markerState ?? "missing",
     sourceContent: overrides.sourceContent,
   };
 }

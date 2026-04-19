@@ -1,7 +1,7 @@
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import { RenderConfigService } from "@/application/services/RenderConfigService";
 import type { IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
-import type { PluginState } from "@/domain/manual-sync/entities/PluginState";
+import { createPendingWriteBackKey, toNoteIdKey, type PluginState } from "@/domain/manual-sync/entities/PluginState";
 import { getDeckResolutionWarningKey, type DeckResolutionWarning } from "@/domain/manual-sync/value-objects/DeckResolution";
 import type { ManualSyncPlan, PlannedCard } from "@/domain/manual-sync/value-objects/ManualSyncPlan";
 
@@ -9,8 +9,9 @@ export class DiffPlannerService {
   constructor(private readonly renderConfigService = new RenderConfigService()) {}
 
   plan(cards: IndexedCard[], state: PluginState, scopedFilePaths: string[], settings: PluginSettings): ManualSyncPlan {
-    const cardsById = new Map<string, IndexedCard>();
-    const pendingByCardId = new Map(state.pendingWriteBack.map((pending) => [pending.cardId, pending]));
+    const cardsBySyncKey = new Map<string, IndexedCard>();
+    const pendingByBlockKey = new Set(state.pendingWriteBack.map((pending) => createPendingWriteBackKey(pending.filePath, pending.blockStartLine, pending.rawBlockHash)));
+    const seenNoteKeys = new Set<string>();
     const toCreate: PlannedCard[] = [];
     const toUpdate: PlannedCard[] = [];
     const toChangeDeck: PlannedCard[] = [];
@@ -19,17 +20,27 @@ export class DiffPlannerService {
     let unchangedCards = 0;
 
     for (const card of cards) {
-      if (cardsById.has(card.cardId)) {
-        throw new Error(`Duplicate cardId detected in current scan: ${card.cardId}`);
+      if (cardsBySyncKey.has(card.syncKey)) {
+        throw new Error(`Duplicate syncKey detected in current scan: ${card.syncKey}`);
       }
 
-      cardsById.set(card.cardId, card);
-      const existingState = state.cards[card.cardId];
+      cardsBySyncKey.set(card.syncKey, card);
+      if (card.noteId !== undefined) {
+        const noteKey = toNoteIdKey(card.noteId);
+        if (seenNoteKeys.has(noteKey)) {
+          throw new Error(`Duplicate noteId detected in current scan: ${card.noteId}`);
+        }
+
+        seenNoteKeys.add(noteKey);
+      }
+
+      const existingState = card.noteId !== undefined ? state.cards[toNoteIdKey(card.noteId)] : undefined;
       const renderPlan = this.renderConfigService.resolve(card, settings);
       for (const warning of renderPlan.warnings) {
         warningMap.set(getDeckResolutionWarningKey(warning), warning);
       }
-      const resolvedNoteId = existingState?.noteId ?? card.noteId;
+      const resolvedNoteId = card.noteId;
+      const blockKey = createPendingWriteBackKey(card.filePath, card.blockStartLine, card.rawBlockHash);
       const plannedCard: PlannedCard = {
         card: {
           ...card,
@@ -46,12 +57,7 @@ export class DiffPlannerService {
         continue;
       }
 
-      if (
-        card.markerState === "missing" ||
-        card.markerState === "card-only" ||
-        card.markerNoteId !== resolvedNoteId ||
-        pendingByCardId.has(card.cardId)
-      ) {
+      if (card.idMarkerState !== "present-valid" || card.noteIdSource !== "marker" || pendingByBlockKey.has(blockKey)) {
         toRewriteMarker.push(plannedCard);
       }
 
@@ -63,8 +69,7 @@ export class DiffPlannerService {
       const fieldsChanged =
         existingState.rawBlockHash !== card.rawBlockHash ||
         existingState.renderConfigHash !== renderPlan.renderConfigHash ||
-        existingState.orphan ||
-        pendingByCardId.has(card.cardId);
+        existingState.orphan;
       const deckChanged = existingState.deck !== renderPlan.deck;
 
       if (fieldsChanged) {
@@ -81,7 +86,7 @@ export class DiffPlannerService {
     }
 
     const scopedPaths = new Set(scopedFilePaths);
-    const toOrphan = Object.values(state.cards).filter((card) => scopedPaths.has(card.filePath) && !cardsById.has(card.cardId));
+    const toOrphan = Object.values(state.cards).filter((card) => scopedPaths.has(card.filePath) && !seenNoteKeys.has(toNoteIdKey(card.noteId)));
 
     return {
       toCreate,

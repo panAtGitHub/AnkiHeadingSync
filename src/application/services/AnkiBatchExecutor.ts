@@ -13,7 +13,7 @@ export interface AnkiBatchExecutionResult {
   uploadedMedia: number;
   markerWrites: PlannedCard[];
   resolvedNoteIds: Map<string, number | undefined>;
-  touchedCardIds: Set<string>;
+  touchedSyncKeys: Set<string>;
 }
 
 export class AnkiBatchExecutor {
@@ -31,7 +31,7 @@ export class AnkiBatchExecutor {
   ): Promise<AnkiBatchExecutionResult> {
     const modelDetailsCache = new Map<string, Promise<Awaited<ReturnType<AnkiGateway["getModelDetails"]>>>>();
     const resolvedNoteIds = new Map<string, number | undefined>();
-    const touchedCardIds = new Set<string>();
+    const touchedSyncKeys = new Set<string>();
     const markerWriteMap = new Map<string, PlannedCard>();
     let created = 0;
     let updated = 0;
@@ -60,22 +60,22 @@ export class AnkiBatchExecutor {
       }
 
       addQueue.push(await this.requireRenderedCard(plannedCard, renderedCards, renderOnDemand));
-      markerWriteMap.set(plannedCard.card.cardId, plannedCard);
+      markerWriteMap.set(plannedCard.card.syncKey, plannedCard);
     }
 
     for (const plannedCard of plan.toRewriteMarker) {
-      if (markerWriteMap.has(plannedCard.card.cardId)) {
+      if (markerWriteMap.has(plannedCard.card.syncKey)) {
         continue;
       }
 
       if (plannedCard.noteId && noteSummariesById.has(plannedCard.noteId)) {
-        markerWriteMap.set(plannedCard.card.cardId, plannedCard);
-        resolvedNoteIds.set(plannedCard.card.cardId, plannedCard.noteId);
+        markerWriteMap.set(plannedCard.card.syncKey, plannedCard);
+        resolvedNoteIds.set(plannedCard.card.syncKey, plannedCard.noteId);
         continue;
       }
 
       addQueue.push(await this.requireRenderedCard(plannedCard, renderedCards, renderOnDemand));
-      markerWriteMap.set(plannedCard.card.cardId, plannedCard);
+      markerWriteMap.set(plannedCard.card.syncKey, plannedCard);
     }
 
     for (const plannedCard of plan.toChangeDeck) {
@@ -84,7 +84,7 @@ export class AnkiBatchExecutor {
       }
 
       changeDeckQueue.push(plannedCard);
-      resolvedNoteIds.set(plannedCard.card.cardId, plannedCard.noteId);
+      resolvedNoteIds.set(plannedCard.card.syncKey, plannedCard.noteId);
     }
 
     await this.batchScheduler.runVoidBatches(
@@ -114,11 +114,11 @@ export class AnkiBatchExecutor {
       const renderedCard = addQueue[index];
       const noteId = addedNoteIds[index];
       created += 1;
-      touchedCardIds.add(renderedCard.card.cardId);
-      resolvedNoteIds.set(renderedCard.card.cardId, noteId);
+      touchedSyncKeys.add(renderedCard.card.syncKey);
+      resolvedNoteIds.set(renderedCard.card.syncKey, noteId);
 
-      const existingMarkerWrite = markerWriteMap.get(renderedCard.card.cardId);
-      markerWriteMap.set(renderedCard.card.cardId, {
+      const existingMarkerWrite = markerWriteMap.get(renderedCard.card.syncKey);
+      markerWriteMap.set(renderedCard.card.syncKey, {
         ...(existingMarkerWrite ?? {
           card: renderedCard.card,
           deck: renderedCard.deck,
@@ -141,8 +141,8 @@ export class AnkiBatchExecutor {
     updated += updateQueue.length;
     for (const { plannedCard } of updateQueue) {
       if (plannedCard.noteId) {
-        touchedCardIds.add(plannedCard.card.cardId);
-        resolvedNoteIds.set(plannedCard.card.cardId, plannedCard.noteId);
+        touchedSyncKeys.add(plannedCard.card.syncKey);
+        resolvedNoteIds.set(plannedCard.card.syncKey, plannedCard.noteId);
       }
     }
 
@@ -178,7 +178,7 @@ export class AnkiBatchExecutor {
 
     migratedDecks = changeDeckQueue.length;
     for (const plannedCard of changeDeckQueue) {
-      touchedCardIds.add(plannedCard.card.cardId);
+      touchedSyncKeys.add(plannedCard.card.syncKey);
     }
 
     return {
@@ -188,10 +188,10 @@ export class AnkiBatchExecutor {
       uploadedMedia,
       markerWrites: Array.from(markerWriteMap.values()).map((plannedCard) => ({
         ...plannedCard,
-        noteId: resolvedNoteIds.get(plannedCard.card.cardId) ?? plannedCard.noteId,
+        noteId: resolvedNoteIds.get(plannedCard.card.syncKey) ?? plannedCard.noteId,
       })),
       resolvedNoteIds,
-      touchedCardIds,
+      touchedSyncKeys,
     };
   }
 
@@ -200,13 +200,13 @@ export class AnkiBatchExecutor {
     renderedCards: Map<string, RenderedSyncCard>,
     renderOnDemand: (plannedCard: PlannedCard) => Promise<RenderedSyncCard>,
   ): Promise<RenderedSyncCard> {
-    const existing = renderedCards.get(plannedCard.card.cardId);
+    const existing = renderedCards.get(plannedCard.card.syncKey);
     if (existing) {
       return existing;
     }
 
     const rendered = await renderOnDemand(plannedCard);
-    renderedCards.set(plannedCard.card.cardId, rendered);
+    renderedCards.set(plannedCard.card.syncKey, rendered);
     return rendered;
   }
 

@@ -1,15 +1,35 @@
 import type { PluginStateRepository } from "@/application/ports/PluginStateRepository";
 import type { PluginDataStore } from "@/application/ports/PluginDataStore";
-import { createEmptyPluginState, type PluginState } from "@/domain/manual-sync/entities/PluginState";
+import { createEmptyPluginState, toNoteIdKey, type CardState, type FileState, type PendingWriteBackState, type PluginState } from "@/domain/manual-sync/entities/PluginState";
 
 import type { PluginDataSnapshot } from "./DataJsonPluginConfigRepository";
+
+interface LegacyFileState extends Partial<FileState> {
+  cardIds?: string[];
+}
+
+interface LegacyCardState extends Partial<CardState> {
+  cardId?: string;
+  noteId?: number;
+}
+
+interface LegacyPendingWriteBackState extends Partial<PendingWriteBackState> {
+  cardId?: string;
+  noteId?: number;
+}
+
+interface LegacyPluginState {
+  files?: Record<string, LegacyFileState>;
+  cards?: Record<string, LegacyCardState>;
+  pendingWriteBack?: LegacyPendingWriteBackState[];
+}
 
 export class DataJsonPluginStateRepository implements PluginStateRepository {
   constructor(private readonly pluginDataStore: PluginDataStore<PluginDataSnapshot>) {}
 
   async load(): Promise<PluginState> {
     const snapshot = (await this.pluginDataStore.load()) ?? {};
-    return snapshot.pluginState ?? createEmptyPluginState();
+    return migratePluginState(snapshot.pluginState);
   }
 
   async save(state: PluginState): Promise<void> {
@@ -20,4 +40,105 @@ export class DataJsonPluginStateRepository implements PluginStateRepository {
       pluginState: state,
     });
   }
+}
+
+export function migratePluginState(pluginState?: PluginState | LegacyPluginState): PluginState {
+  if (!pluginState) {
+    return createEmptyPluginState();
+  }
+
+  const rawCards = pluginState.cards ?? {};
+  const cards: Record<string, CardState> = {};
+
+  for (const rawCard of Object.values(rawCards)) {
+    const noteId = sanitizeNoteId(rawCard.noteId);
+    if (noteId === undefined) {
+      continue;
+    }
+
+    const nextCard = migrateCardState(rawCard, noteId);
+    const noteKey = toNoteIdKey(noteId);
+    const existingCard = cards[noteKey];
+    if (!existingCard || existingCard.lastSyncedAt <= nextCard.lastSyncedAt) {
+      cards[noteKey] = nextCard;
+    }
+  }
+
+  const files: Record<string, FileState> = {};
+  for (const [filePath, rawFile] of Object.entries(pluginState.files ?? {})) {
+    files[filePath] = {
+      filePath,
+      fileHash: typeof rawFile.fileHash === "string" ? rawFile.fileHash : "",
+      fileStamp: typeof rawFile.fileStamp === "string" ? rawFile.fileStamp : "",
+      deckRulesFingerprint: typeof rawFile.deckRulesFingerprint === "string" ? rawFile.deckRulesFingerprint : undefined,
+      lastIndexedAt: typeof rawFile.lastIndexedAt === "number" ? rawFile.lastIndexedAt : 0,
+      noteIds: collectMigratedFileNoteIds(rawFile, rawCards, cards),
+    };
+  }
+
+  return {
+    files,
+    cards,
+    pendingWriteBack: [],
+  };
+}
+
+function migrateCardState(rawCard: LegacyCardState, noteId: number): CardState {
+  return {
+    noteId,
+    filePath: typeof rawCard.filePath === "string" ? rawCard.filePath : "",
+    heading: typeof rawCard.heading === "string" ? rawCard.heading : "",
+    headingLevel: typeof rawCard.headingLevel === "number" ? rawCard.headingLevel : 1,
+    bodyMarkdown: typeof rawCard.bodyMarkdown === "string" ? rawCard.bodyMarkdown : "",
+    cardType: rawCard.cardType === "cloze" ? "cloze" : "basic",
+    blockStartOffset: typeof rawCard.blockStartOffset === "number" ? rawCard.blockStartOffset : 0,
+    blockEndOffset: typeof rawCard.blockEndOffset === "number" ? rawCard.blockEndOffset : 0,
+    blockStartLine: typeof rawCard.blockStartLine === "number" ? rawCard.blockStartLine : 1,
+    bodyStartLine: typeof rawCard.bodyStartLine === "number" ? rawCard.bodyStartLine : 1,
+    blockEndLine: typeof rawCard.blockEndLine === "number" ? rawCard.blockEndLine : 1,
+    contentEndLine: typeof rawCard.contentEndLine === "number" ? rawCard.contentEndLine : 1,
+    markerLine: typeof rawCard.markerLine === "number" ? rawCard.markerLine : undefined,
+    rawBlockText: typeof rawCard.rawBlockText === "string" ? rawCard.rawBlockText : "",
+    rawBlockHash: typeof rawCard.rawBlockHash === "string" ? rawCard.rawBlockHash : "",
+    renderConfigHash: typeof rawCard.renderConfigHash === "string" ? rawCard.renderConfigHash : "",
+    deck: typeof rawCard.deck === "string" ? rawCard.deck : "",
+    deckHint: typeof rawCard.deckHint === "string" ? rawCard.deckHint : undefined,
+    deckHintSource: rawCard.deckHintSource === "frontmatter" || rawCard.deckHintSource === "body" ? rawCard.deckHintSource : undefined,
+    deckWarnings: Array.isArray(rawCard.deckWarnings) ? [...rawCard.deckWarnings] : [],
+    tagsHint: Array.isArray(rawCard.tagsHint) ? rawCard.tagsHint.filter((tag): tag is string => typeof tag === "string") : [],
+    lastSyncedAt: typeof rawCard.lastSyncedAt === "number" ? rawCard.lastSyncedAt : 0,
+    orphan: Boolean(rawCard.orphan),
+  };
+}
+
+function collectMigratedFileNoteIds(
+  rawFile: LegacyFileState,
+  rawCards: Record<string, LegacyCardState>,
+  migratedCards: Record<string, CardState>,
+): number[] {
+  const noteIds = new Set<number>();
+
+  if (Array.isArray(rawFile.noteIds)) {
+    for (const noteId of rawFile.noteIds) {
+      const sanitized = sanitizeNoteId(noteId);
+      if (sanitized !== undefined && migratedCards[toNoteIdKey(sanitized)]) {
+        noteIds.add(sanitized);
+      }
+    }
+  }
+
+  if (Array.isArray(rawFile.cardIds)) {
+    for (const cardId of rawFile.cardIds) {
+      const sanitized = sanitizeNoteId(rawCards[cardId]?.noteId);
+      if (sanitized !== undefined && migratedCards[toNoteIdKey(sanitized)]) {
+        noteIds.add(sanitized);
+      }
+    }
+  }
+
+  return Array.from(noteIds);
+}
+
+function sanitizeNoteId(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined;
 }

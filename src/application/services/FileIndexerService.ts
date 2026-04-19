@@ -1,9 +1,9 @@
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
 import { ScanScopeService } from "@/application/services/ScanScopeService";
-import type { IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
+import { createIndexedCardSyncKey, type IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
 import type { IndexedFile } from "@/domain/manual-sync/entities/IndexedFile";
-import type { CardState, PendingWriteBackState, PluginState } from "@/domain/manual-sync/entities/PluginState";
+import { toNoteIdKey, type CardState, type PendingWriteBackState, type PluginState } from "@/domain/manual-sync/entities/PluginState";
 import { CardIndexingService } from "@/domain/manual-sync/services/CardIndexingService";
 import { hashString } from "@/domain/shared/hash";
 
@@ -88,7 +88,7 @@ export class FileIndexerService {
       const pendingWriteBack = stateIndex.pendingByFilePath.get(ref.path) ?? [];
       const hasPendingWriteBack = pendingWriteBack.length > 0;
       const knownCards = stateIndex.cardsByFilePath.get(ref.path) ?? [];
-      const hasMissingKnownCard = existingFileState?.cardIds.some((cardId) => !state.cards[cardId]) ?? false;
+      const hasMissingKnownCard = (existingFileState?.noteIds ?? []).some((noteId) => !state.cards[toNoteIdKey(noteId)]);
       const shouldRead =
         forceReadAll ||
         hasPendingWriteBack ||
@@ -99,9 +99,9 @@ export class FileIndexerService {
 
       if (!shouldRead) {
         skippedUnchangedFiles += 1;
-        skippedUnchangedCards += existingFileState?.cardIds.length ?? 0;
-        const restoredCards = (existingFileState?.cardIds ?? [])
-          .map((cardId) => state.cards[cardId])
+        skippedUnchangedCards += (existingFileState?.noteIds ?? []).length;
+        const restoredCards = (existingFileState?.noteIds ?? [])
+          .map((noteId) => state.cards[toNoteIdKey(noteId)])
           .filter((card): card is CardState => Boolean(card))
           .map((card) => restoreIndexedCard(card));
 
@@ -177,9 +177,10 @@ export class FileIndexerService {
 
 function restoreIndexedCard(card: CardState): IndexedCard {
   return {
-    cardId: card.cardId,
     noteId: card.noteId,
-    markerNoteId: card.noteId,
+    syncKey: createIndexedCardSyncKey(card.filePath, card.blockStartLine, card.rawBlockHash),
+    idMarkerState: "present-valid",
+    noteIdSource: "marker",
     filePath: card.filePath,
     cardType: card.cardType,
     heading: card.heading,
@@ -198,7 +199,6 @@ function restoreIndexedCard(card: CardState): IndexedCard {
     deckHintSource: card.deckHintSource,
     deckWarnings: [...card.deckWarnings],
     tagsHint: card.tagsHint,
-    markerState: card.noteId ? "card-and-note" : "card-only",
   };
 }
 

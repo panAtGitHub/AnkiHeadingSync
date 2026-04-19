@@ -3,25 +3,23 @@ import { describe, expect, it } from "vitest";
 import { CardMarkerService } from "./CardMarkerService";
 
 describe("CardMarkerService", () => {
-  it("parses cardId and noteId from the module 3 marker format", () => {
-    const service = new CardMarkerService(() => 1);
+  it("parses noteId from the ID marker format", () => {
+    const service = new CardMarkerService();
 
-    expect(service.parse("<!-- AHS:card=ahs_123 note=42 -->", 3)).toEqual({
-      cardId: "ahs_123",
+    expect(service.parse("<!--ID: 42-->", 3)).toEqual({
       noteId: 42,
-      raw: "<!-- AHS:card=ahs_123 note=42 -->",
+      raw: "<!--ID: 42-->",
       lineIndex: 3,
     });
   });
 
   it("writes multiple markers bottom-up in a single file", () => {
-    const service = new CardMarkerService(() => 1);
+    const service = new CardMarkerService();
     const sourceContent = ["#### Top", "Body 1", "", "#### Bottom", "Body 2"].join("\n");
 
     const nextContent = service.applyBatch(sourceContent, [
       {
         filePath: "notes/example.md",
-        cardId: "ahs_top",
         noteId: 11,
         blockStartLine: 1,
         contentEndLine: 2,
@@ -30,7 +28,6 @@ describe("CardMarkerService", () => {
       },
       {
         filePath: "notes/example.md",
-        cardId: "ahs_bottom",
         noteId: 22,
         blockStartLine: 4,
         contentEndLine: 5,
@@ -42,11 +39,11 @@ describe("CardMarkerService", () => {
     expect(nextContent).toBe([
       "#### Top",
       "Body 1",
-      "<!-- AHS:card=ahs_top note=11 -->",
+      "<!--ID: 11-->",
       "",
       "#### Bottom",
       "Body 2",
-      "<!-- AHS:card=ahs_bottom note=22 -->",
+      "<!--ID: 22-->",
     ].join("\n"));
   });
 });

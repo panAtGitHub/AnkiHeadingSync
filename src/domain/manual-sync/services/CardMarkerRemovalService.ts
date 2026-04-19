@@ -1,7 +1,7 @@
 import { CardMarkerService } from "@/domain/manual-sync/services/CardMarkerService";
 
 export interface MarkerRemovalTarget {
-  cardId: string;
+  noteId: number;
 }
 
 export interface MarkerRemovalApplyResult {
@@ -20,7 +20,7 @@ export class CardMarkerRemovalService {
       };
     }
 
-    const targetCardIds = new Set(targets.map((target) => target.cardId));
+    const targetNoteIds = new Set(targets.map((target) => target.noteId));
     const lineEnding = sourceContent.includes("\r\n") ? "\r\n" : "\n";
     const lines = sourceContent.split(/\r?\n/);
     const nextLines: string[] = [];
@@ -34,7 +34,7 @@ export class CardMarkerRemovalService {
       }
 
       const marker = this.markerService.parse(line, index + 1);
-      if (!marker || !targetCardIds.has(marker.cardId)) {
+      if (!marker || !targetNoteIds.has(marker.noteId)) {
         nextLines.push(line);
         continue;
       }
