@@ -179,7 +179,7 @@ export class FakeManualSyncAnkiGateway implements AnkiGateway {
   async getNoteSummaries(noteIds: number[]): Promise<AnkiNoteSummary[]> {
     return noteIds.flatMap((noteId) => {
       const summary = this.noteSummariesById.get(noteId);
-      return summary ? [summary] : [];
+      return summary ? [{ ...summary, deckNames: summary.deckNames ? [...summary.deckNames] : undefined }] : [];
     });
   }
 

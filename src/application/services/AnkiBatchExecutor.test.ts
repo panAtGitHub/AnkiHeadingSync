@@ -38,6 +38,7 @@ describe("AnkiBatchExecutor", () => {
     const plan: ManualSyncPlan = {
       toCreate: [createOne, createTwo],
       toUpdate: [updateOne],
+      toVerifyDeck: [updateOne],
       toChangeDeck: [],
       toRewriteMarker: [],
       toOrphan: [],
@@ -79,6 +80,7 @@ describe("AnkiBatchExecutor", () => {
       {
         toCreate: [createCard],
         toUpdate: [updateCard],
+        toVerifyDeck: [updateCard, changeDeckCard],
         toChangeDeck: [changeDeckCard],
         toRewriteMarker: [],
         toOrphan: [],

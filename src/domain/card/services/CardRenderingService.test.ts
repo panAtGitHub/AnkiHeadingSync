@@ -82,6 +82,37 @@ describe("CardRenderingService", () => {
     expect(card.contentHash).toMatch(/^[0-9a-f]{8}$/);
   });
 
+  it("keeps the raw heading text in the rendered title when the heading ends with a tag", () => {
+    const service = new CardRenderingService();
+    const card = service.render(
+      createDraft({
+        source: {
+          filePath: "notes/example.md",
+          headingLine: 3,
+          blockStartLine: 3,
+          bodyStartLine: 4,
+          blockEndLine: 8,
+          contentEndLine: 7,
+          headingLevel: 4,
+          headingText: "什么的会人？ #3地区",
+        },
+        heading: "什么的会人？ #3地区",
+      }),
+      {
+        defaultDeck: "Default",
+        qaNoteType: "Basic",
+        clozeNoteType: "Cloze",
+        addObsidianBacklink: true,
+        convertHighlightsToCloze: true,
+        resourceResolver: resolver,
+      },
+    );
+
+    expect(card.renderedFields.title).toContain("什么的会人？ #3地区");
+    expect(card.fields.title).toContain("什么的会人？ #3地区");
+    expect(card.fields.body).toContain("Open in Obsidian");
+  });
+
   it("renders a cloze card as title/body fragments before mapping", () => {
     const service = new CardRenderingService();
     const card = service.render(

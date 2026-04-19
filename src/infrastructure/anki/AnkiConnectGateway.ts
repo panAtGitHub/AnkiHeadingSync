@@ -15,6 +15,11 @@ interface NoteInfo {
   noteId?: number;
 }
 
+interface CardInfo {
+  cardId?: number;
+  deckName?: string;
+}
+
 interface RawDeckStats {
   deck_id?: number;
   name?: string;
@@ -89,15 +94,37 @@ export class AnkiConnectGateway implements AnkiGateway {
       notes: noteIds,
     });
 
+    const allCardIds = noteInfo.flatMap((entry) => Array.isArray(entry?.cards) ? entry.cards : []);
+    const cardDeckNamesByCardId = new Map<number, string>();
+
+    if (allCardIds.length > 0) {
+      const cardInfo = await this.invoke<Array<CardInfo | null>>("cardsInfo", {
+        cards: allCardIds,
+      });
+
+      for (const entry of cardInfo) {
+        if (!entry || typeof entry.cardId !== "number" || typeof entry.deckName !== "string") {
+          continue;
+        }
+
+        cardDeckNamesByCardId.set(entry.cardId, entry.deckName);
+      }
+    }
+
     return noteInfo.flatMap((entry) => {
       if (!entry || typeof entry.noteId !== "number" || typeof entry.modelName !== "string") {
         return [];
       }
 
+      const cardIds = Array.isArray(entry.cards) ? entry.cards : [];
+
       return [{
         noteId: entry.noteId,
         modelName: entry.modelName,
-        cardIds: Array.isArray(entry.cards) ? entry.cards : [],
+        cardIds,
+        deckNames: Array.from(new Set(cardIds
+          .map((cardId) => cardDeckNamesByCardId.get(cardId))
+          .filter((deckName): deckName is string => typeof deckName === "string"))),
       }];
     });
   }

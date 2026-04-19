@@ -39,6 +39,7 @@ export class AnkiBatchExecutor {
 
     const summaryIds = Array.from(new Set([
       ...plan.toUpdate,
+      ...plan.toVerifyDeck,
       ...plan.toRewriteMarker,
       ...plan.toChangeDeck,
     ].flatMap((plannedCard) => plannedCard.noteId ? [plannedCard.noteId] : [])));
@@ -48,6 +49,7 @@ export class AnkiBatchExecutor {
     const addQueue: RenderedSyncCard[] = [];
     const updateQueue: Array<{ plannedCard: PlannedCard; renderedCard: RenderedSyncCard }> = [];
     const changeDeckQueue: PlannedCard[] = [];
+    const explicitDeckChangeSyncKeys = new Set(plan.toChangeDeck.map((plannedCard) => plannedCard.card.syncKey));
 
     for (const plannedCard of plan.toCreate) {
       addQueue.push(await this.requireRenderedCard(plannedCard, renderedCards, renderOnDemand));
@@ -78,8 +80,17 @@ export class AnkiBatchExecutor {
       markerWriteMap.set(plannedCard.card.syncKey, plannedCard);
     }
 
-    for (const plannedCard of plan.toChangeDeck) {
-      if (!plannedCard.noteId || !noteSummariesById.has(plannedCard.noteId)) {
+    for (const plannedCard of plan.toVerifyDeck) {
+      if (!plannedCard.noteId) {
+        continue;
+      }
+
+      const summary = noteSummariesById.get(plannedCard.noteId);
+      if (!summary) {
+        continue;
+      }
+
+      if (!shouldChangeDeck(summary, plannedCard.deck, explicitDeckChangeSyncKeys.has(plannedCard.card.syncKey))) {
         continue;
       }
 
@@ -257,4 +268,13 @@ export class AnkiBatchExecutor {
     await this.batchScheduler.runVoidBatches(Array.from(uniqueMedia.values()), 10, 3, (batch) => this.ankiGateway.storeMediaFiles(batch));
     return uniqueMedia.size;
   }
+}
+
+function shouldChangeDeck(summary: Awaited<ReturnType<AnkiGateway["getNoteSummaries"]>>[number], targetDeck: string, explicitlyPlanned: boolean): boolean {
+  const deckNames = summary.deckNames?.filter((deckName) => deckName.length > 0) ?? [];
+  if (deckNames.length === 0) {
+    return explicitlyPlanned;
+  }
+
+  return deckNames.some((deckName) => deckName !== targetDeck);
 }

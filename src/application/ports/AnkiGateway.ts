@@ -18,6 +18,7 @@ export interface AnkiNoteSummary {
   noteId: number;
   modelName: string;
   cardIds: number[];
+  deckNames?: string[];
 }
 
 export interface ChangeDeckInput {

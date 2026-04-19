@@ -14,6 +14,7 @@ export class DiffPlannerService {
     const seenNoteKeys = new Set<string>();
     const toCreate: PlannedCard[] = [];
     const toUpdate: PlannedCard[] = [];
+    const toVerifyDeck: PlannedCard[] = [];
     const toChangeDeck: PlannedCard[] = [];
     const toRewriteMarker: PlannedCard[] = [];
     const warningMap = new Map<string, DeckResolutionWarning>();
@@ -57,6 +58,8 @@ export class DiffPlannerService {
         continue;
       }
 
+      toVerifyDeck.push(plannedCard);
+
       if (card.idMarkerState !== "present-valid" || card.noteIdSource !== "marker" || pendingByBlockKey.has(blockKey)) {
         toRewriteMarker.push(plannedCard);
       }
@@ -91,6 +94,7 @@ export class DiffPlannerService {
     return {
       toCreate,
       toUpdate,
+      toVerifyDeck,
       toChangeDeck,
       toRewriteMarker,
       toOrphan,

@@ -84,29 +84,46 @@ describe("AnkiConnectGateway", () => {
   });
 
   it("returns note existence and model summaries", async () => {
-    requestUrlMock.mockResolvedValue({
-      json: {
-        error: null,
-        result: [
-          { noteId: 100, modelName: "Basic", cards: [1] },
-          null,
-          { noteId: 102, modelName: "Cloze", cards: [2] },
-        ],
-      },
-    });
+    requestUrlMock
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: [
+            { noteId: 100, modelName: "Basic", cards: [1] },
+            null,
+            { noteId: 102, modelName: "Cloze", cards: [2] },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: [
+            { cardId: 1, deckName: "Deck::One" },
+            { cardId: 2, deckName: "Deck::Two" },
+          ],
+        },
+      });
 
     const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
     const summaries = await gateway.getNoteSummaries([100, 101, 102]);
 
     expect(summaries).toEqual([
-      { noteId: 100, modelName: "Basic", cardIds: [1] },
-      { noteId: 102, modelName: "Cloze", cardIds: [2] },
+      { noteId: 100, modelName: "Basic", cardIds: [1], deckNames: ["Deck::One"] },
+      { noteId: 102, modelName: "Cloze", cardIds: [2], deckNames: ["Deck::Two"] },
     ]);
     expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
       action: "notesInfo",
       version: 6,
       params: {
         notes: [100, 101, 102],
+      },
+    });
+    expect(JSON.parse(requestUrlMock.mock.calls[1][0].body)).toEqual({
+      action: "cardsInfo",
+      version: 6,
+      params: {
+        cards: [1, 2],
       },
     });
   });

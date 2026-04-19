@@ -106,7 +106,7 @@ export class ObsidianVaultGateway implements VaultGateway, ManualSyncVaultGatewa
   }
 
   createBacklink(location: SourceLocation): string {
-    return this.createObsidianUrl(`${location.filePath}#${location.headingText}`);
+    return this.createObsidianUrl(`${location.filePath}#${normalizeHeadingForBacklink(location.headingText)}`);
   }
 
   private async toSourceFile(file: TFile) {
@@ -157,4 +157,8 @@ function getFullPath(app: App, vaultPath: string): string {
   }
 
   return adapter.getFullPath(vaultPath);
+}
+
+function normalizeHeadingForBacklink(headingText: string): string {
+  return headingText.replace(/(?:\s+#\S+)+$/g, (trailingTags) => trailingTags.replace(/(^|\s)#(\S+)/g, "$1$2"));
 }

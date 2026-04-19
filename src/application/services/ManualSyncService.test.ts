@@ -122,6 +122,7 @@ describe("ManualSyncService", () => {
       noteId: 42,
       modelName: "Basic",
       cardIds: [7001],
+      deckNames: ["[[anki背诵]]::[[城市更新，运营类，anki]]"],
     });
     const service = new ManualSyncService(vaultGateway, stateRepository, ankiGateway, undefined, undefined, undefined, undefined, undefined, undefined, () => 1234);
 
@@ -243,6 +244,7 @@ describe("ManualSyncService", () => {
       noteId: 42,
       modelName: "Basic",
       cardIds: [7001],
+      deckNames: ["[[anki背诵]]::[[城市更新，运营类，anki]]"],
     });
     const service = new ManualSyncService(vaultGateway, stateRepository, ankiGateway, undefined, undefined, undefined, undefined, undefined, undefined, () => 1234);
 
@@ -252,6 +254,79 @@ describe("ManualSyncService", () => {
     expect(result.migratedDecks).toBe(1);
     expect(ankiGateway.updatedNotes).toHaveLength(0);
     expect(ankiGateway.changedDecks).toEqual([{ deckName: "New::Deck", cardIds: [7001] }]);
+  });
+
+  it("aligns deck for a marker-backed existing note even without prior local state", async () => {
+    const settings = createModule3Settings({ folderDeckMode: "folder-and-file", defaultDeck: "Obsidian1" });
+    const filePath = "999，试验卡片/城市更新，运营类，anki.md";
+    const vaultGateway = new FakeManualSyncVaultGateway({
+      [filePath]: ["#### 城市更新，百人会的核心产品", "Answer", "<!--ID: 42-->"].join("\n"),
+    });
+    const stateRepository = new InMemoryPluginStateRepository();
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    ankiGateway.noteSummariesById.set(42, {
+      noteId: 42,
+      modelName: "Basic",
+      cardIds: [7001],
+      deckNames: ["[[anki背诵]]::[[城市更新，运营类，anki]]"],
+    });
+    const service = new ManualSyncService(vaultGateway, stateRepository, ankiGateway, undefined, undefined, undefined, undefined, undefined, undefined, () => 1234);
+
+    const result = await service.syncFile(filePath, settings);
+
+    expect(result.updated).toBe(1);
+    expect(result.migratedDecks).toBe(1);
+    expect(ankiGateway.changedDecks).toEqual([{ deckName: "999，试验卡片::城市更新，运营类，anki", cardIds: [7001] }]);
+    expect(stateRepository.savedState?.cards["42"]?.deck).toBe("999，试验卡片::城市更新，运营类，anki");
+  });
+
+  it("self-heals deck drift when local state already claims the target deck", async () => {
+    const settings = createModule3Settings({ folderDeckMode: "folder-and-file", defaultDeck: "Obsidian1" });
+    const filePath = "999，试验卡片/城市更新，运营类，anki.md";
+    const content = ["#### 城市更新，百人会的核心产品", "Answer", "<!--ID: 42-->"].join("\n");
+    const vaultGateway = new FakeManualSyncVaultGateway({
+      [filePath]: content,
+    });
+    const targetDeck = "999，试验卡片::城市更新，运营类，anki";
+    const storedCard = createStoredSyncedCard(settings, {
+      filePath,
+      noteId: 42,
+      heading: "城市更新，百人会的核心产品",
+      bodyMarkdown: "Answer",
+      rawBlockText: ["#### 城市更新，百人会的核心产品", "Answer"].join("\n"),
+      rawBlockHash: hashString(["#### 城市更新，百人会的核心产品", "Answer"].join("\n")),
+      deck: targetDeck,
+    });
+    const stateRepository = new InMemoryPluginStateRepository({
+      files: {
+        [filePath]: {
+          filePath,
+          fileHash: hashString(content),
+          fileStamp: `1:${content.length}`,
+          deckRulesFingerprint: createDeckRulesFingerprint(settings),
+          lastIndexedAt: 1,
+          noteIds: [42],
+        },
+      },
+      cards: {
+        "42": storedCard,
+      },
+      pendingWriteBack: [],
+    });
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    ankiGateway.noteSummariesById.set(42, {
+      noteId: 42,
+      modelName: "Basic",
+      cardIds: [7001],
+      deckNames: ["[[anki背诵]]::[[城市更新，运营类，anki]]"],
+    } as never);
+    const service = new ManualSyncService(vaultGateway, stateRepository, ankiGateway, undefined, undefined, undefined, undefined, undefined, undefined, () => 1234);
+
+    const result = await service.syncFile(filePath, settings);
+
+    expect(result.updated).toBe(0);
+    expect(result.migratedDecks).toBe(1);
+    expect(ankiGateway.changedDecks).toEqual([{ deckName: targetDeck, cardIds: [7001] }]);
   });
 
   it("ordinary sync re-evaluates unchanged files when folder deck rules changed and migrates old notes", async () => {
