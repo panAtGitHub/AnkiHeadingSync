@@ -88,9 +88,12 @@ function migrateCardState(rawCard: LegacyCardState, noteId: number): CardState {
     noteId,
     filePath: typeof rawCard.filePath === "string" ? rawCard.filePath : "",
     heading: typeof rawCard.heading === "string" ? rawCard.heading : "",
+    backlinkHeadingText: typeof rawCard.backlinkHeadingText === "string"
+      ? rawCard.backlinkHeadingText
+      : (typeof rawCard.heading === "string" ? rawCard.heading : ""),
     headingLevel: typeof rawCard.headingLevel === "number" ? rawCard.headingLevel : 1,
     bodyMarkdown: typeof rawCard.bodyMarkdown === "string" ? rawCard.bodyMarkdown : "",
-    cardType: rawCard.cardType === "cloze" ? "cloze" : "basic",
+    cardType: sanitizeCardType(rawCard.cardType),
     blockStartOffset: typeof rawCard.blockStartOffset === "number" ? rawCard.blockStartOffset : 0,
     blockEndOffset: typeof rawCard.blockEndOffset === "number" ? rawCard.blockEndOffset : 0,
     blockStartLine: typeof rawCard.blockStartLine === "number" ? rawCard.blockStartLine : 1,
@@ -109,6 +112,14 @@ function migrateCardState(rawCard: LegacyCardState, noteId: number): CardState {
     lastSyncedAt: typeof rawCard.lastSyncedAt === "number" ? rawCard.lastSyncedAt : 0,
     orphan: Boolean(rawCard.orphan),
   };
+}
+
+function sanitizeCardType(value: unknown): CardState["cardType"] {
+  if (value === "cloze" || value === "semantic-qa") {
+    return value;
+  }
+
+  return "basic";
 }
 
 function collectMigratedFileNoteIds(

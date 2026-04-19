@@ -53,7 +53,7 @@ export class ManualCardRenderer {
           contentEndLine: plannedCard.card.contentEndLine,
           markerLine: plannedCard.card.markerLine,
           headingLevel: plannedCard.card.headingLevel,
-          headingText: plannedCard.card.heading,
+          headingText: plannedCard.card.backlinkHeadingText,
         }))}">Open in Obsidian</a></p>`
       : "";
 

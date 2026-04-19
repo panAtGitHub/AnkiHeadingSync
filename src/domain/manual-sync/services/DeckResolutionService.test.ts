@@ -83,6 +83,7 @@ function createIndexedCard(overrides: Partial<IndexedCard> = {}): IndexedCard {
     filePath: overrides.filePath ?? "notes/example.md",
     cardType: overrides.cardType ?? "basic",
     heading: overrides.heading ?? "Prompt",
+    backlinkHeadingText: overrides.backlinkHeadingText ?? (overrides.heading ?? "Prompt"),
     headingLevel: overrides.headingLevel ?? 4,
     bodyMarkdown: overrides.bodyMarkdown ?? "Answer",
     blockStartOffset: overrides.blockStartOffset ?? 0,

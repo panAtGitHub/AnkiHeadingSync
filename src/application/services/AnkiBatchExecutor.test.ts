@@ -134,6 +134,7 @@ function createIndexedCard(syncKey: string, noteId?: number): IndexedCard {
     filePath: "notes/example.md",
     cardType: "basic",
     heading: `Heading ${syncKey}`,
+    backlinkHeadingText: `Heading ${syncKey}`,
     headingLevel: 4,
     bodyMarkdown: `Body ${syncKey}`,
     blockStartOffset: 0,

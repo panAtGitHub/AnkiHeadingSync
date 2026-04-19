@@ -8,6 +8,7 @@ export interface MarkerWriteRequest {
   contentEndLine: number;
   blockEndLine: number;
   markerLine?: number;
+  markerIndent?: string;
   sourceContent: string;
 }
 
@@ -100,7 +101,7 @@ export class CardMarkerService {
         lines.splice(write.markerLine - 1, 1);
       }
 
-      lines.splice(write.contentEndLine, 0, this.create(write.noteId).raw);
+      lines.splice(write.contentEndLine, 0, `${write.markerIndent ?? ""}${this.create(write.noteId).raw}`);
     }
 
     return lines.join(lineEnding);

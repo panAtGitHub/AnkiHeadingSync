@@ -84,6 +84,7 @@ export class MarkdownWriteBackService {
       contentEndLine: plannedCard.card.contentEndLine,
       blockEndLine: plannedCard.card.blockEndLine,
       markerLine: plannedCard.card.markerLine,
+      markerIndent: plannedCard.card.markerIndent,
       sourceContent,
     };
   }

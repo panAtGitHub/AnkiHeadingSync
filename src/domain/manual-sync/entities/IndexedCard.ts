@@ -10,6 +10,7 @@ export interface IndexedCard {
   filePath: string;
   cardType: CardType;
   heading: string;
+  backlinkHeadingText: string;
   headingLevel: number;
   bodyMarkdown: string;
   blockStartOffset: number;
@@ -19,6 +20,7 @@ export interface IndexedCard {
   blockEndLine: number;
   contentEndLine: number;
   markerLine?: number;
+  markerIndent?: string;
   rawBlockText: string;
   rawBlockHash: string;
   deckHint?: string;

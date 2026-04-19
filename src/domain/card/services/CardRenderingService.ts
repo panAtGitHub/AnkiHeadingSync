@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 
 import type { RenderResourceResolver } from "@/domain/card/ports/RenderResourceResolver";
+import { isClozeCardType } from "@/domain/card/entities/RenderedFields";
 import { hashString } from "@/domain/shared/hash";
 
 import type { Card } from "../entities/Card";
@@ -49,9 +50,9 @@ export class CardRenderingService {
 
   render(draft: CardDraft, context: CardRenderingContext): Card {
     const deck = this.deckResolutionService.resolve(draft.deckHint, context.defaultDeck);
-    const noteModel = createNoteModelName(draft.type === "basic" ? context.qaNoteType : context.clozeNoteType);
+    const noteModel = createNoteModelName(isClozeCardType(draft.type) ? context.clozeNoteType : context.qaNoteType);
     const headingResult = this.renderMarkdown(draft.heading, draft, context, false, true);
-    const bodyResult = this.renderMarkdown(draft.bodyMarkdown, draft, context, draft.type === "cloze", false);
+    const bodyResult = this.renderMarkdown(draft.bodyMarkdown, draft, context, isClozeCardType(draft.type), false);
     const backlinkHtml = context.addObsidianBacklink
       ? `<p><a class="anki-heading-sync-backlink" href="${escapeHtml(context.resourceResolver.createBacklink(draft.source))}">Open in Obsidian</a></p>`
       : "";

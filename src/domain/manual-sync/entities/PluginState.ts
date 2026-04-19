@@ -14,6 +14,7 @@ export interface CardState {
   noteId: number;
   filePath: string;
   heading: string;
+  backlinkHeadingText: string;
   headingLevel: number;
   bodyMarkdown: string;
   cardType: CardType;

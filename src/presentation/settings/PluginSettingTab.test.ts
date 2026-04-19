@@ -308,7 +308,7 @@ class FakePlugin {
   }
 
   async listNoteModels(): Promise<string[]> {
-    return ["Basic", "Cloze", "Custom Basic", "Custom Cloze"];
+    return ["Basic", "Cloze", "Custom Basic", "Custom Cloze", "Semantic QA"];
   }
 
   async getNoteModelDetails(modelName: string) {
@@ -316,6 +316,13 @@ class FakePlugin {
       return {
         fieldNames: ["Text", "Extra", "Context"],
         isCloze: true,
+      };
+    }
+
+    if (modelName === "Semantic QA") {
+      return {
+        fieldNames: ["Title", "Body", "Source"],
+        isCloze: false,
       };
     }
 
@@ -465,7 +472,7 @@ describe("AnkiHeadingSyncSettingTab", () => {
     await getButton(findSetting(container, "Refresh note types from Anki")).click();
 
     const dropdown = getDropdown(findSetting(container, "QA / Basic note type"));
-    expect(dropdown.options.map((option: { value: string }) => option.value)).toEqual(["Basic", "Cloze", "Custom Basic", "Custom Cloze"]);
+    expect(dropdown.options.map((option: { value: string }) => option.value)).toEqual(["Basic", "Cloze", "Custom Basic", "Custom Cloze", "Semantic QA"]);
   });
 
   it("loads fields, applies suggestions, and saves a user-adjusted basic mapping", async () => {
@@ -511,6 +518,45 @@ describe("AnkiHeadingSyncSettingTab", () => {
 
     const mainFieldDropdown = getDropdown(findSetting(container, "Cloze main field"));
     expect(mainFieldDropdown.value).toBe("Text");
+  });
+
+  it("shows semantic QA preview and saves a semantic QA mapping", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+    const container = tab.containerEl as unknown as FakeContainerElInstance;
+
+    tab.display();
+
+    expect(container.textNodes).toContain("Trigger heading example: 城市更新 #anki-list-qa");
+    expect(container.textNodes).toContain("Question preview: 城市更新<br>核心产品");
+    expect(container.textNodes).toContain("Answer preview: 百人会、城市更新研习社、城市更新创投营。");
+
+    await getText(findSetting(container, "Semantic QA marker")).triggerChange("#semantic-qa");
+    await getButton(findSetting(container, "Refresh note types from Anki")).click();
+    await getButton(findSetting(container, "Semantic QA fields")).click();
+
+    const titleDropdown = getDropdown(findSetting(container, "Semantic QA title field"));
+    const bodyDropdown = getDropdown(findSetting(container, "Semantic QA body field"));
+
+    expect(titleDropdown.value).toBe("Title");
+    expect(bodyDropdown.value).toBe("Body");
+
+    await bodyDropdown.triggerChange("Source");
+    await getButton(findSetting(container, "Semantic QA mapping")).click();
+
+    expect(plugin.settings.semanticQaMarker).toBe("#semantic-qa");
+    expect(plugin.settings.noteFieldMappings).toEqual(expect.objectContaining({
+      [createNoteFieldMappingKey("semantic-qa", "Semantic QA")]: {
+        cardType: "semantic-qa",
+        modelName: "Semantic QA",
+        loadedFieldNames: ["Title", "Body", "Source"],
+        titleField: "Title",
+        bodyField: "Source",
+        loadedAt: expect.any(Number),
+      },
+    }));
+    expect(container.textNodes).toContain("Saved mapping for Semantic QA.");
+    expect(container.textNodes).toContain("Trigger heading example: 城市更新 #semantic-qa");
   });
 
   it("removes the old folder textareas and hides the folder tree in all mode", async () => {

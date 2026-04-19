@@ -1,7 +1,7 @@
 import type { Card } from "@/domain/card/entities/Card";
 import { createNoteFieldMappingKey, type NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
-import type { CardType, RenderedFields } from "@/domain/card/entities/RenderedFields";
+import { isBasicLikeCardType, type CardType, type RenderedFields } from "@/domain/card/entities/RenderedFields";
 
 interface RenderedCardInput {
   type: CardType;
@@ -26,7 +26,7 @@ export class NoteFieldMappingService {
     const mapping = this.getRequiredMapping(card, noteFieldMappings);
     this.validateMapping(mapping, noteModelDetails);
 
-    if (card.type === "basic") {
+    if (isBasicLikeCardType(card.type)) {
       return this.mapBasic(card, mapping);
     }
 
@@ -34,7 +34,7 @@ export class NoteFieldMappingService {
   }
 
   suggest(cardType: Card["type"], modelName: string, fieldNames: string[], loadedAt = Date.now()): NoteModelFieldMapping {
-    return cardType === "basic"
+    return isBasicLikeCardType(cardType)
       ? {
           cardType,
           modelName,
@@ -57,15 +57,15 @@ export class NoteFieldMappingService {
   validateMapping(mapping: NoteModelFieldMapping, noteModelDetails: NoteModelDetails): void {
     const availableFields = new Set(noteModelDetails.fieldNames);
 
-    if (mapping.cardType === "basic") {
+    if (isBasicLikeCardType(mapping.cardType)) {
       if (!mapping.titleField || !mapping.bodyField) {
         throw new Error(
-          `Saved field mapping for basic note type "${mapping.modelName}" is incomplete. Open plugin settings and save both title and body fields.`,
+          `Saved field mapping for ${describeBasicLikeCardType(mapping.cardType)} note type "${mapping.modelName}" is incomplete. Open plugin settings and save both title and body fields.`,
         );
       }
 
       if (mapping.titleField === mapping.bodyField) {
-        throw new Error(`Basic note type "${mapping.modelName}" must use different title and body fields.`);
+        throw new Error(`${capitalizeFirstLetter(describeBasicLikeCardType(mapping.cardType))} note type "${mapping.modelName}" must use different title and body fields.`);
       }
 
       const missingFields = [mapping.titleField, mapping.bodyField].filter((fieldName) => !availableFields.has(fieldName));
@@ -127,7 +127,7 @@ export class NoteFieldMappingService {
 
     if (!mapping) {
       throw new Error(
-        `No saved field mapping found for ${card.type === "basic" ? "basic" : "cloze"} note type "${card.noteModel}". Open plugin settings and read fields from Anki first.`,
+        `No saved field mapping found for ${describeCardType(card.type)} note type "${card.noteModel}". Open plugin settings and read fields from Anki first.`,
       );
     }
 
@@ -138,6 +138,22 @@ export class NoteFieldMappingService {
     const quotedMissingFields = missingFields.map((fieldName) => `"${fieldName}"`).join(", ");
     return `Saved field mapping for note type "${modelName}" is stale because these fields no longer exist in Anki: ${quotedMissingFields}. Open plugin settings and read fields from Anki again.`;
   }
+}
+
+function describeCardType(cardType: CardType): string {
+  if (cardType === "cloze") {
+    return "cloze";
+  }
+
+  return describeBasicLikeCardType(cardType);
+}
+
+function describeBasicLikeCardType(cardType: Extract<CardType, "basic" | "semantic-qa">): string {
+  return cardType === "semantic-qa" ? "semantic QA" : "basic";
+}
+
+function capitalizeFirstLetter(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function findFieldName(fieldNames: string[], preferredNames: string[]): string | undefined {

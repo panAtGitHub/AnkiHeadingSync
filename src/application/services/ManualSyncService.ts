@@ -237,6 +237,7 @@ export class ManualSyncService {
         noteId,
         filePath: card.filePath,
         heading: card.heading,
+        backlinkHeadingText: card.backlinkHeadingText,
         headingLevel: card.headingLevel,
         bodyMarkdown: card.bodyMarkdown,
         cardType: card.cardType,

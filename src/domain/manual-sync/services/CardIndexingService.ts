@@ -6,6 +6,7 @@ import { hashString } from "@/domain/shared/hash";
 
 import { CardMarkerService } from "./CardMarkerService";
 import { DeckExtractionService } from "./DeckExtractionService";
+import { SemanticQaListParser } from "./SemanticQaListParser";
 
 interface HeadingMatch {
   level: number;
@@ -24,6 +25,7 @@ interface MarkerExtractionResult {
 export interface CardIndexingContext {
   qaHeadingLevel: number;
   clozeHeadingLevel: number;
+  semanticQaMarker?: string;
   fileStamp: string;
   knownCards: CardState[];
   pendingWriteBack: PendingWriteBackState[];
@@ -36,6 +38,7 @@ export class CardIndexingService {
   constructor(
     private readonly markerService = new CardMarkerService(),
     private readonly deckExtractionService = new DeckExtractionService(),
+    private readonly semanticQaListParser = new SemanticQaListParser(),
   ) {}
 
   index(sourceFile: SourceFile, context: CardIndexingContext): IndexedFile {
@@ -61,6 +64,62 @@ export class CardIndexingService {
 
       const blockEndLineIndex = findBlockEndLineIndex(headings, headingIndex, lines.length);
       const bodyLines = lines.slice(heading.lineIndex + 1, blockEndLineIndex);
+      const semanticQaMarker = context.semanticQaMarker ?? "#anki-list-qa";
+      if (cardType === "basic" && this.semanticQaListParser.isSemanticQaHeading(heading.text, semanticQaMarker)) {
+        for (const semanticCard of this.semanticQaListParser.parse({
+          parentHeadingText: heading.text,
+          marker: semanticQaMarker,
+          bodyLines,
+          bodyStartLine: heading.lineIndex + 2,
+        })) {
+          const resolvedIdentity = this.resolveIdentity(
+            sourceFile.path,
+            semanticCard.blockStartLine,
+            semanticCard.rawBlockHash,
+            semanticCard.markerNoteId,
+            knownCardsByBlockKey,
+            pendingByBlockKey,
+            usedNoteIds,
+          );
+
+          if (resolvedIdentity.noteId !== undefined) {
+            usedNoteIds.add(resolvedIdentity.noteId);
+          }
+
+          cards.push({
+            noteId: resolvedIdentity.noteId,
+            syncKey: createIndexedCardSyncKey(sourceFile.path, semanticCard.blockStartLine, semanticCard.rawBlockHash),
+            idMarkerState: semanticCard.idMarkerState,
+            noteIdSource: resolvedIdentity.noteIdSource,
+            filePath: sourceFile.path,
+            cardType: "semantic-qa",
+            heading: semanticCard.heading,
+            backlinkHeadingText: semanticCard.backlinkHeadingText,
+            headingLevel: heading.level,
+            bodyMarkdown: semanticCard.bodyMarkdown,
+            blockStartOffset: lineStartOffsets[semanticCard.blockStartLine - 1] ?? 0,
+            blockEndOffset: semanticCard.blockEndLine < lines.length
+              ? (lineStartOffsets[semanticCard.blockEndLine] ?? sourceFile.content.length)
+              : sourceFile.content.length,
+            blockStartLine: semanticCard.blockStartLine,
+            bodyStartLine: semanticCard.bodyStartLine,
+            blockEndLine: semanticCard.blockEndLine,
+            contentEndLine: semanticCard.contentEndLine,
+            markerLine: semanticCard.markerLine,
+            markerIndent: semanticCard.markerIndent,
+            rawBlockText: semanticCard.rawBlockText,
+            rawBlockHash: semanticCard.rawBlockHash,
+            deckHint: extractedDeck.explicitDeckHint,
+            deckHintSource: extractedDeck.explicitDeckSource,
+            deckWarnings: [...extractedDeck.warnings],
+            tagsHint: [],
+            sourceContent: sourceFile.content,
+          });
+        }
+
+        continue;
+      }
+
       const marker = extractMarker(bodyLines, heading.lineIndex + 2, heading.lineIndex + 1, this.markerService);
       const trimmedBodyLines = trimBlankEdges(marker.bodyLines);
       const bodyMarkdown = trimmedBodyLines.join("\n");
@@ -88,6 +147,7 @@ export class CardIndexingService {
         filePath: sourceFile.path,
         cardType,
         heading: heading.text,
+        backlinkHeadingText: heading.text,
         headingLevel: heading.level,
         bodyMarkdown,
         blockStartOffset: lineStartOffsets[heading.lineIndex] ?? 0,

@@ -177,6 +177,51 @@ describe("CardIndexingService", () => {
     });
   });
 
+  it("splits a tagged QA heading into semantic QA child cards with distinct titles and backlink anchors", () => {
+    const service = new CardIndexingService();
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: [
+          "#### Concepts #anki-list-qa",
+          "- Alpha",
+          "  First answer",
+          "  <!--ID: 42-->",
+          "- Beta",
+          "  Second answer",
+        ].join("\n"),
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        semanticQaMarker: "#anki-list-qa",
+        fileStamp: "1:1",
+        knownCards: [],
+        pendingWriteBack: [],
+      },
+    );
+
+    expect(indexedFile.cards).toHaveLength(2);
+    expect(indexedFile.cards[0]).toMatchObject({
+      noteId: 42,
+      noteIdSource: "marker",
+      cardType: "semantic-qa",
+      heading: "Concepts<br>Alpha",
+      backlinkHeadingText: "Concepts #anki-list-qa",
+      bodyMarkdown: "First answer",
+      markerLine: 4,
+      markerIndent: "  ",
+    });
+    expect(indexedFile.cards[1]).toMatchObject({
+      noteId: undefined,
+      cardType: "semantic-qa",
+      heading: "Concepts<br>Beta",
+      backlinkHeadingText: "Concepts #anki-list-qa",
+      bodyMarkdown: "Second answer",
+    });
+  });
+
   it("extracts YAML deck, prefers it over conflicting body deck, and stores a warning on indexed cards", () => {
     const service = new CardIndexingService();
     const indexedFile = service.index(
@@ -283,6 +328,7 @@ function createKnownCardState(overrides: Partial<CardState> = {}): CardState {
     noteId: overrides.noteId ?? 42,
     filePath: overrides.filePath ?? "notes/example.md",
     heading: overrides.heading ?? "Prompt",
+    backlinkHeadingText: overrides.backlinkHeadingText ?? (overrides.heading ?? "Prompt"),
     headingLevel: overrides.headingLevel ?? 4,
     bodyMarkdown: overrides.bodyMarkdown ?? "Answer",
     cardType: overrides.cardType ?? "basic",

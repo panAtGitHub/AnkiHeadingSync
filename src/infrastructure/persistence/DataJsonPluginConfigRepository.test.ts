@@ -41,6 +41,8 @@ describe("DataJsonPluginConfigRepository", () => {
     expect(settings.fileDeckTemplate).toBe("obsidian::filename");
     expect(settings.fileDeckInsertLocation).toBe("body");
     expect(settings.folderDeckMode).toBe("off");
+    expect(settings.semanticQaMarker).toBe("#anki-list-qa");
+    expect(settings.semanticQaNoteType).toBe("Semantic QA");
   });
 
   it("persists note field mappings across save and reload", async () => {
@@ -71,6 +73,42 @@ describe("DataJsonPluginConfigRepository", () => {
         titleField: "Front",
         bodyField: "Back",
         loadedAt: 123,
+      },
+    });
+  });
+
+  it("persists semantic QA settings and mappings across save and reload", async () => {
+    const store = new InMemoryPluginDataStore();
+    const repository = new DataJsonPluginConfigRepository(store);
+
+    await repository.save({
+      ...DEFAULT_SETTINGS,
+      semanticQaMarker: "#semantic-qa",
+      semanticQaNoteType: "Semantic QA",
+      noteFieldMappings: {
+        "semantic-qa:Semantic QA": {
+          cardType: "semantic-qa",
+          modelName: "Semantic QA",
+          loadedFieldNames: ["Title", "Body"],
+          titleField: "Title",
+          bodyField: "Body",
+          loadedAt: 456,
+        },
+      },
+    });
+
+    const reloaded = await repository.load();
+
+    expect(reloaded.semanticQaMarker).toBe("#semantic-qa");
+    expect(reloaded.semanticQaNoteType).toBe("Semantic QA");
+    expect(reloaded.noteFieldMappings).toEqual({
+      "semantic-qa:Semantic QA": {
+        cardType: "semantic-qa",
+        modelName: "Semantic QA",
+        loadedFieldNames: ["Title", "Body"],
+        titleField: "Title",
+        bodyField: "Body",
+        loadedAt: 456,
       },
     });
   });

@@ -1,5 +1,6 @@
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import { createNoteFieldMappingKey } from "@/application/config/NoteModelFieldMapping";
+import { isClozeCardType } from "@/domain/card/entities/RenderedFields";
 import type { IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
 import { DeckResolutionService } from "@/domain/manual-sync/services/DeckResolutionService";
 import type { DeckResolutionWarning } from "@/domain/manual-sync/value-objects/DeckResolution";
@@ -16,7 +17,7 @@ export class RenderConfigService {
   constructor(private readonly deckResolutionService = new DeckResolutionService()) {}
 
   resolve(card: IndexedCard, settings: PluginSettings): RenderPlan {
-    const noteModel = card.cardType === "basic" ? settings.qaNoteType : settings.clozeNoteType;
+    const noteModel = resolveNoteModel(card.cardType, settings);
     const deckResolution = this.deckResolutionService.resolve(card, settings.defaultDeck, settings.folderDeckMode);
     const deck = deckResolution.resolvedDeck.value;
     const mapping = settings.noteFieldMappings[createNoteFieldMappingKey(card.cardType, noteModel)] ?? null;
@@ -36,4 +37,12 @@ export class RenderConfigService {
       warnings: deckResolution.warnings,
     };
   }
+}
+
+function resolveNoteModel(cardType: IndexedCard["cardType"], settings: PluginSettings): string {
+  if (isClozeCardType(cardType)) {
+    return settings.clozeNoteType;
+  }
+
+  return cardType === "semantic-qa" ? settings.semanticQaNoteType : settings.qaNoteType;
 }

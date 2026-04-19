@@ -1,11 +1,12 @@
 import { PluginSettingTab, Setting } from "obsidian";
 
-import type { FileDeckInsertLocation, FolderDeckMode, ScopeMode } from "@/application/config/PluginSettings";
+import { isValidSemanticQaMarker, type FileDeckInsertLocation, type FolderDeckMode, type ScopeMode } from "@/application/config/PluginSettings";
 import { createNoteFieldMappingKey, type NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
 import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
 import { NoteFieldMappingService } from "@/application/services/NoteFieldMappingService";
 import type { CardType } from "@/domain/card/entities/RenderedFields";
+import { SemanticQaListParser } from "@/domain/manual-sync/services/SemanticQaListParser";
 import type AnkiHeadingSyncPlugin from "@/presentation/AnkiHeadingSyncPlugin";
 
 import { buildFolderTreeSelection, toggleFolderTreeSelection, type FolderTreeSelectionNode } from "./FolderScopeTree";
@@ -27,6 +28,7 @@ type SimpleDropdown = {
 
 export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private readonly noteFieldMappingService = new NoteFieldMappingService();
+  private readonly semanticQaListParser = new SemanticQaListParser();
   private availableNoteModels: string[] = [];
   private noteTypeStatus = NOTE_TYPE_STATUS_IDLE;
   private readonly draftMappings: Record<string, NoteModelFieldMapping> = {};
@@ -95,6 +97,25 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
       });
 
+    containerEl.createEl("h3", { text: "Semantic QA" });
+
+    new Setting(containerEl)
+      .setName("Semantic QA marker")
+      .setDesc("When a QA heading ends with this hashtag marker, first-level list items with indented child content become separate cards.")
+      .addText((text) => {
+        text.setPlaceholder("#anki-list-qa").setValue(settings.semanticQaMarker).onChange(async (value) => {
+          const nextValue = value.trim();
+          if (!nextValue || !isValidSemanticQaMarker(nextValue)) {
+            return;
+          }
+
+          await this.plugin.updateSettings({ semanticQaMarker: nextValue });
+          this.display();
+        });
+      });
+
+    this.renderSemanticQaPreview(containerEl, settings.semanticQaMarker);
+
     this.renderScopeSection(containerEl, settings);
 
     new Setting(containerEl)
@@ -136,6 +157,11 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       title: "Cloze",
       description: "Choose the cloze note type, read its fields from Anki, then confirm the main field mapping.",
     });
+    this.renderMappingSection(containerEl, {
+      cardType: "semantic-qa",
+      title: "Semantic QA",
+      description: "Choose the semantic QA note type, read its fields from Anki, then confirm the title/body mapping for child cards.",
+    });
   }
 
   private renderMappingSection(containerEl: HTMLElement, config: MappingSectionConfig): void {
@@ -175,10 +201,10 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
           : "Loaded fields: none. Read fields from Anki first.",
     });
 
-    if (config.cardType === "basic") {
-      this.renderBasicFieldSelectors(containerEl, selectedModelName, currentMapping);
-    } else {
+    if (config.cardType === "cloze") {
       this.renderClozeFieldSelector(containerEl, selectedModelName, currentMapping);
+    } else {
+      this.renderBasicFieldSelectors(containerEl, selectedModelName, currentMapping, config.title);
     }
 
     new Setting(containerEl)
@@ -203,26 +229,27 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     containerEl: HTMLElement,
     selectedModelName: string,
     mapping: NoteModelFieldMapping | undefined,
+    sectionTitle: string,
   ): void {
     const fieldNames = mapping?.loadedFieldNames ?? [];
 
     new Setting(containerEl)
-      .setName("QA / Basic title field")
+      .setName(`${sectionTitle} title field`)
       .setDesc("Which Anki field should receive the heading/title fragment.")
       .addDropdown((dropdown) => {
         this.populateFieldDropdown(dropdown, fieldNames, mapping?.titleField);
         dropdown.onChange((value) => {
-          this.updateDraftMapping("basic", selectedModelName, { titleField: value || undefined });
+          this.updateDraftMapping(mapping?.cardType ?? inferBasicLikeCardType(sectionTitle), selectedModelName, { titleField: value || undefined });
         });
       });
 
     new Setting(containerEl)
-      .setName("QA / Basic body field")
+      .setName(`${sectionTitle} body field`)
       .setDesc("Which Anki field should receive the body fragment.")
       .addDropdown((dropdown) => {
         this.populateFieldDropdown(dropdown, fieldNames, mapping?.bodyField);
         dropdown.onChange((value) => {
-          this.updateDraftMapping("basic", selectedModelName, { bodyField: value || undefined });
+          this.updateDraftMapping(mapping?.cardType ?? inferBasicLikeCardType(sectionTitle), selectedModelName, { bodyField: value || undefined });
         });
       });
   }
@@ -273,8 +300,10 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private async updateSelectedNoteType(cardType: CardType, modelName: string): Promise<void> {
     if (cardType === "basic") {
       await this.plugin.updateSettings({ qaNoteType: modelName });
-    } else {
+    } else if (cardType === "cloze") {
       await this.plugin.updateSettings({ clozeNoteType: modelName });
+    } else {
+      await this.plugin.updateSettings({ semanticQaNoteType: modelName });
     }
 
     const mappingKey = createNoteFieldMappingKey(cardType, modelName);
@@ -379,7 +408,41 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private getSelectedNoteType(cardType: CardType): string {
-    return cardType === "basic" ? this.plugin.settings.qaNoteType : this.plugin.settings.clozeNoteType;
+    if (cardType === "basic") {
+      return this.plugin.settings.qaNoteType;
+    }
+
+    if (cardType === "cloze") {
+      return this.plugin.settings.clozeNoteType;
+    }
+
+    return this.plugin.settings.semanticQaNoteType;
+  }
+
+  private renderSemanticQaPreview(containerEl: HTMLElement, marker: string): void {
+    containerEl.createEl("h4", { text: "Semantic QA preview" });
+    containerEl.createEl("p", { text: `Trigger heading example: 城市更新 ${marker}` });
+
+    const previewCards = this.semanticQaListParser.parse({
+      parentHeadingText: `城市更新 ${marker}`,
+      marker,
+      bodyLines: [
+        "- 核心产品",
+        "  百人会、城市更新研习社、城市更新创投营。",
+        "- 目标客户",
+        "  对城市更新有系统学习需求的从业者。",
+      ],
+      bodyStartLine: 2,
+    });
+
+    if (previewCards.length === 0) {
+      containerEl.createEl("p", { text: "Preview unavailable. Use a trailing hashtag marker such as #anki-list-qa." });
+      return;
+    }
+
+    const firstPreview = previewCards[0];
+    containerEl.createEl("p", { text: `Question preview: ${firstPreview.heading}` });
+    containerEl.createEl("p", { text: `Answer preview: ${firstPreview.bodyMarkdown}` });
   }
 
   private renderDeckSection(containerEl: HTMLElement, settings: AnkiHeadingSyncPlugin["settings"]): void {
@@ -655,6 +718,10 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     this.display();
   }
+}
+
+function inferBasicLikeCardType(sectionTitle: string): Extract<CardType, "basic" | "semantic-qa"> {
+  return sectionTitle === "Semantic QA" ? "semantic-qa" : "basic";
 }
 
 function getScopeModeSummary(scopeMode: ScopeMode): string {

@@ -9,6 +9,8 @@ export interface PluginSettings {
   clozeHeadingLevel: number;
   qaNoteType: string;
   clozeNoteType: string;
+  semanticQaMarker: string;
+  semanticQaNoteType: string;
   noteFieldMappings: Record<string, NoteModelFieldMapping>;
   defaultDeck: string;
   fileDeckEnabled: boolean;
@@ -29,6 +31,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   clozeHeadingLevel: 5,
   qaNoteType: "Basic",
   clozeNoteType: "Cloze",
+  semanticQaMarker: "#anki-list-qa",
+  semanticQaNoteType: "Semantic QA",
   noteFieldMappings: {},
   defaultDeck: "Obsidian",
   fileDeckEnabled: false,
@@ -43,6 +47,12 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   convertHighlightsToCloze: true,
   ankiConnectUrl: "http://127.0.0.1:8765",
 };
+
+export const SEMANTIC_QA_MARKER_REGEXP = /^#[^\s#]+$/;
+
+export function isValidSemanticQaMarker(marker: string): boolean {
+  return SEMANTIC_QA_MARKER_REGEXP.test(marker);
+}
 
 export function validatePluginSettings(settings: PluginSettings): void {
   const headingLevels = [settings.qaHeadingLevel, settings.clozeHeadingLevel];
@@ -63,6 +73,18 @@ export function validatePluginSettings(settings: PluginSettings): void {
 
   if (!settings.clozeNoteType.trim()) {
     throw new Error("Cloze note type is required.");
+  }
+
+  if (!settings.semanticQaMarker.trim()) {
+    throw new Error("Semantic QA marker is required.");
+  }
+
+  if (!isValidSemanticQaMarker(settings.semanticQaMarker.trim())) {
+    throw new Error("Semantic QA marker must be a hashtag-style token like #anki-list-qa.");
+  }
+
+  if (!settings.semanticQaNoteType.trim()) {
+    throw new Error("Semantic QA note type is required.");
   }
 
   validateNoteFieldMappings(settings.noteFieldMappings);
@@ -121,7 +143,7 @@ function validateNoteFieldMappings(noteFieldMappings: Record<string, NoteModelFi
   }
 
   for (const mapping of Object.values(noteFieldMappings)) {
-    if (mapping.cardType !== "basic" && mapping.cardType !== "cloze") {
+    if (mapping.cardType !== "basic" && mapping.cardType !== "cloze" && mapping.cardType !== "semantic-qa") {
       throw new Error("Note field mappings must use a supported card type.");
     }
 
