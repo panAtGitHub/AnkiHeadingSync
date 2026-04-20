@@ -559,6 +559,18 @@ describe("AnkiHeadingSyncSettingTab", () => {
     expect(container.textNodes).toContain("Trigger heading example: 城市更新 #semantic-qa");
   });
 
+  it("saves the QA Group marker independently from the semantic QA marker", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+    const container = tab.containerEl as unknown as FakeContainerElInstance;
+
+    tab.display();
+    await getText(findSetting(container, "QA Group marker")).triggerChange("#anki-list-12");
+
+    expect(plugin.settings.qaGroupMarker).toBe("#anki-list-12");
+    expect(plugin.settings.semanticQaMarker).toBe("#anki-list-qa");
+  });
+
   it("removes the old folder textareas and hides the folder tree in all mode", async () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);

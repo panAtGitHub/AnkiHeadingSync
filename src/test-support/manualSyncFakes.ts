@@ -1,7 +1,7 @@
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import { DEFAULT_SETTINGS } from "@/application/config/PluginSettings";
 import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
-import type { AddAnkiNoteInput, AnkiGateway, AnkiNoteSummary, ChangeDeckInput, DeckStat, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
+import type { AddAnkiNoteInput, AnkiGroupGateway, AnkiModelTemplate, AnkiNoteDetails, AnkiNoteSummary, ChangeDeckInput, CreateAnkiModelInput, DeckStat, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
 import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
 import type { PluginStateRepository } from "@/application/ports/PluginStateRepository";
 import { MarkdownWriteConflictError } from "@/application/ports/VaultGateway";
@@ -134,7 +134,7 @@ export class FakeManualSyncVaultGateway implements ManualSyncVaultGateway {
   }
 }
 
-export class FakeManualSyncAnkiGateway implements AnkiGateway {
+export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
   public ensuredDecks: string[][] = [];
   public addedNotes: AddAnkiNoteInput[] = [];
   public deletedNotes: number[][] = [];
@@ -143,12 +143,21 @@ export class FakeManualSyncAnkiGateway implements AnkiGateway {
   public deletedDecks: string[][] = [];
   public storedMedia: MediaAsset[] = [];
   public noteSummariesById = new Map<number, AnkiNoteSummary>();
+  public noteDetailsById = new Map<number, AnkiNoteDetails>();
   public deckStatsByName = new Map<string, DeckStat>();
   public listedDeckNames: string[] | null = null;
+  public createdModels: CreateAnkiModelInput[] = [];
+  public addedModelFields: Array<{ modelName: string; fieldName: string }> = [];
+  public addedModelTemplates: Array<{ modelName: string; template: AnkiModelTemplate }> = [];
+  public updatedModelTemplates: Array<{ modelName: string; template: AnkiModelTemplate }> = [];
+  public updatedModelStyling: Array<{ modelName: string; css: string }> = [];
+  public foundNoteIds = new Map<string, number[]>();
   public modelDetailsByName: Record<string, NoteModelDetails> = {
     Basic: { fieldNames: ["Front", "Back"], isCloze: false },
     Cloze: { fieldNames: ["Text", "Extra"], isCloze: true },
   };
+  public modelTemplatesByName: Record<string, Record<string, AnkiModelTemplate>> = {};
+  public modelStylingByName: Record<string, string> = {};
 
   private nextNoteId = 9000;
 
@@ -170,6 +179,74 @@ export class FakeManualSyncAnkiGateway implements AnkiGateway {
 
   async getModelDetails(modelName: string): Promise<NoteModelDetails> {
     return this.modelDetailsByName[modelName] ?? { fieldNames: ["Front", "Back"], isCloze: false };
+  }
+
+  async getModelFieldNames(modelName: string): Promise<string[]> {
+    return this.modelDetailsByName[modelName]?.fieldNames ?? [];
+  }
+
+  async getModelTemplates(modelName: string): Promise<Record<string, AnkiModelTemplate>> {
+    return this.modelTemplatesByName[modelName] ?? {};
+  }
+
+  async getModelStyling(modelName: string): Promise<string> {
+    return this.modelStylingByName[modelName] ?? "";
+  }
+
+  async createModel(input: CreateAnkiModelInput): Promise<void> {
+    this.createdModels.push(input);
+    this.modelDetailsByName[input.modelName] = {
+      fieldNames: [...input.fieldNames],
+      isCloze: Boolean(input.isCloze),
+    };
+    this.modelTemplatesByName[input.modelName] = Object.fromEntries(input.templates.map((template) => [template.name, { ...template }]));
+    this.modelStylingByName[input.modelName] = input.css;
+  }
+
+  async addModelField(modelName: string, fieldName: string): Promise<void> {
+    this.addedModelFields.push({ modelName, fieldName });
+    const existing = this.modelDetailsByName[modelName] ?? { fieldNames: [], isCloze: false };
+    if (!existing.fieldNames.includes(fieldName)) {
+      existing.fieldNames.push(fieldName);
+    }
+    this.modelDetailsByName[modelName] = existing;
+  }
+
+  async addModelTemplate(modelName: string, template: AnkiModelTemplate): Promise<void> {
+    this.addedModelTemplates.push({ modelName, template });
+    this.modelTemplatesByName[modelName] = {
+      ...(this.modelTemplatesByName[modelName] ?? {}),
+      [template.name]: { ...template },
+    };
+  }
+
+  async updateModelTemplate(modelName: string, template: AnkiModelTemplate): Promise<void> {
+    this.updatedModelTemplates.push({ modelName, template });
+    this.modelTemplatesByName[modelName] = {
+      ...(this.modelTemplatesByName[modelName] ?? {}),
+      [template.name]: { ...template },
+    };
+  }
+
+  async updateModelStyling(modelName: string, css: string): Promise<void> {
+    this.updatedModelStyling.push({ modelName, css });
+    this.modelStylingByName[modelName] = css;
+  }
+
+  async findNoteIds(query: string): Promise<number[]> {
+    return [...(this.foundNoteIds.get(query) ?? [])];
+  }
+
+  async getNoteDetails(noteIds: number[]): Promise<AnkiNoteDetails[]> {
+    return noteIds.flatMap((noteId) => {
+      const detail = this.noteDetailsById.get(noteId);
+      if (detail) {
+        return [{ ...detail, cardIds: [...detail.cardIds], deckNames: detail.deckNames ? [...detail.deckNames] : undefined, fields: { ...detail.fields } }];
+      }
+
+      const summary = this.noteSummariesById.get(noteId);
+      return summary ? [{ ...summary, deckNames: summary.deckNames ? [...summary.deckNames] : undefined, fields: {} }] : [];
+    });
   }
 
   async getDeckStats(deckNames: string[]): Promise<DeckStat[]> {

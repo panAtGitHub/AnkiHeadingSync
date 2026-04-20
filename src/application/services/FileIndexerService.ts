@@ -2,8 +2,9 @@ import type { PluginSettings } from "@/application/config/PluginSettings";
 import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
 import { ScanScopeService } from "@/application/services/ScanScopeService";
 import { createIndexedCardSyncKey, type IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
+import { buildGroupSrc, createIndexedGroupSyncKey, type IndexedGroupCardBlock } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
 import type { IndexedFile } from "@/domain/manual-sync/entities/IndexedFile";
-import { toNoteIdKey, type CardState, type PendingWriteBackState, type PluginState } from "@/domain/manual-sync/entities/PluginState";
+import { toNoteIdKey, type CardState, type GroupBlockState, type PendingWriteBackState, type PluginState } from "@/domain/manual-sync/entities/PluginState";
 import { CardIndexingService } from "@/domain/manual-sync/services/CardIndexingService";
 import { hashString } from "@/domain/shared/hash";
 
@@ -12,12 +13,14 @@ export interface FileIndexerResult {
   scannedFiles: number;
   indexedFiles: IndexedFile[];
   cards: IndexedCard[];
+  groupBlocks: IndexedGroupCardBlock[];
   skippedUnchangedFiles: number;
   skippedUnchangedCards: number;
 }
 
 interface StateIndex {
   cardsByFilePath: Map<string, CardState[]>;
+  groupBlocksByFilePath: Map<string, GroupBlockState[]>;
   pendingByFilePath: Map<string, PendingWriteBackState[]>;
 }
 
@@ -52,9 +55,11 @@ export class FileIndexerService {
     const indexedFile = this.cardIndexingService.index(sourceFile, {
       qaHeadingLevel: settings.qaHeadingLevel,
       clozeHeadingLevel: settings.clozeHeadingLevel,
+      qaGroupMarker: settings.qaGroupMarker,
       semanticQaMarker: settings.semanticQaMarker,
       fileStamp,
       knownCards: stateIndex.cardsByFilePath.get(filePath) ?? [],
+      knownGroupBlocks: stateIndex.groupBlocksByFilePath.get(filePath) ?? [],
       pendingWriteBack: stateIndex.pendingByFilePath.get(filePath) ?? [],
       fileDeckEnabled: settings.fileDeckEnabled,
       fileDeckMarker: settings.fileDeckMarker,
@@ -65,6 +70,7 @@ export class FileIndexerService {
       scannedFiles: 1,
       indexedFiles: [indexedFile],
       cards: indexedFile.cards,
+      groupBlocks: indexedFile.groupBlocks ?? [],
       skippedUnchangedFiles: 0,
       skippedUnchangedCards: 0,
     };
@@ -79,6 +85,7 @@ export class FileIndexerService {
   ): Promise<FileIndexerResult> {
     const indexedFiles: IndexedFile[] = [];
     const cards: IndexedCard[] = [];
+    const groupBlocks: IndexedGroupCardBlock[] = [];
     let skippedUnchangedFiles = 0;
     let skippedUnchangedCards = 0;
     const deckRulesFingerprint = createDeckRulesFingerprint(settings);
@@ -100,7 +107,11 @@ export class FileIndexerService {
 
       if (!shouldRead) {
         skippedUnchangedFiles += 1;
-        skippedUnchangedCards += (existingFileState?.noteIds ?? []).length;
+        const restoredGroups = (existingFileState?.groupIds ?? [])
+          .map((groupId) => state.groupBlocks?.[groupId])
+          .filter((groupBlock): groupBlock is GroupBlockState => Boolean(groupBlock))
+          .map((groupBlock) => restoreIndexedGroupBlock(groupBlock));
+        skippedUnchangedCards += (existingFileState?.noteIds ?? []).length + restoredGroups.length;
         const restoredCards = (existingFileState?.noteIds ?? [])
           .map((noteId) => state.cards[toNoteIdKey(noteId)])
           .filter((card): card is CardState => Boolean(card))
@@ -111,8 +122,10 @@ export class FileIndexerService {
           fileHash: existingFileState?.fileHash ?? "",
           fileStamp,
           cards: restoredCards,
+          groupBlocks: restoredGroups,
         });
         cards.push(...restoredCards);
+        groupBlocks.push(...restoredGroups);
         continue;
       }
 
@@ -124,9 +137,11 @@ export class FileIndexerService {
       const indexedFile = this.cardIndexingService.index(sourceFile, {
         qaHeadingLevel: settings.qaHeadingLevel,
         clozeHeadingLevel: settings.clozeHeadingLevel,
+        qaGroupMarker: settings.qaGroupMarker,
         semanticQaMarker: settings.semanticQaMarker,
         fileStamp,
         knownCards,
+        knownGroupBlocks: stateIndex.groupBlocksByFilePath.get(ref.path) ?? [],
         pendingWriteBack,
         fileDeckEnabled: settings.fileDeckEnabled,
         fileDeckMarker: settings.fileDeckMarker,
@@ -134,6 +149,7 @@ export class FileIndexerService {
 
       indexedFiles.push(indexedFile);
       cards.push(...indexedFile.cards);
+      groupBlocks.push(...(indexedFile.groupBlocks ?? []));
     }
 
     return {
@@ -141,6 +157,7 @@ export class FileIndexerService {
       scannedFiles: refs.length,
       indexedFiles,
       cards,
+      groupBlocks,
       skippedUnchangedFiles,
       skippedUnchangedCards,
     };
@@ -148,6 +165,7 @@ export class FileIndexerService {
 
   private buildStateIndex(state: PluginState): StateIndex {
     const cardsByFilePath = new Map<string, CardState[]>();
+    const groupBlocksByFilePath = new Map<string, GroupBlockState[]>();
     const pendingByFilePath = new Map<string, PendingWriteBackState[]>();
 
     for (const card of Object.values(state.cards)) {
@@ -158,6 +176,16 @@ export class FileIndexerService {
       }
 
       cardsByFilePath.set(card.filePath, [card]);
+    }
+
+    for (const groupBlock of Object.values(state.groupBlocks ?? {})) {
+      const groupBlocks = groupBlocksByFilePath.get(groupBlock.filePath);
+      if (groupBlocks) {
+        groupBlocks.push(groupBlock);
+        continue;
+      }
+
+      groupBlocksByFilePath.set(groupBlock.filePath, [groupBlock]);
     }
 
     for (const pending of state.pendingWriteBack) {
@@ -172,6 +200,7 @@ export class FileIndexerService {
 
     return {
       cardsByFilePath,
+      groupBlocksByFilePath,
       pendingByFilePath,
     };
   }
@@ -205,6 +234,37 @@ function restoreIndexedCard(card: CardState): IndexedCard {
   };
 }
 
+function restoreIndexedGroupBlock(groupBlock: GroupBlockState): IndexedGroupCardBlock {
+  return {
+    noteId: groupBlock.noteId,
+    groupId: groupBlock.groupId,
+    syncKey: createIndexedGroupSyncKey(groupBlock.filePath, groupBlock.blockStartLine, groupBlock.rawBlockHash),
+    markerState: "present-valid",
+    identitySource: "state-recovery",
+    filePath: groupBlock.filePath,
+    headingText: groupBlock.headingText,
+    backlinkHeadingText: groupBlock.backlinkHeadingText,
+    headingLevel: groupBlock.headingLevel,
+    stem: groupBlock.stem,
+    src: groupBlock.src || buildGroupSrc(groupBlock.filePath, groupBlock.backlinkHeadingText),
+    blockStartOffset: groupBlock.blockStartOffset,
+    blockEndOffset: groupBlock.blockEndOffset,
+    blockStartLine: groupBlock.blockStartLine,
+    bodyStartLine: groupBlock.bodyStartLine,
+    blockEndLine: groupBlock.blockEndLine,
+    contentEndLine: groupBlock.contentEndLine,
+    markerLine: groupBlock.markerLine,
+    markerIndent: groupBlock.markerIndent,
+    rawBlockText: groupBlock.rawBlockText,
+    rawBlockHash: groupBlock.rawBlockHash,
+    deckHint: groupBlock.deckHint,
+    deckHintSource: groupBlock.deckHintSource,
+    deckWarnings: [...groupBlock.deckWarnings],
+    items: groupBlock.items.map((item) => ({ ...item })),
+    freeSlots: [...groupBlock.freeSlots],
+  };
+}
+
 export function createFileStamp(mtime: number, size: number): string {
   return `${mtime}:${size}`;
 }
@@ -216,6 +276,7 @@ export function createDeckRulesFingerprint(settings: PluginSettings): string {
     version: DECK_RULES_FINGERPRINT_VERSION,
     qaHeadingLevel: settings.qaHeadingLevel,
     clozeHeadingLevel: settings.clozeHeadingLevel,
+    qaGroupMarker: settings.qaGroupMarker,
     semanticQaMarker: settings.semanticQaMarker,
     defaultDeck: settings.defaultDeck,
     fileDeckEnabled: settings.fileDeckEnabled,

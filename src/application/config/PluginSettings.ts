@@ -7,6 +7,7 @@ export type FolderDeckMode = "off" | "folder" | "folder-and-file";
 export interface PluginSettings {
   qaHeadingLevel: number;
   clozeHeadingLevel: number;
+  qaGroupMarker: string;
   qaNoteType: string;
   clozeNoteType: string;
   semanticQaMarker: string;
@@ -29,6 +30,7 @@ export interface PluginSettings {
 export const DEFAULT_SETTINGS: PluginSettings = {
   qaHeadingLevel: 4,
   clozeHeadingLevel: 5,
+  qaGroupMarker: "#anki-list",
   qaNoteType: "Basic",
   clozeNoteType: "Cloze",
   semanticQaMarker: "#anki-list-qa",
@@ -50,8 +52,12 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 
 export const SEMANTIC_QA_MARKER_REGEXP = /^#[^\s#]+$/;
 
-export function isValidSemanticQaMarker(marker: string): boolean {
+export function isValidHashtagMarker(marker: string): boolean {
   return SEMANTIC_QA_MARKER_REGEXP.test(marker);
+}
+
+export function isValidSemanticQaMarker(marker: string): boolean {
+  return isValidHashtagMarker(marker);
 }
 
 export function validatePluginSettings(settings: PluginSettings): void {
@@ -71,6 +77,14 @@ export function validatePluginSettings(settings: PluginSettings): void {
     throw new Error("QA note type is required.");
   }
 
+  if (!settings.qaGroupMarker.trim()) {
+    throw new Error("QA Group marker is required.");
+  }
+
+  if (!isValidHashtagMarker(settings.qaGroupMarker.trim())) {
+    throw new Error("QA Group marker must be a hashtag-style token like #anki-list.");
+  }
+
   if (!settings.clozeNoteType.trim()) {
     throw new Error("Cloze note type is required.");
   }
@@ -81,6 +95,10 @@ export function validatePluginSettings(settings: PluginSettings): void {
 
   if (!isValidSemanticQaMarker(settings.semanticQaMarker.trim())) {
     throw new Error("Semantic QA marker must be a hashtag-style token like #anki-list-qa.");
+  }
+
+  if (settings.qaGroupMarker.trim() === settings.semanticQaMarker.trim()) {
+    throw new Error("QA Group marker must be different from Semantic QA marker.");
   }
 
   if (!settings.semanticQaNoteType.trim()) {

@@ -41,6 +41,7 @@ describe("DataJsonPluginConfigRepository", () => {
     expect(settings.fileDeckTemplate).toBe("obsidian::filename");
     expect(settings.fileDeckInsertLocation).toBe("body");
     expect(settings.folderDeckMode).toBe("off");
+    expect(settings.qaGroupMarker).toBe("#anki-list");
     expect(settings.semanticQaMarker).toBe("#anki-list-qa");
     expect(settings.semanticQaNoteType).toBe("Semantic QA");
   });

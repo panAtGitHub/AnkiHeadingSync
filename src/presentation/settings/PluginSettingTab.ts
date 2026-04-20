@@ -1,6 +1,6 @@
 import { PluginSettingTab, Setting } from "obsidian";
 
-import { isValidSemanticQaMarker, type FileDeckInsertLocation, type FolderDeckMode, type ScopeMode } from "@/application/config/PluginSettings";
+import { isValidHashtagMarker, isValidSemanticQaMarker, type FileDeckInsertLocation, type FolderDeckMode, type ScopeMode } from "@/application/config/PluginSettings";
 import { createNoteFieldMappingKey, type NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
 import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
@@ -94,6 +94,22 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
         dropdown.setValue(String(settings.clozeHeadingLevel)).onChange((value) => {
           void this.plugin.updateSettings({ clozeHeadingLevel: Number(value) });
+        });
+      });
+
+    containerEl.createEl("h3", { text: "QA Group 12" });
+
+    new Setting(containerEl)
+      .setName("QA Group marker")
+      .setDesc("When a QA heading ends with this hashtag marker, the whole heading block syncs as one ObsiAnki QA Group 12 note.")
+      .addText((text) => {
+        text.setPlaceholder("#anki-list").setValue(settings.qaGroupMarker).onChange(async (value) => {
+          const nextValue = value.trim();
+          if (!nextValue || !isValidHashtagMarker(nextValue) || nextValue === settings.semanticQaMarker) {
+            return;
+          }
+
+          await this.plugin.updateSettings({ qaGroupMarker: nextValue });
         });
       });
 

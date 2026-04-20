@@ -1,7 +1,7 @@
 import { requestUrl } from "obsidian";
 
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
-import type { AddAnkiNoteInput, AnkiGateway, AnkiNoteSummary, ChangeDeckInput, DeckStat, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
+import type { AddAnkiNoteInput, AnkiGroupGateway, AnkiModelTemplate, AnkiNoteDetails, AnkiNoteSummary, ChangeDeckInput, CreateAnkiModelInput, DeckStat, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
 import type { MediaAsset } from "@/domain/card/entities/RenderedFields";
 
 interface AnkiResponse<T> {
@@ -11,6 +11,7 @@ interface AnkiResponse<T> {
 
 interface NoteInfo {
   cards: number[];
+  fields?: Record<string, { value?: string }>;
   modelName?: string;
   noteId?: number;
 }
@@ -26,9 +27,13 @@ interface RawDeckStats {
   total_in_deck?: number;
 }
 
-type ModelTemplates = Record<string, unknown>;
+type ModelTemplates = Record<string, { Front?: string; Back?: string }>;
 
-export class AnkiConnectGateway implements AnkiGateway {
+interface ModelStylingResponse {
+  css?: string;
+}
+
+export class AnkiConnectGateway implements AnkiGroupGateway {
   constructor(private readonly getBaseUrl: () => string) {}
 
   async ensureDeckExists(deckName: string): Promise<void> {
@@ -52,40 +57,82 @@ export class AnkiConnectGateway implements AnkiGateway {
     return Object.keys(deckNamesAndIds);
   }
 
-  async getModelDetails(modelName: string): Promise<NoteModelDetails> {
-    const fieldNames = await this.invoke<string[]>("modelFieldNames", { modelName });
-    let isCloze = modelName.toLowerCase().includes("cloze");
-
-    try {
-      const templates = await this.invoke<ModelTemplates>("modelTemplates", { modelName });
-      isCloze = isCloze || Object.keys(templates).some((templateName) => templateName.toLowerCase().includes("cloze"));
-    } catch {
-      isCloze = isCloze || fieldNames.some((fieldName) => fieldName.toLowerCase() === "text");
-    }
-
-    return {
-      fieldNames,
-      isCloze,
-    };
+  async getModelFieldNames(modelName: string): Promise<string[]> {
+    return this.invoke<string[]>("modelFieldNames", { modelName });
   }
 
-  async getDeckStats(deckNames: string[]): Promise<DeckStat[]> {
-    if (deckNames.length === 0) {
-      return [];
+  async getModelTemplates(modelName: string): Promise<Record<string, AnkiModelTemplate>> {
+    const templates = await this.invoke<ModelTemplates>("modelTemplates", { modelName });
+    return Object.fromEntries(Object.entries(templates).map(([templateName, template]) => [templateName, {
+      name: templateName,
+      front: template.Front ?? "",
+      back: template.Back ?? "",
+    }]));
+  }
+
+  async getModelStyling(modelName: string): Promise<string> {
+    const styling = await this.invoke<ModelStylingResponse | string>("modelStyling", { modelName });
+    if (typeof styling === "string") {
+      return styling;
     }
 
-    const deckNamesAndIds = await this.invoke<Record<string, number>>("deckNamesAndIds", {});
-    const rawStats = await this.invoke<unknown>("getDeckStats", {
-      decks: deckNames,
+    return styling.css ?? "";
+  }
+
+  async createModel(input: CreateAnkiModelInput): Promise<void> {
+    await this.invoke("createModel", {
+      modelName: input.modelName,
+      inOrderFields: input.fieldNames,
+      css: input.css,
+      isCloze: Boolean(input.isCloze),
+      cardTemplates: input.templates.map((template) => ({
+        Name: template.name,
+        Front: template.front,
+        Back: template.back,
+      })),
     });
-
-    return deckNames.map((deckName) => ({
-      deckName,
-      noteCount: extractDeckNoteCount(rawStats, deckNamesAndIds[deckName]),
-    }));
   }
 
-  async getNoteSummaries(noteIds: number[]): Promise<AnkiNoteSummary[]> {
+  async addModelField(modelName: string, fieldName: string): Promise<void> {
+    await this.invoke("modelFieldAdd", {
+      modelName,
+      fieldName,
+    });
+  }
+
+  async addModelTemplate(modelName: string, template: AnkiModelTemplate): Promise<void> {
+    await this.invoke("modelTemplateAdd", {
+      modelName,
+      templateName: template.name,
+      Front: template.front,
+      Back: template.back,
+    });
+  }
+
+  async updateModelTemplate(modelName: string, template: AnkiModelTemplate): Promise<void> {
+    await this.invoke("updateModelTemplates", {
+      model: modelName,
+      templates: {
+        [template.name]: {
+          Front: template.front,
+          Back: template.back,
+        },
+      },
+    });
+  }
+
+  async updateModelStyling(modelName: string, css: string): Promise<void> {
+    await this.invoke("updateModelStyling", {
+      model: modelName,
+      css,
+    });
+  }
+
+  async findNoteIds(query: string): Promise<number[]> {
+    return this.invoke<number[]>("findNotes", { query });
+  }
+
+  async getNoteDetails(noteIds: number[]): Promise<AnkiNoteDetails[]> {
     if (noteIds.length === 0) {
       return [];
     }
@@ -117,6 +164,7 @@ export class AnkiConnectGateway implements AnkiGateway {
       }
 
       const cardIds = Array.isArray(entry.cards) ? entry.cards : [];
+      const fields = Object.fromEntries(Object.entries(entry.fields ?? {}).map(([fieldName, fieldValue]) => [fieldName, fieldValue?.value ?? ""]));
 
       return [{
         noteId: entry.noteId,
@@ -125,8 +173,51 @@ export class AnkiConnectGateway implements AnkiGateway {
         deckNames: Array.from(new Set(cardIds
           .map((cardId) => cardDeckNamesByCardId.get(cardId))
           .filter((deckName): deckName is string => typeof deckName === "string"))),
+        fields,
       }];
     });
+  }
+
+  async getModelDetails(modelName: string): Promise<NoteModelDetails> {
+    const fieldNames = await this.getModelFieldNames(modelName);
+    let isCloze = modelName.toLowerCase().includes("cloze");
+
+    try {
+      const templates = await this.getModelTemplates(modelName);
+      isCloze = isCloze || Object.keys(templates).some((templateName) => templateName.toLowerCase().includes("cloze"));
+    } catch {
+      isCloze = isCloze || fieldNames.some((fieldName) => fieldName.toLowerCase() === "text");
+    }
+
+    return {
+      fieldNames,
+      isCloze,
+    };
+  }
+
+  async getDeckStats(deckNames: string[]): Promise<DeckStat[]> {
+    if (deckNames.length === 0) {
+      return [];
+    }
+
+    const deckNamesAndIds = await this.invoke<Record<string, number>>("deckNamesAndIds", {});
+    const rawStats = await this.invoke<unknown>("getDeckStats", {
+      decks: deckNames,
+    });
+
+    return deckNames.map((deckName) => ({
+      deckName,
+      noteCount: extractDeckNoteCount(rawStats, deckNamesAndIds[deckName]),
+    }));
+  }
+
+  async getNoteSummaries(noteIds: number[]): Promise<AnkiNoteSummary[]> {
+    return (await this.getNoteDetails(noteIds)).map((note) => ({
+      noteId: note.noteId,
+      modelName: note.modelName,
+      cardIds: note.cardIds,
+      deckNames: note.deckNames,
+    }));
   }
 
   async addNote(input: AddAnkiNoteInput): Promise<number> {

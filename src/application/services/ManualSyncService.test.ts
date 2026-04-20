@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { QA_GROUP_MODEL_NAME } from "@/application/services/QaGroupModelDefinition";
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import { createDeckRulesFingerprint } from "@/application/services/FileIndexerService";
 import { RenderConfigService } from "@/application/services/RenderConfigService";
@@ -47,6 +48,38 @@ describe("ManualSyncService", () => {
     expect(result.markerWriteConflictFiles).toEqual(["notes/example.md"]);
     expect(stateRepository.savedState?.pendingWriteBack).toHaveLength(1);
     expect(stateRepository.savedState?.pendingWriteBack[0]).toMatchObject({ filePath: "notes/example.md", targetNoteId: 9001 });
+  });
+
+  it("syncs a #anki-list block into one QA Group 12 note and writes one GI marker", async () => {
+    const vaultGateway = new FakeManualSyncVaultGateway({
+      "notes/example.md": [
+        "#### Concepts #anki-list",
+        "- Alpha",
+        "  - First answer",
+        "- Beta",
+        "  - Second answer",
+      ].join("\n"),
+    });
+    const stateRepository = new InMemoryPluginStateRepository();
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    const service = new ManualSyncService(vaultGateway, stateRepository, ankiGateway, undefined, undefined, undefined, undefined, undefined, () => 1234);
+
+    const result = await service.syncFile("notes/example.md", createModule3Settings());
+
+    expect(result.created).toBe(1);
+    expect(result.rewrittenMarkers).toBe(1);
+    expect(ankiGateway.createdModels[0]?.modelName).toBe(QA_GROUP_MODEL_NAME);
+    expect(ankiGateway.addedNotes[0]?.modelName).toBe(QA_GROUP_MODEL_NAME);
+    expect(ankiGateway.addedNotes[0]?.fields).toMatchObject({
+      Stem: "Concepts",
+      S01_Q: "Alpha",
+      S01_A: "First answer",
+      S02_Q: "Beta",
+      S02_A: "Second answer",
+    });
+    expect(vaultGateway.getFileContent("notes/example.md")).toMatch(/<!--GI:n=9001;i=[^;]+;f=3,4,5,6,7,8,9,10,11,12-->/);
+    expect(Object.values(stateRepository.savedState?.groupBlocks ?? {})).toHaveLength(1);
+    expect(stateRepository.savedState?.files["notes/example.md"]?.groupIds).toHaveLength(1);
   });
 
   it("rebuilds the card index without writing unresolved ID markers or calling Anki", async () => {

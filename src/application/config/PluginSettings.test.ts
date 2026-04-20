@@ -32,6 +32,23 @@ describe("PluginSettings", () => {
     expect(DEFAULT_SETTINGS.fileDeckTemplate).toBe("obsidian::filename");
     expect(DEFAULT_SETTINGS.fileDeckInsertLocation).toBe("body");
     expect(DEFAULT_SETTINGS.folderDeckMode).toBe("off");
+    expect(DEFAULT_SETTINGS.qaGroupMarker).toBe("#anki-list");
+  });
+
+  it("rejects invalid QA Group markers and semantic marker collisions", () => {
+    expect(() =>
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        qaGroupMarker: "anki-list",
+      }),
+    ).toThrow("QA Group marker must be a hashtag-style token like #anki-list.");
+
+    expect(() =>
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        qaGroupMarker: "#anki-list-qa",
+      }),
+    ).toThrow("QA Group marker must be different from Semantic QA marker.");
   });
 
   it("rejects invalid module 5 enum values", () => {

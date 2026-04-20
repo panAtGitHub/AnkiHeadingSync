@@ -10,7 +10,9 @@ export class DiffPlannerService {
 
   plan(cards: IndexedCard[], state: PluginState, scopedFilePaths: string[], settings: PluginSettings): ManualSyncPlan {
     const cardsBySyncKey = new Map<string, IndexedCard>();
-    const pendingByBlockKey = new Set(state.pendingWriteBack.map((pending) => createPendingWriteBackKey(pending.filePath, pending.blockStartLine, pending.rawBlockHash)));
+    const pendingByBlockKey = new Set(state.pendingWriteBack
+      .filter((pending) => pending.markerKind !== "group-gi")
+      .map((pending) => createPendingWriteBackKey(pending.filePath, pending.blockStartLine, pending.rawBlockHash)));
     const seenNoteKeys = new Set<string>();
     const toCreate: PlannedCard[] = [];
     const toUpdate: PlannedCard[] = [];

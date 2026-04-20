@@ -1,11 +1,13 @@
 import type { SourceFile } from "@/domain/card/entities/SourceFile";
 import { createIndexedCardSyncKey, type IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
+import { buildGroupSrc, createIndexedGroupSyncKey, type IndexedGroupCardBlock } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
 import type { IndexedFile } from "@/domain/manual-sync/entities/IndexedFile";
-import { createPendingWriteBackKey, type CardState, type PendingWriteBackState } from "@/domain/manual-sync/entities/PluginState";
+import { createPendingWriteBackKey, type CardState, type GroupBlockState, type PendingWriteBackState } from "@/domain/manual-sync/entities/PluginState";
 import { hashString } from "@/domain/shared/hash";
 
 import { CardMarkerService } from "./CardMarkerService";
 import { DeckExtractionService } from "./DeckExtractionService";
+import { QaGroupBlockParser } from "./QaGroupBlockParser";
 import { SemanticQaListParser } from "./SemanticQaListParser";
 
 interface HeadingMatch {
@@ -25,9 +27,11 @@ interface MarkerExtractionResult {
 export interface CardIndexingContext {
   qaHeadingLevel: number;
   clozeHeadingLevel: number;
+  qaGroupMarker?: string;
   semanticQaMarker?: string;
   fileStamp: string;
   knownCards: CardState[];
+  knownGroupBlocks?: GroupBlockState[];
   pendingWriteBack: PendingWriteBackState[];
   fileDeckEnabled?: boolean;
   fileDeckMarker?: string;
@@ -38,6 +42,7 @@ export class CardIndexingService {
   constructor(
     private readonly markerService = new CardMarkerService(),
     private readonly deckExtractionService = new DeckExtractionService(),
+    private readonly qaGroupBlockParser = new QaGroupBlockParser(),
     private readonly semanticQaListParser = new SemanticQaListParser(),
   ) {}
 
@@ -51,9 +56,12 @@ export class CardIndexingService {
       ? this.deckExtractionService.extract(sourceFile, context.fileDeckMarker ?? "TARGET DECK")
       : { warnings: [] };
     const cards: IndexedCard[] = [];
+    const groupBlocks: IndexedGroupCardBlock[] = [];
     const knownCardsByBlockKey = groupKnownCardsByBlockKey(context.knownCards);
     const pendingByBlockKey = groupPendingWriteBackByBlockKey(context.pendingWriteBack);
     const usedNoteIds = new Set<number>();
+    const usedGroupIds = new Set<string>();
+    const knownGroupBlocks = context.knownGroupBlocks ?? [];
 
     for (let headingIndex = 0; headingIndex < headings.length; headingIndex += 1) {
       const heading = headings[headingIndex];
@@ -64,6 +72,66 @@ export class CardIndexingService {
 
       const blockEndLineIndex = findBlockEndLineIndex(headings, headingIndex, lines.length);
       const bodyLines = lines.slice(heading.lineIndex + 1, blockEndLineIndex);
+      const qaGroupMarker = context.qaGroupMarker ?? "#anki-list";
+      if (cardType === "basic" && this.qaGroupBlockParser.isQaGroupHeading(heading.text, qaGroupMarker)) {
+        const parsedGroupBlock = this.qaGroupBlockParser.parse({
+          parentHeadingText: heading.text,
+          marker: qaGroupMarker,
+          bodyLines,
+          bodyStartLine: heading.lineIndex + 2,
+        });
+        const src = buildGroupSrc(sourceFile.path, heading.text);
+        const resolvedGroupIdentity = this.resolveGroupIdentity(
+          src,
+          parsedGroupBlock.rawBlockHash,
+          parsedGroupBlock.groupMarker?.noteId,
+          knownGroupBlocks,
+          usedNoteIds,
+          usedGroupIds,
+        );
+
+        if (resolvedGroupIdentity.noteId !== undefined) {
+          usedNoteIds.add(resolvedGroupIdentity.noteId);
+        }
+
+        if (resolvedGroupIdentity.groupId) {
+          usedGroupIds.add(resolvedGroupIdentity.groupId);
+        }
+
+        groupBlocks.push({
+          noteId: resolvedGroupIdentity.noteId,
+          groupId: resolvedGroupIdentity.groupId,
+          syncKey: createIndexedGroupSyncKey(sourceFile.path, heading.lineIndex + 1, parsedGroupBlock.rawBlockHash),
+          markerState: parsedGroupBlock.markerState,
+          identitySource: resolvedGroupIdentity.identitySource,
+          filePath: sourceFile.path,
+          headingText: heading.text,
+          backlinkHeadingText: heading.text,
+          headingLevel: heading.level,
+          stem: parsedGroupBlock.stem,
+          src,
+          blockStartOffset: lineStartOffsets[heading.lineIndex] ?? 0,
+          blockEndOffset: blockEndLineIndex < lines.length ? (lineStartOffsets[blockEndLineIndex] ?? sourceFile.content.length) : sourceFile.content.length,
+          blockStartLine: heading.lineIndex + 1,
+          bodyStartLine: heading.lineIndex + 2,
+          blockEndLine: blockEndLineIndex,
+          contentEndLine: parsedGroupBlock.contentEndLine,
+          markerLine: parsedGroupBlock.markerLine,
+          markerIndent: parsedGroupBlock.markerIndent,
+          rawBlockText: parsedGroupBlock.rawBlockText,
+          rawBlockHash: parsedGroupBlock.rawBlockHash,
+          deckHint: extractedDeck.explicitDeckHint,
+          deckHintSource: extractedDeck.explicitDeckSource,
+          deckWarnings: [...extractedDeck.warnings],
+          items: parsedGroupBlock.items,
+          groupMarker: parsedGroupBlock.groupMarker,
+          freeSlots: parsedGroupBlock.groupMarker?.freeSlots ?? resolvedGroupIdentity.freeSlots,
+          sourceContent: sourceFile.content,
+        });
+
+        continue;
+      }
+
       const semanticQaMarker = context.semanticQaMarker ?? "#anki-list-qa";
       if (cardType === "basic" && this.semanticQaListParser.isSemanticQaHeading(heading.text, semanticQaMarker)) {
         for (const semanticCard of this.semanticQaListParser.parse({
@@ -173,6 +241,7 @@ export class CardIndexingService {
       fileStamp: context.fileStamp,
       content: sourceFile.content,
       cards,
+      groupBlocks,
     };
   }
 
@@ -222,6 +291,59 @@ export class CardIndexingService {
 
     return {};
   }
+
+  private resolveGroupIdentity(
+    src: string,
+    rawBlockHash: string,
+    markerNoteId: number | undefined,
+    knownGroupBlocks: GroupBlockState[],
+    usedNoteIds: Set<number>,
+    usedGroupIds: Set<string>,
+  ): { noteId?: number; groupId?: string; freeSlots: number[]; identitySource?: IndexedGroupCardBlock["identitySource"] } {
+    if (markerNoteId !== undefined && !usedNoteIds.has(markerNoteId)) {
+      const stateMatch = knownGroupBlocks.find((groupBlock) => !groupBlock.orphan && groupBlock.noteId === markerNoteId);
+      if (!stateMatch) {
+        return {
+          noteId: markerNoteId,
+          freeSlots: [],
+          identitySource: "gi-marker",
+        };
+      }
+
+      if (!usedGroupIds.has(stateMatch.groupId)) {
+        return {
+          noteId: stateMatch.noteId,
+          groupId: stateMatch.groupId,
+          freeSlots: [...stateMatch.freeSlots],
+          identitySource: "gi-marker",
+        };
+      }
+    }
+
+    const srcMatches = knownGroupBlocks.filter((groupBlock) => !groupBlock.orphan && groupBlock.src === src);
+    if (srcMatches.length === 1 && !usedGroupIds.has(srcMatches[0].groupId) && !usedNoteIds.has(srcMatches[0].noteId)) {
+      return {
+        noteId: srcMatches[0].noteId,
+        groupId: srcMatches[0].groupId,
+        freeSlots: [...srcMatches[0].freeSlots],
+        identitySource: "state-recovery",
+      };
+    }
+
+    const hashMatches = knownGroupBlocks.filter((groupBlock) => !groupBlock.orphan && groupBlock.rawBlockHash === rawBlockHash);
+    if (hashMatches.length === 1 && !usedGroupIds.has(hashMatches[0].groupId) && !usedNoteIds.has(hashMatches[0].noteId)) {
+      return {
+        noteId: hashMatches[0].noteId,
+        groupId: hashMatches[0].groupId,
+        freeSlots: [...hashMatches[0].freeSlots],
+        identitySource: "state-recovery",
+      };
+    }
+
+    return {
+      freeSlots: [],
+    };
+  }
 }
 
 function groupKnownCardsByBlockKey(knownCards: CardState[]): Map<string, CardState[]> {
@@ -248,7 +370,7 @@ function groupKnownCardsByBlockKey(knownCards: CardState[]): Map<string, CardSta
 function groupPendingWriteBackByBlockKey(pendingWriteBack: PendingWriteBackState[]): Map<string, PendingWriteBackState[]> {
   const grouped = new Map<string, PendingWriteBackState[]>();
 
-  for (const pending of pendingWriteBack) {
+  for (const pending of pendingWriteBack.filter((entry) => entry.markerKind !== "group-gi")) {
     const key = createPendingWriteBackKey(pending.filePath, pending.blockStartLine, pending.rawBlockHash);
     const entries = grouped.get(key);
     if (entries) {

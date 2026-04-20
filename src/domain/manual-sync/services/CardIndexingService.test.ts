@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { CardState } from "@/domain/manual-sync/entities/PluginState";
+import { buildGroupSrc } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
+import type { CardState, GroupBlockState } from "@/domain/manual-sync/entities/PluginState";
 import { hashString } from "@/domain/shared/hash";
 
 import { CardIndexingService } from "./CardIndexingService";
@@ -222,6 +223,98 @@ describe("CardIndexingService", () => {
     });
   });
 
+  it("indexes a #anki-list heading as one QA Group block and parses its GI marker", () => {
+    const service = new CardIndexingService();
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: [
+          "#### Concepts #anki-list",
+          "- Alpha",
+          "  - First answer",
+          "- Beta",
+          "  - Second answer",
+          "<!--GI:n=42;i=item_a:1,item_b:2;f=3,4,5,6,7,8,9,10,11,12-->",
+        ].join("\n"),
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        qaGroupMarker: "#anki-list",
+        fileStamp: "1:1",
+        knownCards: [],
+        pendingWriteBack: [],
+      },
+    );
+
+    expect(indexedFile.cards).toHaveLength(0);
+    expect(indexedFile.groupBlocks).toHaveLength(1);
+    expect(indexedFile.groupBlocks?.[0]).toMatchObject({
+      noteId: 42,
+      markerState: "present-valid",
+      stem: "Concepts",
+      items: [
+        { title: "Alpha", answer: "First answer", ordinalInMarkdown: 1 },
+        { title: "Beta", answer: "Second answer", ordinalInMarkdown: 2 },
+      ],
+      freeSlots: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    });
+  });
+
+  it("recovers QA Group note identity from prior group state when GI is missing", () => {
+    const service = new CardIndexingService();
+    const headingText = "Concepts #anki-list";
+    const rawBlockText = [
+      "qa-group:Concepts",
+      "Alpha\nFirst answer",
+      "Beta\nSecond answer",
+      "- Alpha",
+      "  - First answer",
+      "- Beta",
+      "  - Second answer",
+    ].join("\n");
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: [
+          `#### ${headingText}`,
+          "- Alpha",
+          "  - First answer",
+          "- Beta",
+          "  - Second answer",
+        ].join("\n"),
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        qaGroupMarker: "#anki-list",
+        fileStamp: "1:1",
+        knownCards: [],
+        knownGroupBlocks: [createKnownGroupState({
+          groupId: "group-1",
+          noteId: 42,
+          headingText,
+          backlinkHeadingText: headingText,
+          stem: "Concepts",
+          src: buildGroupSrc("notes/example.md", headingText),
+          rawBlockText,
+          rawBlockHash: hashString(rawBlockText),
+        })],
+        pendingWriteBack: [],
+      },
+    );
+
+    expect(indexedFile.groupBlocks).toHaveLength(1);
+    expect(indexedFile.groupBlocks?.[0]).toMatchObject({
+      noteId: 42,
+      groupId: "group-1",
+      identitySource: "state-recovery",
+      markerState: "missing",
+    });
+  });
+
   it("extracts YAML deck, prefers it over conflicting body deck, and stores a warning on indexed cards", () => {
     const service = new CardIndexingService();
     const indexedFile = service.index(
@@ -347,6 +440,37 @@ function createKnownCardState(overrides: Partial<CardState> = {}): CardState {
     deckHintSource: overrides.deckHintSource,
     deckWarnings: overrides.deckWarnings ?? [],
     tagsHint: overrides.tagsHint ?? [],
+    lastSyncedAt: overrides.lastSyncedAt ?? 1,
+    orphan: overrides.orphan ?? false,
+  };
+}
+
+function createKnownGroupState(overrides: Partial<GroupBlockState> = {}): GroupBlockState {
+  return {
+    groupId: overrides.groupId ?? "group-1",
+    noteId: overrides.noteId ?? 42,
+    filePath: overrides.filePath ?? "notes/example.md",
+    headingText: overrides.headingText ?? "Concepts #anki-list",
+    backlinkHeadingText: overrides.backlinkHeadingText ?? "Concepts #anki-list",
+    headingLevel: overrides.headingLevel ?? 4,
+    stem: overrides.stem ?? "Concepts",
+    src: overrides.src ?? buildGroupSrc("notes/example.md", "Concepts #anki-list"),
+    blockStartOffset: overrides.blockStartOffset ?? 0,
+    blockEndOffset: overrides.blockEndOffset ?? 0,
+    blockStartLine: overrides.blockStartLine ?? 1,
+    bodyStartLine: overrides.bodyStartLine ?? 2,
+    blockEndLine: overrides.blockEndLine ?? 5,
+    contentEndLine: overrides.contentEndLine ?? 5,
+    markerLine: overrides.markerLine,
+    markerIndent: overrides.markerIndent,
+    rawBlockText: overrides.rawBlockText ?? "qa-group:Concepts",
+    rawBlockHash: overrides.rawBlockHash ?? hashString(overrides.rawBlockText ?? "qa-group:Concepts"),
+    deck: overrides.deck ?? "notes",
+    deckHint: overrides.deckHint,
+    deckHintSource: overrides.deckHintSource,
+    deckWarnings: overrides.deckWarnings ?? [],
+    items: overrides.items ?? [],
+    freeSlots: overrides.freeSlots ?? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
     lastSyncedAt: overrides.lastSyncedAt ?? 1,
     orphan: overrides.orphan ?? false,
   };

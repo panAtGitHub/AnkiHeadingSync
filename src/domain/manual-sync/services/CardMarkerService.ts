@@ -61,10 +61,21 @@ export class CardMarkerService {
       return sourceContent;
     }
 
-    const filePath = writes[0]?.filePath;
-    const seenBlocks = new Set<number>();
+    this.validateBatch(sourceContent, writes);
     const lineEnding = sourceContent.includes("\r\n") ? "\r\n" : "\n";
     const lines = sourceContent.split(/\r?\n/);
+
+    const sortedWrites = [...writes].sort((left, right) => right.blockStartLine - left.blockStartLine);
+    for (const write of sortedWrites) {
+      this.applyWrite(lines, write);
+    }
+
+    return lines.join(lineEnding);
+  }
+
+  validateBatch(sourceContent: string, writes: MarkerWriteRequest[]): void {
+    const filePath = writes[0]?.filePath;
+    const seenBlocks = new Set<number>();
 
     for (const write of writes) {
       if (write.filePath !== filePath) {
@@ -89,21 +100,18 @@ export class CardMarkerService {
 
       seenBlocks.add(write.blockStartLine);
     }
+  }
 
-    const sortedWrites = [...writes].sort((left, right) => right.blockStartLine - left.blockStartLine);
-    for (const write of sortedWrites) {
-      const adjustedBlockEndLine = write.markerLine !== undefined ? write.blockEndLine - 1 : write.blockEndLine;
-      if (write.contentEndLine < write.blockStartLine || write.contentEndLine > adjustedBlockEndLine) {
-        throw new CardMarkerError(`Cannot write marker outside the heading block in ${write.filePath}.`);
-      }
-
-      if (write.markerLine !== undefined) {
-        lines.splice(write.markerLine - 1, 1);
-      }
-
-      lines.splice(write.contentEndLine, 0, `${write.markerIndent ?? ""}${this.create(write.noteId).raw}`);
+  applyWrite(lines: string[], write: MarkerWriteRequest): void {
+    const adjustedBlockEndLine = write.markerLine !== undefined ? write.blockEndLine - 1 : write.blockEndLine;
+    if (write.contentEndLine < write.blockStartLine || write.contentEndLine > adjustedBlockEndLine) {
+      throw new CardMarkerError(`Cannot write marker outside the heading block in ${write.filePath}.`);
     }
 
-    return lines.join(lineEnding);
+    if (write.markerLine !== undefined) {
+      lines.splice(write.markerLine - 1, 1);
+    }
+
+    lines.splice(write.contentEndLine, 0, `${write.markerIndent ?? ""}${this.create(write.noteId).raw}`);
   }
 }

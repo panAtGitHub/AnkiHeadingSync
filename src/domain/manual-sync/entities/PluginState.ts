@@ -1,4 +1,5 @@
 import type { CardType } from "@/domain/card/entities/RenderedFields";
+import type { GroupItem } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
 import type { DeckResolutionWarning, DeckResolutionSource } from "@/domain/manual-sync/value-objects/DeckResolution";
 
 export interface FileState {
@@ -8,6 +9,7 @@ export interface FileState {
   deckRulesFingerprint?: string;
   lastIndexedAt: number;
   noteIds: number[];
+  groupIds?: string[];
 }
 
 export interface CardState {
@@ -44,11 +46,43 @@ export interface PendingWriteBackState {
   targetMarker: string;
   rawBlockHash: string;
   targetNoteId: number;
+  markerKind?: "card-id" | "group-gi";
+  targetGroupId?: string;
+}
+
+export interface GroupBlockState {
+  groupId: string;
+  noteId: number;
+  filePath: string;
+  headingText: string;
+  backlinkHeadingText: string;
+  headingLevel: number;
+  stem: string;
+  src: string;
+  blockStartOffset: number;
+  blockEndOffset: number;
+  blockStartLine: number;
+  bodyStartLine: number;
+  blockEndLine: number;
+  contentEndLine: number;
+  markerLine?: number;
+  markerIndent?: string;
+  rawBlockText: string;
+  rawBlockHash: string;
+  deck: string;
+  deckHint?: string;
+  deckHintSource?: Extract<DeckResolutionSource, "frontmatter" | "body">;
+  deckWarnings: DeckResolutionWarning[];
+  items: GroupItem[];
+  freeSlots: number[];
+  lastSyncedAt: number;
+  orphan: boolean;
 }
 
 export interface PluginState {
   files: Record<string, FileState>;
   cards: Record<string, CardState>;
+  groupBlocks?: Record<string, GroupBlockState>;
   pendingWriteBack: PendingWriteBackState[];
 }
 
@@ -56,6 +90,7 @@ export function createEmptyPluginState(): PluginState {
   return {
     files: {},
     cards: {},
+    groupBlocks: {},
     pendingWriteBack: [],
   };
 }

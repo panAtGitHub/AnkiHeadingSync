@@ -1,6 +1,6 @@
 import type { PluginStateRepository } from "@/application/ports/PluginStateRepository";
 import type { PluginDataStore } from "@/application/ports/PluginDataStore";
-import { createEmptyPluginState, toNoteIdKey, type CardState, type FileState, type PendingWriteBackState, type PluginState } from "@/domain/manual-sync/entities/PluginState";
+import { createEmptyPluginState, toNoteIdKey, type CardState, type FileState, type GroupBlockState, type PendingWriteBackState, type PluginState } from "@/domain/manual-sync/entities/PluginState";
 
 import type { PluginDataSnapshot } from "./DataJsonPluginConfigRepository";
 
@@ -18,9 +18,14 @@ interface LegacyPendingWriteBackState extends Partial<PendingWriteBackState> {
   noteId?: number;
 }
 
+interface LegacyGroupBlockState extends Partial<GroupBlockState> {
+  groupId?: string;
+}
+
 interface LegacyPluginState {
   files?: Record<string, LegacyFileState>;
   cards?: Record<string, LegacyCardState>;
+  groupBlocks?: Record<string, LegacyGroupBlockState>;
   pendingWriteBack?: LegacyPendingWriteBackState[];
 }
 
@@ -73,12 +78,27 @@ export function migratePluginState(pluginState?: PluginState | LegacyPluginState
       deckRulesFingerprint: typeof rawFile.deckRulesFingerprint === "string" ? rawFile.deckRulesFingerprint : undefined,
       lastIndexedAt: typeof rawFile.lastIndexedAt === "number" ? rawFile.lastIndexedAt : 0,
       noteIds: collectMigratedFileNoteIds(rawFile, rawCards, cards),
+      groupIds: collectMigratedFileGroupIds(rawFile, pluginState.groupBlocks ?? {}),
     };
+  }
+
+  const groupBlocks: Record<string, GroupBlockState> = {};
+  for (const [groupId, rawGroupBlock] of Object.entries(pluginState.groupBlocks ?? {})) {
+    const nextGroupBlock = migrateGroupBlockState(rawGroupBlock, groupId);
+    if (!nextGroupBlock) {
+      continue;
+    }
+
+    const existingGroupBlock = groupBlocks[groupId];
+    if (!existingGroupBlock || existingGroupBlock.lastSyncedAt <= nextGroupBlock.lastSyncedAt) {
+      groupBlocks[groupId] = nextGroupBlock;
+    }
   }
 
   return {
     files,
     cards,
+    groupBlocks,
     pendingWriteBack: [],
   };
 }
@@ -122,6 +142,65 @@ function sanitizeCardType(value: unknown): CardState["cardType"] {
   return "basic";
 }
 
+function migrateGroupBlockState(rawGroupBlock: LegacyGroupBlockState, groupId: string): GroupBlockState | null {
+  const noteId = sanitizeNoteId(rawGroupBlock.noteId);
+  if (noteId === undefined || !groupId.trim()) {
+    return null;
+  }
+
+  return {
+    groupId,
+    noteId,
+    filePath: typeof rawGroupBlock.filePath === "string" ? rawGroupBlock.filePath : "",
+    headingText: typeof rawGroupBlock.headingText === "string" ? rawGroupBlock.headingText : "",
+    backlinkHeadingText: typeof rawGroupBlock.backlinkHeadingText === "string"
+      ? rawGroupBlock.backlinkHeadingText
+      : (typeof rawGroupBlock.headingText === "string" ? rawGroupBlock.headingText : ""),
+    headingLevel: typeof rawGroupBlock.headingLevel === "number" ? rawGroupBlock.headingLevel : 1,
+    stem: typeof rawGroupBlock.stem === "string" ? rawGroupBlock.stem : "",
+    src: typeof rawGroupBlock.src === "string" ? rawGroupBlock.src : "",
+    blockStartOffset: typeof rawGroupBlock.blockStartOffset === "number" ? rawGroupBlock.blockStartOffset : 0,
+    blockEndOffset: typeof rawGroupBlock.blockEndOffset === "number" ? rawGroupBlock.blockEndOffset : 0,
+    blockStartLine: typeof rawGroupBlock.blockStartLine === "number" ? rawGroupBlock.blockStartLine : 1,
+    bodyStartLine: typeof rawGroupBlock.bodyStartLine === "number" ? rawGroupBlock.bodyStartLine : 1,
+    blockEndLine: typeof rawGroupBlock.blockEndLine === "number" ? rawGroupBlock.blockEndLine : 1,
+    contentEndLine: typeof rawGroupBlock.contentEndLine === "number" ? rawGroupBlock.contentEndLine : 1,
+    markerLine: typeof rawGroupBlock.markerLine === "number" ? rawGroupBlock.markerLine : undefined,
+    markerIndent: typeof rawGroupBlock.markerIndent === "string" ? rawGroupBlock.markerIndent : undefined,
+    rawBlockText: typeof rawGroupBlock.rawBlockText === "string" ? rawGroupBlock.rawBlockText : "",
+    rawBlockHash: typeof rawGroupBlock.rawBlockHash === "string" ? rawGroupBlock.rawBlockHash : "",
+    deck: typeof rawGroupBlock.deck === "string" ? rawGroupBlock.deck : "",
+    deckHint: typeof rawGroupBlock.deckHint === "string" ? rawGroupBlock.deckHint : undefined,
+    deckHintSource: rawGroupBlock.deckHintSource === "frontmatter" || rawGroupBlock.deckHintSource === "body" ? rawGroupBlock.deckHintSource : undefined,
+    deckWarnings: Array.isArray(rawGroupBlock.deckWarnings) ? [...rawGroupBlock.deckWarnings] : [],
+    items: Array.isArray(rawGroupBlock.items)
+      ? rawGroupBlock.items.flatMap((item) => {
+        if (!item || typeof item !== "object") {
+          return [];
+        }
+
+        const nextItem = item as GroupBlockState["items"][number];
+        if (typeof nextItem.title !== "string" || typeof nextItem.answer !== "string" || typeof nextItem.ordinalInMarkdown !== "number") {
+          return [];
+        }
+
+        return [{
+          itemId: typeof nextItem.itemId === "string" ? nextItem.itemId : undefined,
+          title: nextItem.title,
+          answer: nextItem.answer,
+          slot: typeof nextItem.slot === "number" ? nextItem.slot : undefined,
+          ordinalInMarkdown: nextItem.ordinalInMarkdown,
+        }];
+      })
+      : [],
+    freeSlots: Array.isArray(rawGroupBlock.freeSlots)
+      ? rawGroupBlock.freeSlots.filter((slot): slot is number => typeof slot === "number" && Number.isInteger(slot) && slot > 0)
+      : [],
+    lastSyncedAt: typeof rawGroupBlock.lastSyncedAt === "number" ? rawGroupBlock.lastSyncedAt : 0,
+    orphan: Boolean(rawGroupBlock.orphan),
+  };
+}
+
 function collectMigratedFileNoteIds(
   rawFile: LegacyFileState,
   rawCards: Record<string, LegacyCardState>,
@@ -148,6 +227,17 @@ function collectMigratedFileNoteIds(
   }
 
   return Array.from(noteIds);
+}
+
+function collectMigratedFileGroupIds(
+  rawFile: LegacyFileState,
+  rawGroupBlocks: Record<string, LegacyGroupBlockState>,
+): string[] {
+  if (!Array.isArray(rawFile.groupIds)) {
+    return [];
+  }
+
+  return rawFile.groupIds.filter((groupId): groupId is string => typeof groupId === "string" && Boolean(rawGroupBlocks[groupId]));
 }
 
 function sanitizeNoteId(value: unknown): number | undefined {
