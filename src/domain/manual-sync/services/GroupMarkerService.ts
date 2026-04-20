@@ -9,6 +9,7 @@ export interface GroupMarkerWriteRequest {
   syncKey: string;
   filePath: string;
   blockStartLine: number;
+  contentEndLine: number;
   blockEndLine: number;
   markerLine?: number;
   markerIndent?: string;
@@ -114,6 +115,10 @@ export class GroupMarkerService {
         throw new GroupMarkerError(`Cannot replace GI marker outside the heading block in ${write.filePath}.`);
       }
 
+      if (write.contentEndLine < write.blockStartLine || write.contentEndLine > write.blockEndLine) {
+        throw new GroupMarkerError(`Cannot place GI marker outside the content range in ${write.filePath}.`);
+      }
+
       if (seenBlocks.has(write.blockStartLine)) {
         throw new GroupMarkerError(`Duplicate GI marker write detected for block ${write.blockStartLine} in ${write.filePath}.`);
       }
@@ -145,15 +150,27 @@ export class GroupMarkerService {
       uniqueRemovals.add(write.markerLine - 1);
     }
 
+    for (let lineIndex = write.contentEndLine; lineIndex < write.blockEndLine; lineIndex += 1) {
+      if (!(lines[lineIndex] ?? "").trim()) {
+        uniqueRemovals.add(lineIndex);
+      }
+    }
+
     const removalIndexes = [...uniqueRemovals].sort((left, right) => right - left);
-    const removalsWithinBlock = [...uniqueRemovals].filter((lineIndex) => lineIndex <= write.blockEndLine - 1).length;
-    const insertionIndex = write.blockEndLine - removalsWithinBlock;
+    const insertionIndex = write.contentEndLine - [...uniqueRemovals].filter((lineIndex) => lineIndex < write.contentEndLine).length;
 
     for (const lineIndex of removalIndexes) {
       lines.splice(lineIndex, 1);
     }
 
     lines.splice(insertionIndex, 0, `${write.markerIndent ?? ""}${serializeGroupMarker(write.noteId, write.itemToSlot, write.freeSlots)}`);
+    while (insertionIndex + 1 < lines.length && !(lines[insertionIndex + 1] ?? "").trim()) {
+      lines.splice(insertionIndex + 1, 1);
+    }
+
+    if (insertionIndex + 1 < lines.length) {
+      lines.splice(insertionIndex + 1, 0, "", "");
+    }
   }
 }
 

@@ -94,6 +94,10 @@ export class CardMarkerService {
         throw new CardMarkerError(`Cannot replace marker outside the heading block in ${write.filePath}.`);
       }
 
+      if (write.contentEndLine < write.blockStartLine || write.contentEndLine > write.blockEndLine) {
+        throw new CardMarkerError(`Cannot write marker outside the content range in ${write.filePath}.`);
+      }
+
       if (seenBlocks.has(write.blockStartLine)) {
         throw new CardMarkerError(`Duplicate marker write detected for block ${write.blockStartLine} in ${write.filePath}.`);
       }
@@ -108,10 +112,31 @@ export class CardMarkerService {
       throw new CardMarkerError(`Cannot write marker outside the heading block in ${write.filePath}.`);
     }
 
+    const removalIndexes = new Set<number>();
     if (write.markerLine !== undefined) {
-      lines.splice(write.markerLine - 1, 1);
+      removalIndexes.add(write.markerLine - 1);
     }
 
-    lines.splice(write.contentEndLine, 0, `${write.markerIndent ?? ""}${this.create(write.noteId).raw}`);
+    for (let lineIndex = write.contentEndLine; lineIndex < write.blockEndLine; lineIndex += 1) {
+      if (!(lines[lineIndex] ?? "").trim()) {
+        removalIndexes.add(lineIndex);
+      }
+    }
+
+    const sortedRemovals = [...removalIndexes].sort((left, right) => right - left);
+    const insertionIndex = write.contentEndLine - [...removalIndexes].filter((lineIndex) => lineIndex < write.contentEndLine).length;
+
+    for (const lineIndex of sortedRemovals) {
+      lines.splice(lineIndex, 1);
+    }
+
+    lines.splice(insertionIndex, 0, `${write.markerIndent ?? ""}${this.create(write.noteId).raw}`);
+    while (insertionIndex + 1 < lines.length && !(lines[insertionIndex + 1] ?? "").trim()) {
+      lines.splice(insertionIndex + 1, 1);
+    }
+
+    if (insertionIndex + 1 < lines.length) {
+      lines.splice(insertionIndex + 1, 0, "", "");
+    }
   }
 }

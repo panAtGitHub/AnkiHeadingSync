@@ -93,11 +93,32 @@ export class HeadingSyncMarkerService {
       throw new HeadingSyncMarkerBatchError(`Cannot write AHS marker outside the heading block in ${location.filePath}.`);
     }
 
+    const removalIndexes = new Set<number>();
     if (location.markerLine) {
-      lines.splice(location.markerLine - 1, 1);
+      removalIndexes.add(location.markerLine - 1);
     }
 
-    lines.splice(location.contentEndLine, 0, this.create(noteId).raw);
+    for (let lineIndex = location.contentEndLine; lineIndex < location.blockEndLine; lineIndex += 1) {
+      if (!(lines[lineIndex] ?? "").trim()) {
+        removalIndexes.add(lineIndex);
+      }
+    }
+
+    const sortedRemovals = [...removalIndexes].sort((left, right) => right - left);
+    const insertionIndex = location.contentEndLine - [...removalIndexes].filter((lineIndex) => lineIndex < location.contentEndLine).length;
+
+    for (const lineIndex of sortedRemovals) {
+      lines.splice(lineIndex, 1);
+    }
+
+    lines.splice(insertionIndex, 0, this.create(noteId).raw);
+    while (insertionIndex + 1 < lines.length && !(lines[insertionIndex + 1] ?? "").trim()) {
+      lines.splice(insertionIndex + 1, 1);
+    }
+
+    if (insertionIndex + 1 < lines.length) {
+      lines.splice(insertionIndex + 1, 0, "", "");
+    }
   }
 
   create(noteId: number): HeadingSyncMarker {

@@ -12,11 +12,11 @@ describe("HeadingSyncMarkerService", () => {
     const nextContent = service.apply(
       {
         filePath: "notes/example.md",
-        sourceContent: ["#### Prompt", "Answer", "", "### Next"].join("\n"),
+        sourceContent: ["#### Prompt", "Answer", "", "", "### Next"].join("\n"),
         headingLine: 1,
         blockStartLine: 1,
         bodyStartLine: 2,
-        blockEndLine: 3,
+        blockEndLine: 4,
         contentEndLine: 2,
         headingLevel: 4,
         headingText: "Prompt",
@@ -24,7 +24,7 @@ describe("HeadingSyncMarkerService", () => {
       123,
     );
 
-    expect(nextContent).toBe(["#### Prompt", "Answer", "<!-- AHS:123 -->", "", "### Next"].join("\n"));
+    expect(nextContent).toBe(["#### Prompt", "Answer", "<!-- AHS:123 -->", "", "", "### Next"].join("\n"));
   });
 
   it("writes the marker right after the heading when the block body is empty", () => {
@@ -43,18 +43,18 @@ describe("HeadingSyncMarkerService", () => {
       456,
     );
 
-    expect(nextContent).toBe(["#### Prompt", "<!-- AHS:456 -->", "### Next"].join("\n"));
+    expect(nextContent).toBe(["#### Prompt", "<!-- AHS:456 -->", "", "", "### Next"].join("\n"));
   });
 
   it("replaces an existing marker without moving past the next heading", () => {
     const nextContent = service.apply(
       {
         filePath: "notes/example.md",
-        sourceContent: ["#### Prompt", "Answer", "<!-- AHS:123 -->", "### Next"].join("\n"),
+        sourceContent: ["#### Prompt", "Answer", "<!-- AHS:123 -->", "", "", "### Next"].join("\n"),
         headingLine: 1,
         blockStartLine: 1,
         bodyStartLine: 2,
-        blockEndLine: 3,
+        blockEndLine: 5,
         contentEndLine: 2,
         markerLine: 3,
         headingLevel: 4,
@@ -63,13 +63,14 @@ describe("HeadingSyncMarkerService", () => {
       789,
     );
 
-    expect(nextContent).toBe(["#### Prompt", "Answer", "<!-- AHS:789 -->", "### Next"].join("\n"));
+    expect(nextContent).toBe(["#### Prompt", "Answer", "<!-- AHS:789 -->", "", "", "### Next"].join("\n"));
   });
 
   it("applies multiple writes in one file from bottom to top", () => {
     const sourceContent = [
       "#### Top",
       "Top answer",
+      "",
       "",
       "#### Bottom",
       "Bottom answer",
@@ -86,7 +87,7 @@ describe("HeadingSyncMarkerService", () => {
           headingLine: 1,
           blockStartLine: 1,
           bodyStartLine: 2,
-          blockEndLine: 3,
+          blockEndLine: 4,
           contentEndLine: 2,
           headingLevel: 4,
           headingText: "Top",
@@ -101,11 +102,11 @@ describe("HeadingSyncMarkerService", () => {
         location: {
           filePath: "notes/example.md",
           sourceContent,
-          headingLine: 4,
-          blockStartLine: 4,
-          bodyStartLine: 5,
-          blockEndLine: 5,
-          contentEndLine: 5,
+          headingLine: 5,
+          blockStartLine: 5,
+          bodyStartLine: 6,
+          blockEndLine: 6,
+          contentEndLine: 6,
           headingLevel: 4,
           headingText: "Bottom",
         },
@@ -119,6 +120,7 @@ describe("HeadingSyncMarkerService", () => {
       "Top answer",
       "<!-- AHS:111 -->",
       "",
+      "",
       "#### Bottom",
       "Bottom answer",
       "<!-- AHS:222 -->",
@@ -130,6 +132,7 @@ describe("HeadingSyncMarkerService", () => {
       "#### First",
       "Body 1",
       "<!-- AHS:42 -->",
+      "",
       "",
       "#### Second",
       "Body 2",
@@ -146,7 +149,7 @@ describe("HeadingSyncMarkerService", () => {
           headingLine: 1,
           blockStartLine: 1,
           bodyStartLine: 2,
-          blockEndLine: 3,
+          blockEndLine: 5,
           contentEndLine: 2,
           markerLine: 3,
           headingLevel: 4,
@@ -162,11 +165,11 @@ describe("HeadingSyncMarkerService", () => {
         location: {
           filePath: "notes/example.md",
           sourceContent,
-          headingLine: 5,
-          blockStartLine: 5,
-          bodyStartLine: 6,
-          blockEndLine: 6,
-          contentEndLine: 6,
+          headingLine: 6,
+          blockStartLine: 6,
+          bodyStartLine: 7,
+          blockEndLine: 7,
+          contentEndLine: 7,
           headingLevel: 4,
           headingText: "Second",
         },
@@ -179,6 +182,7 @@ describe("HeadingSyncMarkerService", () => {
       "#### First",
       "Body 1",
       "<!-- AHS:9001 -->",
+      "",
       "",
       "#### Second",
       "Body 2",

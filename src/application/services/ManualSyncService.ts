@@ -414,6 +414,7 @@ export class ManualSyncService {
           syncKey: block.syncKey,
           filePath: block.filePath,
           blockStartLine: block.blockStartLine,
+          contentEndLine: block.contentEndLine,
           blockEndLine: block.blockEndLine,
           markerLine: block.markerLine,
           markerIndent: block.markerIndent,
