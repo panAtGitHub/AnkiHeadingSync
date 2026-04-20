@@ -72,6 +72,7 @@ describe("ManualSyncService", () => {
     expect(ankiGateway.addedNotes[0]?.modelName).toBe(QA_GROUP_MODEL_NAME);
     expect(ankiGateway.addedNotes[0]?.fields).toMatchObject({
       Stem: "Concepts",
+      Src: "obsidian://open?vault=Vault&file=notes/example.md#Concepts #anki-list",
       S01_Q: "Alpha",
       S01_A: "First answer",
       S02_Q: "Beta",

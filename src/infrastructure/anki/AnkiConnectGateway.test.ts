@@ -669,6 +669,34 @@ describe("AnkiConnectGateway", () => {
     });
   });
 
+  it("updates note fields without calling changeDeck when no target deck is provided", async () => {
+    requestUrlMock
+      .mockResolvedValueOnce({
+        json: {
+          error: null,
+          result: null,
+        },
+      });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    await gateway.updateNote({
+      noteId: 10,
+      fields: { Front: "Prompt", Back: "Answer" },
+    });
+
+    expect(requestUrlMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+      action: "updateNoteFields",
+      version: 6,
+      params: {
+        note: {
+          id: 10,
+          fields: { Front: "Prompt", Back: "Answer" },
+        },
+      },
+    });
+  });
+
   it("deletes notes and empty decks through direct actions", async () => {
     requestUrlMock
       .mockResolvedValueOnce({

@@ -3,13 +3,14 @@ import { describe, expect, it } from "vitest";
 import { buildGroupSrc, type IndexedGroupCardBlock } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
 import { createEmptyPluginState, type GroupBlockState } from "@/domain/manual-sync/entities/PluginState";
 import { QA_GROUP_MODEL_NAME, buildQaGroupNoteFields } from "@/application/services/QaGroupModelDefinition";
-import { createModule3Settings, FakeManualSyncAnkiGateway } from "@/test-support/manualSyncFakes";
+import { createModule3Settings, FakeManualSyncAnkiGateway, FakeManualSyncVaultGateway } from "@/test-support/manualSyncFakes";
 
 import { QaGroupSyncService } from "./QaGroupSyncService";
 
 describe("QaGroupSyncService", () => {
   it("creates one QA Group note and assigns fresh item ids and slots", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
+    const vaultGateway = new FakeManualSyncVaultGateway();
     const itemIds = ["item-1", "item-2"];
     const service = new QaGroupSyncService(
       ankiGateway,
@@ -19,6 +20,7 @@ describe("QaGroupSyncService", () => {
       () => 1234,
       () => "group-1",
       () => itemIds.shift() ?? "item-x",
+      vaultGateway.createBacklink.bind(vaultGateway),
     );
 
     const result = await service.sync([createIndexedGroupBlock()], createEmptyPluginState(), createModule3Settings());
@@ -28,7 +30,7 @@ describe("QaGroupSyncService", () => {
     expect(ankiGateway.addedNotes[0]?.fields).toMatchObject({
       Stem: "Concepts",
       GroupId: "group-1",
-      Src: buildGroupSrc("notes/example.md", "Concepts #anki-list"),
+      Src: "obsidian://open?vault=Vault&file=notes/example.md#Concepts #anki-list",
       S01_Q: "Alpha",
       S01_A: "First answer",
       S02_Q: "Beta",
@@ -43,6 +45,7 @@ describe("QaGroupSyncService", () => {
 
   it("preserves slots across reorder and reuses a free slot for a new item", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
+    const vaultGateway = new FakeManualSyncVaultGateway();
     const existingState = createStoredGroupBlockState();
     ankiGateway.noteDetailsById.set(42, {
       noteId: 42,
@@ -59,6 +62,7 @@ describe("QaGroupSyncService", () => {
       () => 1234,
       () => "group-x",
       () => "item-c",
+      vaultGateway.createBacklink.bind(vaultGateway),
     );
 
     const result = await service.sync([
@@ -90,6 +94,52 @@ describe("QaGroupSyncService", () => {
       "item-c": 2,
       "item-b": 3,
     });
+  });
+
+  it("recreates a missing QA Group note instead of failing when the stored noteId no longer exists", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    const vaultGateway = new FakeManualSyncVaultGateway();
+    const existingState = createStoredGroupBlockState();
+    const service = new QaGroupSyncService(
+      ankiGateway,
+      undefined,
+      undefined,
+      undefined,
+      () => 1234,
+      () => "group-x",
+      () => "item-new",
+      vaultGateway.createBacklink.bind(vaultGateway),
+    );
+
+    const result = await service.sync([
+      createIndexedGroupBlock({
+        noteId: 42,
+        groupId: "group-1",
+        rawBlockHash: "hash-updated",
+        items: [
+          { title: "Alpha", answer: "First answer", ordinalInMarkdown: 1 },
+          { title: "Beta", answer: "Second answer", ordinalInMarkdown: 2 },
+          { title: "Gamma", answer: "Third answer", ordinalInMarkdown: 3 },
+        ],
+      }),
+    ], {
+      ...createEmptyPluginState(),
+      groupBlocks: {
+        "group-1": existingState,
+      },
+    }, createModule3Settings());
+
+    expect(result.created).toBe(1);
+    expect(result.updated).toBe(0);
+    expect(ankiGateway.addedNotes[0]?.modelName).toBe(QA_GROUP_MODEL_NAME);
+    expect(ankiGateway.addedNotes[0]?.fields).toMatchObject({
+      GroupId: "group-1",
+      S01_Q: "Alpha",
+      S02_Q: "Gamma",
+      S03_Q: "Beta",
+    });
+    expect(result.syncedGroupBlocks[0]?.groupId).toBe("group-1");
+    expect(result.syncedGroupBlocks[0]?.noteId).toBeDefined();
   });
 });
 

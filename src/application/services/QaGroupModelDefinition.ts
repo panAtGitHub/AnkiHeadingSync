@@ -32,7 +32,7 @@ export function buildQaGroupTemplates(): AnkiModelTemplate[] {
     templates.push({
       name: `Q${slotId.slice(1)}`,
       front: `{{#${slotId}_Q}}{{#${slotId}_A}}<div class="stem">{{Stem}}</div>\n<div class="q">{{${slotId}_Q}}</div>{{/${slotId}_A}}{{/${slotId}_Q}}`,
-      back: `{{FrontSide}}\n\n<hr id="answer">\n\n<div class="a">{{${slotId}_A}}</div>\n<div class="meta">{{Src}}</div>`,
+      back: `{{FrontSide}}\n\n<hr id="answer">\n\n<div class="a">{{${slotId}_A}}</div>\n{{#Src}}<p><a class="anki-heading-sync-backlink" href="{{Src}}">Open in Obsidian</a></p>{{/Src}}`,
     });
   }
 

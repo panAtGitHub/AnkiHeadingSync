@@ -276,6 +276,10 @@ export class AnkiConnectGateway implements AnkiGroupGateway {
       },
     });
 
+    if (!input.deckName) {
+      return;
+    }
+
     const noteInfo = await this.invoke<NoteInfo[]>("notesInfo", {
       notes: [input.noteId],
     });

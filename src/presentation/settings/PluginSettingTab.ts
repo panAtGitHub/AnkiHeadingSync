@@ -5,7 +5,7 @@ import { createNoteFieldMappingKey, type NoteModelFieldMapping } from "@/applica
 import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
 import { NoteFieldMappingService } from "@/application/services/NoteFieldMappingService";
-import { buildQaGroupModelDefinition, QA_GROUP_MODEL_NAME } from "@/application/services/QaGroupModelDefinition";
+import { buildQaGroupModelDefinition } from "@/application/services/QaGroupModelDefinition";
 import type { CardType } from "@/domain/card/entities/RenderedFields";
 import { SemanticQaListParser } from "@/domain/manual-sync/services/SemanticQaListParser";
 import type AnkiHeadingSyncPlugin from "@/presentation/AnkiHeadingSyncPlugin";
@@ -184,19 +184,12 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private renderMappingSection(containerEl: HTMLElement, config: MappingSectionConfig): void {
-    const storedModelName = this.getSelectedNoteType(config.cardType);
     const selectedModelName = this.getSelectedMappingNoteType(config.cardType);
     const mappingKey = createNoteFieldMappingKey(config.cardType, selectedModelName);
     const currentMapping = this.getCurrentMapping(mappingKey);
 
     containerEl.createEl("h4", { text: config.title });
     containerEl.createEl("p", { text: config.description });
-
-    if (storedModelName !== selectedModelName) {
-      containerEl.createEl("p", {
-        text: `${QA_GROUP_MODEL_NAME} is reserved for QA Group sync and cannot be configured in ${config.title}. Choose another note type for these mapping controls.`,
-      });
-    }
 
     new Setting(containerEl)
       .setName(`${config.title} note type`)
@@ -324,12 +317,6 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private async updateSelectedNoteType(cardType: CardType, modelName: string): Promise<void> {
-    if (!this.isSelectableMappingNoteType(modelName)) {
-      this.sectionStatuses[cardType] = `${QA_GROUP_MODEL_NAME} is reserved for QA Group sync and cannot be selected for ${describeMappingSection(cardType)}.`;
-      this.display();
-      return;
-    }
-
     if (cardType === "basic") {
       await this.plugin.updateSettings({ qaNoteType: modelName });
     } else if (cardType === "cloze") {
@@ -400,14 +387,17 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
   private getSelectableNoteModels(cardType: CardType, selectedModelName: string): string[] {
     void cardType;
-    const noteModels = (this.availableNoteModels.length > 0 ? [...this.availableNoteModels] : [])
-      .filter((noteModel) => this.isSelectableMappingNoteType(noteModel));
+    const noteModels = this.getSelectableMappingNoteModels();
 
-    if (this.isSelectableMappingNoteType(selectedModelName) && !noteModels.includes(selectedModelName)) {
+    if (!noteModels.includes(selectedModelName)) {
       noteModels.unshift(selectedModelName);
     }
 
     return noteModels;
+  }
+
+  private getSelectableMappingNoteModels(): string[] {
+    return this.availableNoteModels.length > 0 ? [...this.availableNoteModels] : [];
   }
 
   private updateDraftMapping(
@@ -454,37 +444,13 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private getSelectedMappingNoteType(cardType: CardType): string {
-    const selectedModelName = this.getSelectedNoteType(cardType);
-    if (this.isSelectableMappingNoteType(selectedModelName)) {
-      return selectedModelName;
-    }
-
-    return this.getFallbackMappingNoteType(cardType);
-  }
-
-  private getFallbackMappingNoteType(cardType: CardType): string {
-    const preferredModelName = cardType === "basic"
-      ? "Basic"
-      : cardType === "cloze"
-        ? "Cloze"
-        : "Semantic QA";
-
-    const availableNoteModels = this.availableNoteModels.filter((noteModel) => this.isSelectableMappingNoteType(noteModel));
-    if (availableNoteModels.includes(preferredModelName)) {
-      return preferredModelName;
-    }
-
-    return availableNoteModels[0] ?? preferredModelName;
-  }
-
-  private isSelectableMappingNoteType(modelName: string): boolean {
-    return modelName !== QA_GROUP_MODEL_NAME;
+    return this.getSelectedNoteType(cardType);
   }
 
   private renderQaGroupModelStatus(containerEl: HTMLElement): void {
     const definition = buildQaGroupModelDefinition();
     containerEl.createEl("p", {
-      text: `Managed note type: ${definition.modelName}. QA Group sync writes Stem / GroupId / Src / S01..S12 directly and does not use the field mapping panels below.`,
+      text: `Managed note type: ${definition.modelName}. QA Group sync writes Stem / GroupId / Src / S01..S12 directly. The same note type can also appear in the field mapping panels below if you want to reuse it for other routes.`,
     });
     containerEl.createEl("p", {
       text: `Managed model contract: ${definition.fieldNames.length} fields and ${definition.templates.length} templates are checked automatically during sync.`,
@@ -794,18 +760,6 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
 function inferBasicLikeCardType(sectionTitle: string): Extract<CardType, "basic" | "semantic-qa"> {
   return sectionTitle === "Semantic QA" ? "semantic-qa" : "basic";
-}
-
-function describeMappingSection(cardType: CardType): string {
-  if (cardType === "basic") {
-    return "QA / Basic";
-  }
-
-  if (cardType === "cloze") {
-    return "Cloze";
-  }
-
-  return "Semantic QA";
 }
 
 function getScopeModeSummary(scopeMode: ScopeMode): string {

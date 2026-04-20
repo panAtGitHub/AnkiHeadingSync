@@ -48,7 +48,16 @@ export class ManualSyncService {
     renderConfigServiceOrNow: RenderConfigService | (() => number) = new RenderConfigService(),
     now: () => number = () => Date.now(),
   ) {
-    this.qaGroupSyncService = new QaGroupSyncService(ankiGateway as AnkiGroupGateway);
+    this.qaGroupSyncService = new QaGroupSyncService(
+      ankiGateway as AnkiGroupGateway,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      this.vaultGateway.createBacklink.bind(this.vaultGateway),
+    );
     this.groupMarkerService = new GroupMarkerService();
 
     if (isRenderConfigService(renderConfigServiceOrNow)) {

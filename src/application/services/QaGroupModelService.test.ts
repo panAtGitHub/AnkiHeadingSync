@@ -6,6 +6,13 @@ import { buildQaGroupModelDefinition } from "./QaGroupModelDefinition";
 import { QaGroupModelService } from "./QaGroupModelService";
 
 describe("QaGroupModelService", () => {
+  it("builds QA Group templates with a clickable Obsidian backlink", () => {
+    const definition = buildQaGroupModelDefinition();
+
+    expect(definition.templates[0]?.back).toContain('<a class="anki-heading-sync-backlink" href="{{Src}}">Open in Obsidian</a>');
+    expect(definition.templates[0]?.back).not.toContain('<div class="meta">{{Src}}</div>');
+  });
+
   it("creates the QA Group model when it is missing", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     const service = new QaGroupModelService(ankiGateway);

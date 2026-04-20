@@ -1,5 +1,6 @@
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import type { AnkiGroupGateway, AnkiNoteDetails } from "@/application/ports/AnkiGateway";
+import type { SourceLocation } from "@/domain/card/value-objects/SourceLocation";
 import { buildGroupSrc, type GroupItem, type IndexedGroupCardBlock } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
 import type { GroupBlockState, PluginState } from "@/domain/manual-sync/entities/PluginState";
 import { GroupMarkerService, type GroupMarkerWriteRequest } from "@/domain/manual-sync/services/GroupMarkerService";
@@ -50,6 +51,7 @@ export class QaGroupSyncService {
       this.sequence += 1;
       return `i_${hashString(`${Date.now()}_${this.sequence}_${Math.random()}`).slice(0, 10)}`;
     },
+    private readonly createBacklink?: (location: SourceLocation) => string,
   ) {}
 
   async sync(blocks: IndexedGroupCardBlock[], state: PluginState, settings: PluginSettings): Promise<QaGroupSyncExecutionResult> {
@@ -108,7 +110,7 @@ export class QaGroupSyncService {
         ensuredDecks.add(deck);
       }
 
-      const fields = buildQaGroupNoteFields(block.stem, groupId, block.src, resolvedItems);
+      const fields = buildQaGroupNoteFields(block.stem, groupId, this.buildGroupBacklink(block, settings), resolvedItems);
       let noteId = recovered.noteId ?? block.noteId;
       let existingNote = recovered.noteDetails;
 
@@ -131,12 +133,23 @@ export class QaGroupSyncService {
         let deckChanged = recovered.stateRecord ? recovered.stateRecord.deck !== deck : false;
 
         if (!stateUnchanged) {
-          existingNote ??= await this.loadQaGroupNote(noteId, block);
-          fieldsChanged = !haveEqualFields(existingNote.fields, fields);
-          deckChanged = !(existingNote.deckNames ?? []).includes(deck);
+          existingNote ??= await this.tryLoadQaGroupNote(noteId, block);
+          if (!existingNote) {
+            noteId = await this.ankiGateway.addNote({
+              deckName: deck,
+              modelName: QA_GROUP_MODEL_NAME,
+              fields,
+              tags: [],
+            });
+            created += 1;
+            touchedSyncKeys.add(block.syncKey);
+          } else {
+            fieldsChanged = !haveEqualFields(existingNote.fields, fields);
+            deckChanged = !(existingNote.deckNames ?? []).includes(deck);
+          }
         }
 
-        if (fieldsChanged || deckChanged) {
+        if (existingNote && (fieldsChanged || deckChanged)) {
           await this.ankiGateway.updateNote({
             noteId,
             fields,
@@ -243,7 +256,10 @@ export class QaGroupSyncService {
     }
 
     if (block.noteId !== undefined) {
-      return noteDetailsToRecoveredGroup(await this.loadQaGroupNote(block.noteId, block), block.groupId);
+      const note = await this.tryLoadQaGroupNote(block.noteId, block);
+      if (note) {
+        return noteDetailsToRecoveredGroup(note, block.groupId);
+      }
     }
 
     const recoveredBySrc = await this.findSingleQaGroupNote(`note:${quoteAnkiValue(QA_GROUP_MODEL_NAME)} Src:${quoteAnkiValue(block.src)}`, block);
@@ -257,23 +273,23 @@ export class QaGroupSyncService {
     };
   }
 
-  private async findSingleQaGroupNote(query: string, block: IndexedGroupCardBlock): Promise<AnkiNoteDetails | null> {
+  private async findSingleQaGroupNote(query: string, block: IndexedGroupCardBlock): Promise<AnkiNoteDetails | undefined> {
     const noteIds = await this.ankiGateway.findNoteIds(query);
     if (noteIds.length === 0) {
-      return null;
+      return undefined;
     }
 
     if (noteIds.length > 1) {
       throw new Error(`QA Group recovery is ambiguous at ${block.filePath}:${block.blockStartLine}. Query: ${query}`);
     }
 
-    return this.loadQaGroupNote(noteIds[0], block);
+    return this.tryLoadQaGroupNote(noteIds[0], block);
   }
 
-  private async loadQaGroupNote(noteId: number, block: IndexedGroupCardBlock): Promise<AnkiNoteDetails> {
+  private async tryLoadQaGroupNote(noteId: number, block: IndexedGroupCardBlock): Promise<AnkiNoteDetails | undefined> {
     const note = (await this.ankiGateway.getNoteDetails([noteId]))[0];
     if (!note) {
-      throw new Error(`Unable to load QA Group note ${noteId} for ${block.filePath}:${block.blockStartLine}.`);
+      return undefined;
     }
 
     if (note.modelName !== QA_GROUP_MODEL_NAME) {
@@ -281,6 +297,25 @@ export class QaGroupSyncService {
     }
 
     return note;
+  }
+
+  private buildGroupBacklink(block: IndexedGroupCardBlock, settings: PluginSettings): string {
+    if (!settings.addObsidianBacklink || !this.createBacklink) {
+      return "";
+    }
+
+    return this.createBacklink({
+      filePath: block.filePath,
+      sourceContent: block.sourceContent,
+      headingLine: block.blockStartLine,
+      blockStartLine: block.blockStartLine,
+      bodyStartLine: block.bodyStartLine,
+      blockEndLine: block.blockEndLine,
+      contentEndLine: block.contentEndLine,
+      markerLine: block.markerLine,
+      headingLevel: block.headingLevel,
+      headingText: block.backlinkHeadingText,
+    });
   }
 }
 
