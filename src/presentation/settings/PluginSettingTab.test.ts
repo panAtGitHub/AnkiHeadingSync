@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createNoteFieldMappingKey } from "@/application/config/NoteModelFieldMapping";
 import { DEFAULT_SETTINGS } from "@/application/config/PluginSettings";
+import { QA_GROUP_MODEL_NAME } from "@/application/services/QaGroupModelDefinition";
 
 const {
   FakeButtonComponent,
@@ -308,7 +309,7 @@ class FakePlugin {
   }
 
   async listNoteModels(): Promise<string[]> {
-    return ["Basic", "Cloze", "Custom Basic", "Custom Cloze", "Semantic QA"];
+    return ["Basic", "Cloze", "Custom Basic", "Custom Cloze", "Semantic QA", QA_GROUP_MODEL_NAME];
   }
 
   async getNoteModelDetails(modelName: string) {
@@ -473,6 +474,35 @@ describe("AnkiHeadingSyncSettingTab", () => {
 
     const dropdown = getDropdown(findSetting(container, "QA / Basic note type"));
     expect(dropdown.options.map((option: { value: string }) => option.value)).toEqual(["Basic", "Cloze", "Custom Basic", "Custom Cloze", "Semantic QA"]);
+  });
+
+  it("shows QA Group model status and keeps it out of the field mapping dropdowns", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+    const container = tab.containerEl as unknown as FakeContainerElInstance;
+
+    tab.display();
+
+    expect(container.textNodes).toContain(`Managed note type: ${QA_GROUP_MODEL_NAME}. QA Group sync writes Stem / GroupId / Src / S01..S12 directly and does not use the field mapping panels below.`);
+    expect(container.textNodes).toContain("Managed model contract: 39 fields and 12 templates are checked automatically during sync.");
+
+    await getButton(findSetting(container, "Refresh note types from Anki")).click();
+
+    const semanticDropdown = getDropdown(findSetting(container, "Semantic QA note type"));
+    expect(semanticDropdown.options.map((option: { value: string }) => option.value)).not.toContain(QA_GROUP_MODEL_NAME);
+  });
+
+  it("blocks selecting the QA Group model inside semantic QA mapping controls", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+    const container = tab.containerEl as unknown as FakeContainerElInstance;
+
+    tab.display();
+    await getButton(findSetting(container, "Refresh note types from Anki")).click();
+    await getDropdown(findSetting(container, "Semantic QA note type")).triggerChange(QA_GROUP_MODEL_NAME);
+
+    expect(plugin.settings.semanticQaNoteType).toBe("Semantic QA");
+    expect(container.textNodes).toContain(`${QA_GROUP_MODEL_NAME} is reserved for QA Group sync and cannot be selected for Semantic QA.`);
   });
 
   it("loads fields, applies suggestions, and saves a user-adjusted basic mapping", async () => {

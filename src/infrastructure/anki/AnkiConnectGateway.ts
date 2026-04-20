@@ -33,6 +33,15 @@ interface ModelStylingResponse {
   css?: string;
 }
 
+function buildModelUpdateParams(modelName: string, updates: Record<string, unknown>): Record<string, unknown> {
+  return {
+    model: {
+      name: modelName,
+      ...updates,
+    },
+  };
+}
+
 export class AnkiConnectGateway implements AnkiGroupGateway {
   constructor(private readonly getBaseUrl: () => string) {}
 
@@ -110,22 +119,18 @@ export class AnkiConnectGateway implements AnkiGroupGateway {
   }
 
   async updateModelTemplate(modelName: string, template: AnkiModelTemplate): Promise<void> {
-    await this.invoke("updateModelTemplates", {
-      model: modelName,
+    await this.invoke("updateModelTemplates", buildModelUpdateParams(modelName, {
       templates: {
         [template.name]: {
           Front: template.front,
           Back: template.back,
         },
       },
-    });
+    }));
   }
 
   async updateModelStyling(modelName: string, css: string): Promise<void> {
-    await this.invoke("updateModelStyling", {
-      model: modelName,
-      css,
-    });
+    await this.invoke("updateModelStyling", buildModelUpdateParams(modelName, { css }));
   }
 
   async findNoteIds(query: string): Promise<number[]> {
