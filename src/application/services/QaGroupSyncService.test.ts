@@ -141,6 +141,48 @@ describe("QaGroupSyncService", () => {
     expect(result.syncedGroupBlocks[0]?.groupId).toBe("group-1");
     expect(result.syncedGroupBlocks[0]?.noteId).toBeDefined();
   });
+
+  it("recreates a missing QA Group note even when the local state looks unchanged", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    const vaultGateway = new FakeManualSyncVaultGateway();
+    const existingState = createStoredGroupBlockState();
+    const service = new QaGroupSyncService(
+      ankiGateway,
+      undefined,
+      undefined,
+      undefined,
+      () => 1234,
+      () => "group-x",
+      () => "item-new",
+      vaultGateway.createBacklink.bind(vaultGateway),
+    );
+
+    const result = await service.sync([
+      createIndexedGroupBlock({
+        noteId: 42,
+        groupId: "group-1",
+        rawBlockHash: existingState.rawBlockHash,
+        items: existingState.items.map(({ title, answer, ordinalInMarkdown }) => ({ title, answer, ordinalInMarkdown })),
+      }),
+    ], {
+      ...createEmptyPluginState(),
+      groupBlocks: {
+        "group-1": existingState,
+      },
+    }, createModule3Settings());
+
+    expect(result.created).toBe(1);
+    expect(result.updated).toBe(0);
+    expect(result.touchedSyncKeys).toContain("notes/example.md\u0000group\u00001\u0000hash-1");
+    expect(ankiGateway.addedNotes).toHaveLength(1);
+    expect(ankiGateway.addedNotes[0]?.fields).toMatchObject({
+      GroupId: "group-1",
+      S01_Q: "Alpha",
+      S03_Q: "Beta",
+    });
+    expect(result.markerWrites[0]?.noteId).toBe(result.syncedGroupBlocks[0]?.noteId);
+    expect(result.syncedGroupBlocks[0]?.noteId).not.toBe(42);
+  });
 });
 
 function createIndexedGroupBlock(overrides: Partial<IndexedGroupCardBlock> = {}): IndexedGroupCardBlock {

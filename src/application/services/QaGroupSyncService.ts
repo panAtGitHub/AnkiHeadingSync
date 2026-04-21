@@ -132,21 +132,19 @@ export class QaGroupSyncService {
         let fieldsChanged = !stateUnchanged;
         let deckChanged = recovered.stateRecord ? recovered.stateRecord.deck !== deck : false;
 
-        if (!stateUnchanged) {
-          existingNote ??= await this.tryLoadQaGroupNote(noteId, block);
-          if (!existingNote) {
-            noteId = await this.ankiGateway.addNote({
-              deckName: deck,
-              modelName: QA_GROUP_MODEL_NAME,
-              fields,
-              tags: [],
-            });
-            created += 1;
-            touchedSyncKeys.add(block.syncKey);
-          } else {
-            fieldsChanged = !haveEqualFields(existingNote.fields, fields);
-            deckChanged = !(existingNote.deckNames ?? []).includes(deck);
-          }
+        existingNote ??= await this.tryLoadQaGroupNote(noteId, block);
+        if (!existingNote) {
+          noteId = await this.ankiGateway.addNote({
+            deckName: deck,
+            modelName: QA_GROUP_MODEL_NAME,
+            fields,
+            tags: [],
+          });
+          created += 1;
+          touchedSyncKeys.add(block.syncKey);
+        } else if (!stateUnchanged) {
+          fieldsChanged = !haveEqualFields(existingNote.fields, fields);
+          deckChanged = !(existingNote.deckNames ?? []).includes(deck);
         }
 
         if (existingNote && (fieldsChanged || deckChanged)) {
