@@ -1,43 +1,27 @@
 import { describe, expect, it } from "vitest";
 
 import { createNoteFieldMappingKey } from "@/application/config/NoteModelFieldMapping";
-import type { Card } from "@/domain/card/entities/Card";
-import { createCardKey } from "@/domain/card/value-objects/CardKey";
-import { createContentHash } from "@/domain/card/value-objects/ContentHash";
-import { createDeckName } from "@/domain/card/value-objects/DeckName";
-import { createNoteModelName } from "@/domain/card/value-objects/NoteModelName";
+import type { CardType } from "@/domain/card/entities/RenderedFields";
 
 import { NoteFieldMappingService } from "./NoteFieldMappingService";
 
-function createCard(overrides: Partial<Card>): Card {
+interface RenderedCardInput {
+  type: CardType;
+  noteModel: string;
+  renderedFields: {
+    title: string;
+    body: string;
+  };
+}
+
+function createCard(overrides: Partial<RenderedCardInput>): RenderedCardInput {
   return {
-    key: createCardKey("card-key"),
-    source: {
-      filePath: "notes/example.md",
-      headingLine: 1,
-      blockStartLine: 1,
-      bodyStartLine: 2,
-      blockEndLine: 3,
-      contentEndLine: 2,
-      headingLevel: 4,
-      headingText: "Prompt",
-    },
     type: "basic",
-    heading: "Prompt",
-    bodyMarkdown: "Answer",
-    deck: createDeckName("Deck"),
-    noteModel: createNoteModelName("Basic"),
-    tags: [],
+    noteModel: "Basic",
     renderedFields: {
       title: "Prompt",
       body: "Answer",
     },
-    fields: {
-      title: "Prompt",
-      body: "Answer",
-    },
-    contentHash: createContentHash("hash"),
-    media: [],
     ...overrides,
   };
 }
@@ -72,12 +56,8 @@ describe("NoteFieldMappingService", () => {
     const fields = service.map(
       createCard({
         type: "cloze",
-        noteModel: createNoteModelName("Cloze"),
+        noteModel: "Cloze",
         renderedFields: {
-          title: "Context",
-          body: "{{c1::answer}}",
-        },
-        fields: {
           title: "Context",
           body: "{{c1::answer}}",
         },

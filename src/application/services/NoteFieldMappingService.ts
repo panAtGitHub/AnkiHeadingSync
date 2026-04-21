@@ -1,4 +1,3 @@
-import type { Card } from "@/domain/card/entities/Card";
 import { createNoteFieldMappingKey, type NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
 import { isBasicLikeCardType, type CardType, type RenderedFields } from "@/domain/card/entities/RenderedFields";
@@ -11,7 +10,7 @@ interface RenderedCardInput {
 
 export class NoteFieldMappingService {
   map(
-    card: Card,
+    card: RenderedCardInput,
     noteModelDetails: NoteModelDetails,
     noteFieldMappings: Record<string, NoteModelFieldMapping>,
   ): Record<string, string> {
@@ -33,7 +32,7 @@ export class NoteFieldMappingService {
     return this.mapCloze(card, noteModelDetails, mapping);
   }
 
-  suggest(cardType: Card["type"], modelName: string, fieldNames: string[], loadedAt = Date.now()): NoteModelFieldMapping {
+  suggest(cardType: CardType, modelName: string, fieldNames: string[], loadedAt = Date.now()): NoteModelFieldMapping {
     return isBasicLikeCardType(cardType)
       ? {
           cardType,

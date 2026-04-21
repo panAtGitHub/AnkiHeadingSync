@@ -1,5 +1,9 @@
 # Module 2 Gap Report
 
+> Archived on 2026-04-21.
+> This document describes the removed legacy syncRegistry-based sync chain.
+> The active runtime path is now the ManualSyncService manual-sync pipeline.
+
 ## Current State
 
 - Card extraction only derives legacy card identity from heading structure and source position.

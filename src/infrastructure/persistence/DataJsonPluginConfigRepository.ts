@@ -6,18 +6,6 @@ import type { PluginState } from "@/domain/manual-sync/entities/PluginState";
 export interface PluginDataSnapshot {
   settings?: Partial<PluginSettings>;
   pluginState?: PluginState;
-  syncRegistry?: {
-    records: Array<{
-      cardKey: string;
-      filePath: string;
-      identityMode?: "embedded-note-id" | "legacy-card-key" | "pending-note-id-write";
-      lastSyncedAt: number;
-      legacyCardKey?: string;
-      noteId: number;
-      orphan: boolean;
-      sourceHash: string;
-    }>;
-  };
 }
 
 export class DataJsonPluginConfigRepository implements PluginConfigRepository {

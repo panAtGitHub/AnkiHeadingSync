@@ -1,5 +1,8 @@
 # Obsidian Anki 新插件设计备忘（DDD 讨论稿）
 
+> 归档说明（2026-04-21）：本文包含已移除的 legacy sync / syncRegistry 架构讨论。
+> 仓库当前有效实现以 `ManualSyncService` manual-sync 主链为准。
+
 ## 文档目的
 
 这不是一个立即开工的实现文档，而是一份面向未来的设计备忘。
