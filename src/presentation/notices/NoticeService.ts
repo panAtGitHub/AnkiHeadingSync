@@ -39,7 +39,7 @@ export class NoticeService {
   }
 
   showClearCurrentFileSummary(prefix: string, result: ClearCurrentFileSyncedCardsResult): void {
-    const summary = `${prefix}: tracked ${result.trackedCards}, deleted notes ${result.deletedNotes}, removed markers ${result.removedMarkers}, deleted local records ${result.deletedLocalRecords}.`;
+    const summary = `${prefix}: tracked cards ${result.trackedCards}, tracked groups ${result.trackedGroups}, deleted notes ${result.deletedNotes}, removed markers ${result.removedMarkers}, removed ID markers ${result.removedCardMarkers}, removed GI markers ${result.removedGroupMarkers}, deleted local records ${result.deletedLocalRecords}.`;
     const conflicts = result.conflictFiles.length > 0
       ? ` Marker removal conflicts: ${result.conflictFiles.join(", ")}.`
       : "";
