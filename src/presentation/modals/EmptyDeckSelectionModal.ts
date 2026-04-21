@@ -1,5 +1,7 @@
 import { Modal, Setting, type App, type ButtonComponent, type ToggleComponent } from "obsidian";
 
+import { t } from "@/presentation/i18n";
+
 export class EmptyDeckSelectionModal extends Modal {
   private readonly deckToggles = new Map<string, ToggleComponent>();
   private readonly selectedDeckNames = new Set<string>();
@@ -22,8 +24,8 @@ export class EmptyDeckSelectionModal extends Modal {
   override onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl("h2", { text: "清理空牌组" });
-    contentEl.createEl("p", { text: "勾选要删除的空牌组。只有删除时仍为空的牌组会被真正删除。" });
+    contentEl.createEl("h2", { text: t("modal.emptyDeck.title") });
+    contentEl.createEl("p", { text: t("modal.emptyDeck.description") });
 
     for (const deckName of this.candidateDeckNames) {
       new Setting(contentEl)
@@ -43,28 +45,28 @@ export class EmptyDeckSelectionModal extends Modal {
 
     const footerSetting = new Setting(contentEl)
       .addButton((button) => {
-        button.setButtonText("全选全部").onClick(() => {
+        button.setButtonText(t("modal.emptyDeck.selectAll")).onClick(() => {
           this.selectAllDecks();
         });
       })
       .addButton((button) => {
-        button.setButtonText("全部不选").onClick(() => {
+        button.setButtonText(t("modal.emptyDeck.clearAll")).onClick(() => {
           this.clearSelectedDecks();
         });
       })
       .addButton((button) => {
-        button.setButtonText("反选").onClick(() => {
+        button.setButtonText(t("modal.emptyDeck.invert")).onClick(() => {
           this.invertSelectedDecks();
         });
       })
       .addButton((button) => {
-        button.setButtonText("取消").onClick(() => {
+        button.setButtonText(t("modal.emptyDeck.cancel")).onClick(() => {
           this.finish(null);
         });
       })
       .addButton((button) => {
         this.deleteButton = button;
-        button.setButtonText("删除所选空牌组").setCta().onClick(() => {
+        button.setButtonText(t("modal.emptyDeck.deleteSelected")).setCta().onClick(() => {
           this.finish(Array.from(this.selectedDeckNames));
         });
       });
@@ -142,6 +144,9 @@ export class EmptyDeckSelectionModal extends Modal {
   }
 
   private getSelectionCountText(): string {
-    return `已选 ${this.selectedDeckNames.size} / 共 ${this.candidateDeckNames.length} 个空牌组`;
+    return t("modal.emptyDeck.selectionCount", {
+      selected: this.selectedDeckNames.size,
+      total: this.candidateDeckNames.length,
+    });
   }
 }

@@ -1,0 +1,71 @@
+import * as obsidian from "obsidian";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { PluginUserError, renderPluginFileFailure, renderPluginFileFailuresInline, renderUnknownUserFacingError, renderUserFacingMessage, renderUserMessage } from "./PluginUserError";
+
+describe("PluginUserError", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("renders plugin-owned errors in English", () => {
+    vi.spyOn(obsidian, "getLanguage").mockReturnValue("en");
+
+    const error = new PluginUserError("errors.currentFileOutOfScope", { filePath: "notes/example.md" });
+
+    expect(renderUserMessage(error)).toBe("The current file is outside the plugin scope: notes/example.md");
+  });
+
+  it("renders plugin-owned errors in Simplified Chinese", () => {
+    vi.spyOn(obsidian, "getLanguage").mockReturnValue("zh");
+
+    const error = new PluginUserError("errors.currentFileOutOfScope", { filePath: "notes/example.md" });
+
+    expect(renderUserMessage(error)).toBe("当前文件不在插件作用范围内：notes/example.md");
+  });
+
+  it("renders write-back failure summaries with localized detail lines", () => {
+    vi.spyOn(obsidian, "getLanguage").mockReturnValue("zh");
+
+    const error = new PluginUserError(
+      "errors.writeBack.summary",
+      { fileCount: 2 },
+      {
+        failures: [
+          { filePath: "a.md", key: "errors.writeBack.missingSourceContent" },
+          { filePath: "b.md", rawMessage: "permission denied" },
+        ],
+      },
+    );
+
+    expect(renderUserMessage(error)).toBe([
+      "Markdown 标记写回失败，共 2 个文件。",
+      "a.md: 缺少用于写回标记的扫描源码内容。",
+      "b.md: permission denied",
+    ].join("\n"));
+  });
+
+  it("renders raw and keyed user-facing messages plus inline failure lists", () => {
+    vi.spyOn(obsidian, "getLanguage").mockReturnValue("en");
+
+    expect(renderUserFacingMessage({ key: "notice.failedSavePluginSettings" })).toBe("Failed to save plugin settings.");
+    expect(renderUserFacingMessage({ rawMessage: "raw failure" })).toBe("raw failure");
+    expect(renderPluginFileFailure({ filePath: "a.md", key: "errors.markerRemoval.markdownFileNotFound" })).toBe("Markdown file was not found.");
+    expect(renderPluginFileFailuresInline([
+      { filePath: "a.md", key: "errors.markerRemoval.markdownFileNotFound" },
+      { filePath: "b.md", rawMessage: "permission denied" },
+    ])).toBe("a.md (Markdown file was not found.), b.md (permission denied)");
+  });
+
+  it("falls back to raw error messages for unknown errors", () => {
+    vi.spyOn(obsidian, "getLanguage").mockReturnValue("zh");
+
+    expect(renderUnknownUserFacingError(new Error("socket closed"), "notice.vaultSyncFailed")).toBe("socket closed");
+  });
+
+  it("falls back to a translated default when the value is not an Error", () => {
+    vi.spyOn(obsidian, "getLanguage").mockReturnValue("en");
+
+    expect(renderUnknownUserFacingError(null, "notice.vaultSyncFailed")).toBe("Vault sync failed.");
+  });
+});

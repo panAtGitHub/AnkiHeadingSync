@@ -14,7 +14,9 @@ import { ObsidianVaultGateway } from "@/infrastructure/obsidian/ObsidianVaultGat
 import { DataJsonPluginConfigRepository, type PluginDataSnapshot } from "@/infrastructure/persistence/DataJsonPluginConfigRepository";
 import { DataJsonPluginStateRepository } from "@/infrastructure/persistence/DataJsonPluginStateRepository";
 import { registerCommands } from "@/presentation/commands/registerCommands";
+import { renderUnknownUserFacingError, renderUserMessage } from "@/application/errors/PluginUserError";
 import { EmptyDeckSelectionModal } from "@/presentation/modals/EmptyDeckSelectionModal";
+import { t } from "@/presentation/i18n";
 import { NoticeService } from "@/presentation/notices/NoticeService";
 import { AnkiHeadingSyncSettingTab } from "@/presentation/settings/PluginSettingTab";
 import { CurrentFileOutOfScopeError, ManualSyncService } from "@/application/services/ManualSyncService";
@@ -48,7 +50,7 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
     } catch (error) {
       console.error("Failed to load plugin settings, falling back to defaults.", error);
       this.settings = DEFAULT_SETTINGS;
-      this.noticeService.error("Invalid plugin settings were detected. Default settings were restored in memory.");
+      this.noticeService.error(t("notice.invalidSettingsRestored"));
     }
 
     const manualSyncService = new ManualSyncService(vaultGateway, pluginStateRepository, this.ankiGateway);
@@ -76,7 +78,7 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
       await this.pluginConfigRepository.save(nextSettings);
       this.settings = nextSettings;
     } catch (error) {
-      this.noticeService.error(error instanceof Error ? error.message : "Failed to save plugin settings.");
+      this.noticeService.error(renderUnknownUserFacingError(error, "notice.failedSavePluginSettings"));
     }
   }
 
@@ -100,56 +102,56 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
     const activeFile = this.app.workspace.getActiveFile();
 
     if (!activeFile || activeFile.extension.toLowerCase() !== "md") {
-      this.noticeService.error("No active Markdown file is available for sync.");
+      this.noticeService.error(t("notice.noActiveMarkdownForSync"));
       return;
     }
 
     if (!this.syncCurrentFileUseCase) {
-      this.noticeService.error("Sync use case is not initialized.");
+      this.noticeService.error(t("notice.syncUseCaseNotInitialized"));
       return;
     }
 
     try {
       const result = await this.syncCurrentFileUseCase.execute(activeFile.path, this.settings);
-      this.noticeService.showSyncSummary("当前文件同步完成", result);
+      this.noticeService.showSyncSummary("currentFile", result);
     } catch (error) {
       if (error instanceof CurrentFileOutOfScopeError) {
-        this.noticeService.info("当前文件不在插件作用范围内");
+        this.noticeService.info(renderUserMessage(error));
         return;
       }
 
       console.error("Current file sync failed.", error);
-      this.noticeService.error(error instanceof Error ? error.message : "Current file sync failed.");
+      this.noticeService.error(renderUnknownUserFacingError(error, "notice.currentFileSyncFailed"));
     }
   }
 
   async runSyncVault(): Promise<void> {
     if (!this.syncVaultUseCase) {
-      this.noticeService.error("Sync use case is not initialized.");
+      this.noticeService.error(t("notice.syncUseCaseNotInitialized"));
       return;
     }
 
     try {
       const result = await this.syncVaultUseCase.execute(this.settings);
-      this.noticeService.showSyncSummary("全库同步完成", result);
+      this.noticeService.showSyncSummary("vault", result);
     } catch (error) {
       console.error("Vault sync failed.", error);
-      this.noticeService.error(error instanceof Error ? error.message : "Vault sync failed.");
+      this.noticeService.error(renderUnknownUserFacingError(error, "notice.vaultSyncFailed"));
     }
   }
 
   async runRebuildCardIndex(): Promise<void> {
     if (!this.rebuildCardIndexUseCase) {
-      this.noticeService.error("Sync use case is not initialized.");
+      this.noticeService.error(t("notice.syncUseCaseNotInitialized"));
       return;
     }
 
     try {
       const result = await this.rebuildCardIndexUseCase.execute(this.settings);
-      this.noticeService.showRebuildSummary("卡片索引重建完成", result);
+      this.noticeService.showRebuildSummary(result);
     } catch (error) {
       console.error("Card index rebuild failed.", error);
-      this.noticeService.error(error instanceof Error ? error.message : "Card index rebuild failed.");
+      this.noticeService.error(renderUnknownUserFacingError(error, "notice.rebuildFailed"));
     }
   }
 
@@ -157,19 +159,19 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
     const activeFile = this.app.workspace.getActiveFile();
 
     if (!activeFile || activeFile.extension.toLowerCase() !== "md") {
-      this.noticeService.error("No active Markdown file is available for deck template insertion.");
+      this.noticeService.error(t("notice.noActiveMarkdownForDeckTemplateInsertion"));
       return;
     }
 
     if (!this.vaultGateway) {
-      this.noticeService.error("Vault gateway is not initialized.");
+      this.noticeService.error(t("notice.vaultGatewayNotInitialized"));
       return;
     }
 
     try {
       const sourceFile = await this.vaultGateway.readMarkdownFile(activeFile.path);
       if (!sourceFile) {
-        this.noticeService.error(`Markdown file not found: ${activeFile.path}`);
+        this.noticeService.error(t("notice.markdownFileNotFound", { filePath: activeFile.path }));
         return;
       }
 
@@ -181,15 +183,15 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
       );
 
       if (insertionResult.nextContent === insertionResult.expectedContent) {
-        this.noticeService.info("当前文件中的 deck 模板已是最新，无需重复写入。");
+        this.noticeService.info(t("notice.deckTemplateAlreadyCurrent"));
         return;
       }
 
       await this.vaultGateway.replaceMarkdownFile(activeFile.path, insertionResult.expectedContent, insertionResult.nextContent);
-      this.noticeService.info(`已向当前文件写入 deck 模板：${insertionResult.insertedDeck}`);
+      this.noticeService.info(t("notice.deckTemplateInserted", { deck: insertionResult.insertedDeck }));
     } catch (error) {
       console.error("Deck template insertion failed.", error);
-      this.noticeService.error(error instanceof Error ? error.message : "Deck template insertion failed.");
+      this.noticeService.error(renderUnknownUserFacingError(error, "notice.deckTemplateInsertionFailed"));
     }
   }
 
@@ -197,54 +199,54 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
     const activeFile = this.app.workspace.getActiveFile();
 
     if (!activeFile || activeFile.extension.toLowerCase() !== "md") {
-      this.noticeService.error("No active Markdown file is available for reset.");
+      this.noticeService.error(t("notice.noActiveMarkdownForReset"));
       return;
     }
 
     if (!this.clearCurrentFileSyncedCardsUseCase) {
-      this.noticeService.error("Clear-current-file use case is not initialized.");
+      this.noticeService.error(t("notice.clearCurrentFileUseCaseNotInitialized"));
       return;
     }
 
     try {
       const hasTrackedCards = await this.clearCurrentFileSyncedCardsUseCase.hasTrackedCards(activeFile.path);
       if (!hasTrackedCards) {
-        this.noticeService.info("当前文件没有已同步卡片");
+        this.noticeService.info(t("notice.noTrackedCardsInCurrentFile"));
         return;
       }
 
       const result = await this.clearCurrentFileSyncedCardsUseCase.execute(activeFile.path);
-      this.noticeService.showClearCurrentFileSummary("当前文件已同步卡片清空完成", result);
+      this.noticeService.showClearCurrentFileSummary(result);
     } catch (error) {
       console.error("Clear current file synced cards failed.", error);
-      this.noticeService.error(error instanceof Error ? error.message : "Clear current file synced cards failed.");
+      this.noticeService.error(renderUnknownUserFacingError(error, "notice.clearCurrentFileFailed"));
     }
   }
 
   async runCleanupEmptyDecks(): Promise<void> {
     if (!this.cleanupEmptyDecksUseCase) {
-      this.noticeService.error("Empty-deck cleanup use case is not initialized.");
+      this.noticeService.error(t("notice.cleanupEmptyDecksUseCaseNotInitialized"));
       return;
     }
 
     try {
       const candidateDeckNames = await this.cleanupEmptyDecksUseCase.listCandidates();
       if (candidateDeckNames.length === 0) {
-        this.noticeService.info("未发现可清理的空牌组");
+        this.noticeService.info(t("notice.noEmptyDeckCandidates"));
         return;
       }
 
       const selectedDeckNames = await new EmptyDeckSelectionModal(this.app, candidateDeckNames).openAndGetSelection();
       if (selectedDeckNames === null) {
-        this.noticeService.info("已取消空牌组清理");
+        this.noticeService.info(t("notice.cleanupEmptyDecksCancelled"));
         return;
       }
 
       const result = await this.cleanupEmptyDecksUseCase.execute(selectedDeckNames, candidateDeckNames);
-      this.noticeService.showCleanupEmptyDecksSummary("空牌组清理完成", result);
+      this.noticeService.showCleanupEmptyDecksSummary(result);
     } catch (error) {
       console.error("Cleanup empty decks failed.", error);
-      this.noticeService.error(error instanceof Error ? error.message : "Cleanup empty decks failed.");
+      this.noticeService.error(renderUnknownUserFacingError(error, "notice.cleanupEmptyDecksFailed"));
     }
   }
 }

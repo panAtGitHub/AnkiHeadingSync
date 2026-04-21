@@ -39,7 +39,6 @@ export class FolderDeckMappingService {
         warnings: [{
           filePath,
           code: "deck_invalid_folder_segment",
-          message: "检测到文件夹名或文件名包含 ::，本次已放弃文件夹映射并回退到默认 deck。",
         }],
       };
     }

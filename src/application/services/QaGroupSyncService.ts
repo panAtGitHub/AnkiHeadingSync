@@ -5,7 +5,7 @@ import { buildGroupSrc, type GroupItem, type IndexedGroupCardBlock } from "@/dom
 import type { GroupBlockState, PluginState } from "@/domain/manual-sync/entities/PluginState";
 import { GroupMarkerService, type GroupMarkerWriteRequest } from "@/domain/manual-sync/services/GroupMarkerService";
 import { DeckResolutionService } from "@/domain/manual-sync/services/DeckResolutionService";
-import type { DeckResolutionWarning } from "@/domain/manual-sync/value-objects/DeckResolution";
+import { getDeckResolutionWarningKey, type DeckResolutionWarning } from "@/domain/manual-sync/value-objects/DeckResolution";
 import { hashString } from "@/domain/shared/hash";
 
 import { buildQaGroupNoteFields, formatQaGroupSlot, QA_GROUP_MODEL_NAME, QA_GROUP_SLOT_COUNT } from "./QaGroupModelDefinition";
@@ -101,7 +101,7 @@ export class QaGroupSyncService {
         deckWarnings: block.deckWarnings,
       } as never, settings.defaultDeck, settings.folderDeckMode);
       for (const warning of deckResolution.warnings) {
-        warningMap.set(`${warning.filePath}:${warning.code}:${warning.message}`, warning);
+        warningMap.set(getDeckResolutionWarningKey(warning), warning);
       }
 
       const deck = deckResolution.resolvedDeck.value;

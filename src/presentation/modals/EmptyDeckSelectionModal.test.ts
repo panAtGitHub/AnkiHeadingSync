@@ -2,10 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 const {
   FakeButtonComponent,
+  getLanguageMock,
   FakeModal,
   FakeSetting,
   FakeToggleComponent,
 } = vi.hoisted(() => {
+  const hoistedGetLanguage = vi.fn(() => "en");
+
   class HoistedFakeElement {
     public children: HoistedFakeElement[] = [];
     public classes: string[] = [];
@@ -148,10 +151,12 @@ const {
     FakeModal: HoistedFakeModal,
     FakeSetting: HoistedFakeSetting,
     FakeToggleComponent: HoistedFakeToggleComponent,
+    getLanguageMock: hoistedGetLanguage,
   };
 });
 
 vi.mock("obsidian", () => ({
+  getLanguage: getLanguageMock,
   Modal: FakeModal,
   Setting: FakeSetting,
 }));
@@ -183,24 +188,46 @@ function getFooterCountText(contentEl: FakeContainerElInstance): string | undefi
 }
 
 describe("EmptyDeckSelectionModal", () => {
+  it("renders the modal text in English when Obsidian language is not zh", async () => {
+    getLanguageMock.mockReturnValue("en");
+    const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B", "Deck C"]);
+
+    void modal.openAndGetSelection();
+    const contentEl = getFakeContentEl(modal);
+    const buttons = getFooterButtons(contentEl);
+
+    expect(contentEl.elements.map((element) => element.textContent)).toContain("Clean up empty decks");
+    expect(contentEl.elements.map((element) => element.textContent)).toContain("Select the empty decks to delete. A deck is deleted only if it is still empty at deletion time.");
+    expect(buttons.map((button) => button.text)).toEqual([
+      "Select all",
+      "Clear all",
+      "Invert selection",
+      "Cancel",
+      "Delete selected empty decks",
+    ]);
+    expect(getFooterCountText(contentEl)).toBe("Selected 0 / 3 empty decks");
+  });
+
   it("starts with zero selected count and a disabled delete button", async () => {
+    getLanguageMock.mockReturnValue("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B", "Deck C"]);
 
     void modal.openAndGetSelection();
     const buttons = getFooterButtons(getFakeContentEl(modal));
-    const deleteButton = buttons.find((button) => button.text === "删除所选空牌组");
+    const deleteButton = buttons.find((button) => button.text === "Delete selected empty decks");
 
     expect(deleteButton?.disabled).toBe(true);
-    expect(getFooterCountText(getFakeContentEl(modal))).toBe("已选 0 / 共 3 个空牌组");
+    expect(getFooterCountText(getFakeContentEl(modal))).toBe("Selected 0 / 3 empty decks");
   });
 
   it("selects every candidate when the select-all button is clicked", async () => {
+    getLanguageMock.mockReturnValue("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B", "Deck C"]);
 
     const selectionPromise = modal.openAndGetSelection();
     const buttons = getFooterButtons(getFakeContentEl(modal));
-    const selectAllButton = buttons.find((button) => button.text === "全选全部");
-    const deleteButton = buttons.find((button) => button.text === "删除所选空牌组");
+    const selectAllButton = buttons.find((button) => button.text === "Select all");
+    const deleteButton = buttons.find((button) => button.text === "Delete selected empty decks");
 
     expect(selectAllButton).toBeDefined();
     expect(deleteButton).toBeDefined();
@@ -209,7 +236,7 @@ describe("EmptyDeckSelectionModal", () => {
 
     expect(getDeckToggles(getFakeContentEl(modal)).map((toggle) => toggle.value)).toEqual([true, true, true]);
     expect(deleteButton?.disabled).toBe(false);
-    expect(getFooterCountText(getFakeContentEl(modal))).toBe("已选 3 / 共 3 个空牌组");
+    expect(getFooterCountText(getFakeContentEl(modal))).toBe("Selected 3 / 3 empty decks");
 
     await deleteButton?.click();
 
@@ -217,58 +244,62 @@ describe("EmptyDeckSelectionModal", () => {
   });
 
   it("clears every candidate when the clear-all button is clicked", async () => {
+    getLanguageMock.mockReturnValue("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B", "Deck C"]);
 
     void modal.openAndGetSelection();
     const buttons = getFooterButtons(getFakeContentEl(modal));
-    const selectAllButton = buttons.find((button) => button.text === "全选全部");
-    const clearAllButton = buttons.find((button) => button.text === "全部不选");
-    const deleteButton = buttons.find((button) => button.text === "删除所选空牌组");
+    const selectAllButton = buttons.find((button) => button.text === "Select all");
+    const clearAllButton = buttons.find((button) => button.text === "Clear all");
+    const deleteButton = buttons.find((button) => button.text === "Delete selected empty decks");
 
     await selectAllButton?.click();
     await clearAllButton?.click();
 
     expect(getDeckToggles(getFakeContentEl(modal)).map((toggle) => toggle.value)).toEqual([false, false, false]);
     expect(deleteButton?.disabled).toBe(true);
-    expect(getFooterCountText(getFakeContentEl(modal))).toBe("已选 0 / 共 3 个空牌组");
+    expect(getFooterCountText(getFakeContentEl(modal))).toBe("Selected 0 / 3 empty decks");
   });
 
   it("inverts selected candidates when the invert button is clicked", async () => {
+    getLanguageMock.mockReturnValue("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B", "Deck C"]);
 
     void modal.openAndGetSelection();
     const contentEl = getFakeContentEl(modal);
     const toggles = getDeckToggles(contentEl);
     const buttons = getFooterButtons(contentEl);
-    const invertButton = buttons.find((button) => button.text === "反选");
-    const deleteButton = buttons.find((button) => button.text === "删除所选空牌组");
+    const invertButton = buttons.find((button) => button.text === "Invert selection");
+    const deleteButton = buttons.find((button) => button.text === "Delete selected empty decks");
 
     await toggles[0]?.triggerChange(true);
     await invertButton?.click();
 
     expect(getDeckToggles(contentEl).map((toggle) => toggle.value)).toEqual([false, true, true]);
     expect(deleteButton?.disabled).toBe(false);
-    expect(getFooterCountText(contentEl)).toBe("已选 2 / 共 3 个空牌组");
+    expect(getFooterCountText(contentEl)).toBe("Selected 2 / 3 empty decks");
   });
 
   it("enables and disables the delete button as manual selection changes", async () => {
+    getLanguageMock.mockReturnValue("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A"]);
 
     void modal.openAndGetSelection();
     const contentEl = getFakeContentEl(modal);
     const toggle = getDeckToggles(contentEl)[0];
-    const deleteButton = getFooterButtons(contentEl).find((button) => button.text === "删除所选空牌组");
+    const deleteButton = getFooterButtons(contentEl).find((button) => button.text === "Delete selected empty decks");
 
     await toggle?.triggerChange(true);
     expect(deleteButton?.disabled).toBe(false);
-    expect(getFooterCountText(contentEl)).toBe("已选 1 / 共 1 个空牌组");
+    expect(getFooterCountText(contentEl)).toBe("Selected 1 / 1 empty decks");
 
     await toggle?.triggerChange(false);
     expect(deleteButton?.disabled).toBe(true);
-    expect(getFooterCountText(contentEl)).toBe("已选 0 / 共 1 个空牌组");
+    expect(getFooterCountText(contentEl)).toBe("Selected 0 / 1 empty decks");
   });
 
   it("returns null when cancel is clicked", async () => {
+    getLanguageMock.mockReturnValue("zh");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B"]);
 
     const selectionPromise = modal.openAndGetSelection();
@@ -277,5 +308,21 @@ describe("EmptyDeckSelectionModal", () => {
     await cancelButton?.click();
 
     await expect(selectionPromise).resolves.toBeNull();
+  });
+
+  it("renders selection text in Simplified Chinese when Obsidian language is zh", async () => {
+    getLanguageMock.mockReturnValue("zh");
+    const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B"]);
+
+    void modal.openAndGetSelection();
+    const contentEl = getFakeContentEl(modal);
+    const toggle = getDeckToggles(contentEl)[0];
+
+    expect(contentEl.elements.map((element) => element.textContent)).toContain("清理空牌组");
+    expect(contentEl.elements.map((element) => element.textContent)).toContain("勾选要删除的空牌组。只有删除时仍为空的牌组会被真正删除。");
+    expect(getFooterCountText(contentEl)).toBe("已选 0 / 共 2 个空牌组");
+
+    await toggle?.triggerChange(true);
+    expect(getFooterCountText(contentEl)).toBe("已选 1 / 共 2 个空牌组");
   });
 });

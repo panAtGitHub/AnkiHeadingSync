@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 
+import { PluginUserError } from "@/application/errors/PluginUserError";
+
 import { DEFAULT_SETTINGS, validatePluginSettings } from "./PluginSettings";
+
+function expectPluginUserError(action: () => void, key: string): void {
+  try {
+    action();
+  } catch (error) {
+    expect(error).toBeInstanceOf(PluginUserError);
+    expect((error as PluginUserError).userMessage.key).toBe(key);
+    return;
+  }
+
+  throw new Error(`Expected PluginUserError for key: ${key}`);
+}
 
 describe("PluginSettings", () => {
   it("accepts the default V1 settings", () => {
@@ -8,22 +22,22 @@ describe("PluginSettings", () => {
   });
 
   it("rejects equal QA and Cloze heading levels", () => {
-    expect(() =>
+    expectPluginUserError(() => {
       validatePluginSettings({
         ...DEFAULT_SETTINGS,
         qaHeadingLevel: 4,
         clozeHeadingLevel: 4,
-      }),
-    ).toThrow("QA and Cloze heading levels must be different.");
+      });
+    }, "errors.settings.headingLevelsDifferent");
   });
 
   it("rejects invalid scope modes", () => {
-    expect(() =>
+    expectPluginUserError(() => {
       validatePluginSettings({
         ...DEFAULT_SETTINGS,
         scopeMode: "invalid" as never,
-      }),
-    ).toThrow("Scope mode must be one of all, include, or exclude.");
+      });
+    }, "errors.settings.scopeModeInvalid");
   });
 
   it("includes module 5 defaults", () => {
@@ -36,34 +50,34 @@ describe("PluginSettings", () => {
   });
 
   it("rejects invalid QA Group markers and semantic marker collisions", () => {
-    expect(() =>
+    expectPluginUserError(() => {
       validatePluginSettings({
         ...DEFAULT_SETTINGS,
         qaGroupMarker: "anki-list",
-      }),
-    ).toThrow("QA Group marker must be a hashtag-style token like #anki-list.");
+      });
+    }, "errors.settings.qaGroupMarkerInvalid");
 
-    expect(() =>
+    expectPluginUserError(() => {
       validatePluginSettings({
         ...DEFAULT_SETTINGS,
         qaGroupMarker: "#anki-list-qa",
-      }),
-    ).toThrow("QA Group marker must be different from Semantic QA marker.");
+      });
+    }, "errors.settings.qaGroupMarkerConflict");
   });
 
   it("rejects invalid module 5 enum values", () => {
-    expect(() =>
+    expectPluginUserError(() => {
       validatePluginSettings({
         ...DEFAULT_SETTINGS,
         fileDeckInsertLocation: "middle" as never,
-      }),
-    ).toThrow("File deck insert location must be yaml or body.");
+      });
+    }, "errors.settings.fileDeckInsertLocationInvalid");
 
-    expect(() =>
+    expectPluginUserError(() => {
       validatePluginSettings({
         ...DEFAULT_SETTINGS,
         folderDeckMode: "tree" as never,
-      }),
-    ).toThrow("Folder deck mode must be off, folder, or folder-and-file.");
+      });
+    }, "errors.settings.folderDeckModeInvalid");
   });
 });

@@ -36,7 +36,9 @@ export class DeckExtractionService {
       warnings.push({
         filePath: sourceFile.path,
         code: "deck_conflict_yaml_body",
-        message: "检测到同一文件同时在 YAML 和正文中声明了不同的 TARGET DECK，本次已按 YAML 值同步，请清理冲突配置。",
+        params: {
+          marker,
+        },
       });
 
       return {
@@ -131,7 +133,9 @@ export class DeckExtractionService {
       warnings.push({
         filePath,
         code: "deck_multiple_body_declarations",
-        message: "检测到同一文件存在多个 TARGET DECK 声明，本次只使用第一个正文 deck 声明。",
+        params: {
+          marker,
+        },
       });
     }
 

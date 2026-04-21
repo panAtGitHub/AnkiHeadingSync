@@ -1,5 +1,6 @@
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import { validatePluginSettings } from "@/application/config/PluginSettings";
+import { PluginUserError, type PluginFileFailure } from "@/application/errors/PluginUserError";
 import type { AnkiGateway, AnkiGroupGateway } from "@/application/ports/AnkiGateway";
 import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
 import type { PluginStateRepository } from "@/application/ports/PluginStateRepository";
@@ -22,9 +23,9 @@ import { getDeckResolutionWarningKey } from "@/domain/manual-sync/value-objects/
 
 import type { ManualSyncResult } from "@/application/use-cases/manualSyncTypes";
 
-export class CurrentFileOutOfScopeError extends Error {
+export class CurrentFileOutOfScopeError extends PluginUserError {
   constructor(filePath: string) {
-    super(`当前文件不在插件作用范围内: ${filePath}`);
+    super("errors.currentFileOutOfScope", { filePath });
     this.name = "CurrentFileOutOfScopeError";
   }
 }
@@ -118,7 +119,7 @@ export class ManualSyncService {
     await this.pluginStateRepository.save(nextState);
 
     if (writeBackResult.failureFiles.length > 0) {
-      throw new Error(this.createWriteBackFailureMessage(writeBackResult.failureFiles));
+      throw this.createWriteBackFailureError(writeBackResult.failureFiles);
     }
 
     return {
@@ -188,7 +189,7 @@ export class ManualSyncService {
     await this.pluginStateRepository.save(nextState);
 
     if (writeBackResult.failureFiles.length > 0) {
-      throw new Error(this.createWriteBackFailureMessage(writeBackResult.failureFiles));
+      throw this.createWriteBackFailureError(writeBackResult.failureFiles);
     }
 
     return {
@@ -446,8 +447,12 @@ export class ManualSyncService {
     }
   }
 
-  private createWriteBackFailureMessage(failures: Array<{ filePath: string; message: string }>): string {
-    return `Markdown marker write-back failed for ${failures.length} file(s).\n${failures.map((failure) => `${failure.filePath}: ${failure.message}`).join("\n")}`;
+  private createWriteBackFailureError(failures: PluginFileFailure[]): PluginUserError {
+    return new PluginUserError("errors.writeBack.summary", {
+      fileCount: failures.length,
+    }, {
+      failures,
+    });
   }
 }
 

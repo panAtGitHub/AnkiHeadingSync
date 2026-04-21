@@ -8,9 +8,12 @@ const {
   FakeButtonComponent,
   FakeDropdownComponent,
   FakeElement,
+  getLanguageMock,
   FakePluginSettingTab,
   FakeSetting,
 } = vi.hoisted(() => {
+  const hoistedGetLanguage = vi.fn(() => "en");
+
   class HoistedFakeElement {
     public readonly children: HoistedFakeElement[] = [];
     public readonly dataset: Record<string, string> = {};
@@ -242,12 +245,14 @@ const {
     FakeButtonComponent: HoistedFakeButtonComponent,
     FakeDropdownComponent: HoistedFakeDropdownComponent,
     FakeElement: HoistedFakeElement,
+    getLanguageMock: hoistedGetLanguage,
     FakePluginSettingTab: HoistedFakePluginSettingTab,
     FakeSetting: HoistedFakeSetting,
   };
 });
 
 vi.mock("obsidian", () => ({
+  getLanguage: getLanguageMock,
   PluginSettingTab: FakePluginSettingTab,
   Setting: FakeSetting,
 }));
@@ -462,6 +467,57 @@ async function flushAsync(): Promise<void> {
 describe("AnkiHeadingSyncSettingTab", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getLanguageMock.mockReset();
+    getLanguageMock.mockReturnValue("en");
+  });
+
+  it("renders key settings labels, descriptions, and aria text in English", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = {
+      ...plugin.settings,
+      scopeMode: "include",
+    };
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+    const container = tab.containerEl as unknown as FakeContainerElInstance;
+
+    tab.display();
+    expect(container.textNodes).toContain("Anki Heading Sync");
+    expect(findSetting(container, "AnkiConnect URL").desc).toBe("Default is http://127.0.0.1:8765");
+    expect(findSetting(container, "Run scope").desc).toBe("Only process Markdown files in the checked folders below");
+
+    await flushAsync();
+    tab.display();
+
+    const toggle = getFolderToggle(container, "notes");
+    expect((toggle as unknown as { [key: string]: string })["aria-label"]).toBe("Expand notes");
+
+    await toggle.trigger("click");
+    expect((getFolderToggle(container, "notes") as unknown as { [key: string]: string })["aria-label"]).toBe("Collapse notes");
+  });
+
+  it("renders key settings labels, descriptions, and aria text in Simplified Chinese", async () => {
+    getLanguageMock.mockReturnValue("zh");
+    const plugin = new FakePlugin();
+    plugin.settings = {
+      ...plugin.settings,
+      scopeMode: "include",
+    };
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+    const container = tab.containerEl as unknown as FakeContainerElInstance;
+
+    tab.display();
+    expect(findSetting(container, "QA 标题层级").desc).toBe("默认是 H4");
+    expect(findSetting(container, "运行范围").desc).toBe("仅处理下方勾选文件夹中的 Markdown 文件");
+    expect(findSetting(container, "默认牌组").desc).toBe("优先级最低：当文件级 deck 与文件夹映射都未命中时使用。");
+
+    await flushAsync();
+    tab.display();
+
+    const toggle = getFolderToggle(container, "notes");
+    expect((toggle as unknown as { [key: string]: string })["aria-label"]).toBe("展开 notes");
+
+    await toggle.trigger("click");
+    expect((getFolderToggle(container, "notes") as unknown as { [key: string]: string })["aria-label"]).toBe("收起 notes");
   });
 
   it("refreshes note type list from Anki into the dropdowns", async () => {
@@ -631,7 +687,7 @@ describe("AnkiHeadingSyncSettingTab", () => {
 
     expect(querySetting(container, "Include folders")).toBeUndefined();
     expect(querySetting(container, "Exclude folders")).toBeUndefined();
-    expect(findSetting(container, "运行范围")).toBeDefined();
+    expect(findSetting(container, "Run scope")).toBeDefined();
     expect(queryCheckboxByPath(container, "notes")).toBeUndefined();
   });
 
@@ -813,7 +869,7 @@ describe("AnkiHeadingSyncSettingTab", () => {
 
     tab.display();
     await flushAsync();
-    await getDropdown(findSetting(container, "运行范围")).triggerChange("include");
+    await getDropdown(findSetting(container, "Run scope")).triggerChange("include");
     await flushAsync();
 
     const parentCheckbox = getCheckboxByPath(container, "notes");
@@ -823,7 +879,7 @@ describe("AnkiHeadingSyncSettingTab", () => {
 
     expect(plugin.settings.includeFolders).toEqual(["notes"]);
 
-    await getDropdown(findSetting(container, "运行范围")).triggerChange("all");
+    await getDropdown(findSetting(container, "Run scope")).triggerChange("all");
     await flushAsync();
 
     expect(queryCheckboxByPath(container, "notes")).toBeUndefined();
@@ -836,19 +892,19 @@ describe("AnkiHeadingSyncSettingTab", () => {
 
     tab.display();
 
-    expect(container.textNodes).toContain("默认牌组");
-    expect(container.textNodes).toContain("文件级自定义牌组");
-    expect(container.textNodes).toContain("高级：文件夹映射");
-    expect(container.textNodes).toContain("最终优先级说明");
+    expect(container.textNodes).toContain("Default deck");
+    expect(container.textNodes).toContain("File-level custom deck");
+    expect(container.textNodes).toContain("Advanced: folder mapping");
+    expect(container.textNodes).toContain("Final priority");
 
-    await getToggle(findSetting(container, "开启文件级自定义牌组")).triggerChange(true);
+    await getToggle(findSetting(container, "Enable file-level custom deck")).triggerChange(true);
     await flushAsync();
 
-    await getText(findSetting(container, "牌组识别名")).triggerChange("MY DECK");
-    await getText(findSetting(container, "默认牌组模板")).triggerChange("vault::filename");
-    await getDropdown(findSetting(container, "模板插入位置")).triggerChange("yaml");
-    await getDropdown(findSetting(container, "文件夹映射模式")).triggerChange("folder-and-file");
-    await getText(findSetting(container, "默认牌组")).triggerChange("Deck::Default");
+    await getText(findSetting(container, "Deck marker name")).triggerChange("MY DECK");
+    await getText(findSetting(container, "Default deck template")).triggerChange("vault::filename");
+    await getDropdown(findSetting(container, "Template insert location")).triggerChange("yaml");
+    await getDropdown(findSetting(container, "Folder mapping mode")).triggerChange("folder-and-file");
+    await getText(findSetting(container, "Default deck")).triggerChange("Deck::Default");
     await flushAsync();
 
     expect(plugin.settings.fileDeckEnabled).toBe(true);
@@ -860,12 +916,12 @@ describe("AnkiHeadingSyncSettingTab", () => {
 
     tab.display();
 
-    expect(getToggle(findSetting(container, "开启文件级自定义牌组")).value).toBe(true);
-    expect(getText(findSetting(container, "牌组识别名")).value).toBe("MY DECK");
-    expect(getText(findSetting(container, "默认牌组模板")).value).toBe("vault::filename");
-    expect(getDropdown(findSetting(container, "模板插入位置")).value).toBe("yaml");
-    expect(getDropdown(findSetting(container, "文件夹映射模式")).value).toBe("folder-and-file");
-    expect(getText(findSetting(container, "默认牌组")).value).toBe("Deck::Default");
+    expect(getToggle(findSetting(container, "Enable file-level custom deck")).value).toBe(true);
+    expect(getText(findSetting(container, "Deck marker name")).value).toBe("MY DECK");
+    expect(getText(findSetting(container, "Default deck template")).value).toBe("vault::filename");
+    expect(getDropdown(findSetting(container, "Template insert location")).value).toBe("yaml");
+    expect(getDropdown(findSetting(container, "Folder mapping mode")).value).toBe("folder-and-file");
+    expect(getText(findSetting(container, "Default deck")).value).toBe("Deck::Default");
   });
 
   it("exposes the deck template insertion action when file deck mode is enabled", async () => {
@@ -878,7 +934,7 @@ describe("AnkiHeadingSyncSettingTab", () => {
     const container = tab.containerEl as unknown as FakeContainerElInstance;
 
     tab.display();
-    await getButton(findSetting(container, "向当前文件插入 deck 模板")).click();
+    await getButton(findSetting(container, "Insert deck template into the current file")).click();
 
     expect(plugin.insertDeckTemplateCalls).toBe(1);
   });

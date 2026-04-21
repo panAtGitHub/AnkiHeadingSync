@@ -1,5 +1,6 @@
 import { MarkdownWriteConflictError } from "@/application/ports/VaultGateway";
 import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
+import { PluginUserError, toPluginFileFailure, type PluginFileFailure } from "@/application/errors/PluginUserError";
 import type { IndexedFile } from "@/domain/manual-sync/entities/IndexedFile";
 import type { PendingWriteBackState } from "@/domain/manual-sync/entities/PluginState";
 import type { PlannedCard } from "@/domain/manual-sync/value-objects/ManualSyncPlan";
@@ -9,7 +10,7 @@ import { GroupMarkerService, type GroupMarkerWriteRequest, serializeGroupMarker 
 export interface MarkdownWriteBackResult {
   writtenSyncKeys: string[];
   conflictFiles: string[];
-  failureFiles: Array<{ filePath: string; message: string }>;
+  failureFiles: PluginFileFailure[];
   pendingEntries: PendingWriteBackState[];
 }
 
@@ -28,7 +29,7 @@ export class MarkdownWriteBackService {
     const plannedByFile = new Map<string, Array<{ kind: "card"; plannedCard: PlannedCard } | { kind: "group"; write: GroupMarkerWriteRequest }>>();
     const writtenSyncKeys: string[] = [];
     const conflictFiles: string[] = [];
-    const failureFiles: Array<{ filePath: string; message: string }> = [];
+    const failureFiles: PluginFileFailure[] = [];
     const pendingEntries: PendingWriteBackState[] = [];
 
     for (const plannedCard of plannedCards) {
@@ -57,7 +58,7 @@ export class MarkdownWriteBackService {
 
       if (!sourceContent || !indexedFile) {
         pendingEntries.push(...fileWrites.map((fileWrite) => this.createPendingEntry(filePath, fileWrite, indexedFile?.fileHash ?? "")));
-        failureFiles.push({ filePath, message: `Missing scanned source content for ${filePath}.` });
+        failureFiles.push({ filePath, key: "errors.writeBack.missingSourceContent" });
         continue;
       }
 
@@ -95,10 +96,7 @@ export class MarkdownWriteBackService {
           continue;
         }
 
-        failureFiles.push({
-          filePath,
-          message: error instanceof Error ? error.message : String(error),
-        });
+        failureFiles.push(toPluginFileFailure(filePath, error));
       }
     }
 
@@ -168,7 +166,9 @@ function getRawBlockHashFromSyncKey(syncKey: string): string {
 
 function requireNoteId(plannedCard: PlannedCard): number {
   if (plannedCard.noteId === undefined) {
-    throw new Error(`Cannot write marker without noteId for block ${plannedCard.card.filePath}:${plannedCard.card.blockStartLine}.`);
+    throw new PluginUserError("errors.writeBack.noteIdMissing", {
+      blockStartLine: plannedCard.card.blockStartLine,
+    });
   }
 
   return plannedCard.noteId;

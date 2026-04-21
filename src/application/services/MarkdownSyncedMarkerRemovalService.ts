@@ -1,5 +1,6 @@
 import { MarkdownWriteConflictError } from "@/application/ports/VaultGateway";
 import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
+import { toPluginFileFailure, type PluginFileFailure } from "@/application/errors/PluginUserError";
 import { CardMarkerService } from "@/domain/manual-sync/services/CardMarkerService";
 import { GroupMarkerService } from "@/domain/manual-sync/services/GroupMarkerService";
 
@@ -18,7 +19,7 @@ export interface MarkdownSyncedMarkerRemovalResult {
   removedGroupMarkers: number;
   removedMarkers: number;
   conflictFiles: string[];
-  failureFiles: Array<{ filePath: string; message: string }>;
+  failureFiles: PluginFileFailure[];
 }
 
 export class MarkdownSyncedMarkerRemovalService {
@@ -41,7 +42,7 @@ export class MarkdownSyncedMarkerRemovalService {
     if (!sourceFile) {
       return {
         ...createEmptyRemovalResult(),
-        failureFiles: [{ filePath, message: `Markdown file not found: ${filePath}` }],
+        failureFiles: [{ filePath, key: "errors.markerRemoval.markdownFileNotFound" }],
       };
     }
 
@@ -75,10 +76,7 @@ export class MarkdownSyncedMarkerRemovalService {
 
       return {
         ...createEmptyRemovalResult(),
-        failureFiles: [{
-          filePath,
-          message: error instanceof Error ? error.message : String(error),
-        }],
+        failureFiles: [toPluginFileFailure(filePath, error)],
       };
     }
   }

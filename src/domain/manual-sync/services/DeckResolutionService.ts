@@ -44,7 +44,6 @@ export class DeckResolutionService {
         {
           filePath: card.filePath,
           code: "deck_fallback_default",
-          message: "该文件没有显式 deck，且所在位置无法生成文件夹牌组，已回退到默认 deck。",
         },
       ],
     };

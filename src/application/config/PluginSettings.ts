@@ -1,4 +1,5 @@
 import type { NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
+import { PluginUserError } from "@/application/errors/PluginUserError";
 
 export type ScopeMode = "all" | "include" | "exclude";
 export type FileDeckInsertLocation = "yaml" | "body";
@@ -65,116 +66,116 @@ export function validatePluginSettings(settings: PluginSettings): void {
 
   for (const level of headingLevels) {
     if (!Number.isInteger(level) || level < 1 || level > 6) {
-      throw new Error("Heading levels must be integers between 1 and 6.");
+      throw new PluginUserError("errors.settings.headingLevelsRange");
     }
   }
 
   if (settings.qaHeadingLevel === settings.clozeHeadingLevel) {
-    throw new Error("QA and Cloze heading levels must be different.");
+    throw new PluginUserError("errors.settings.headingLevelsDifferent");
   }
 
   if (!settings.qaNoteType.trim()) {
-    throw new Error("QA note type is required.");
+    throw new PluginUserError("errors.settings.qaNoteTypeRequired");
   }
 
   if (!settings.qaGroupMarker.trim()) {
-    throw new Error("QA Group marker is required.");
+    throw new PluginUserError("errors.settings.qaGroupMarkerRequired");
   }
 
   if (!isValidHashtagMarker(settings.qaGroupMarker.trim())) {
-    throw new Error("QA Group marker must be a hashtag-style token like #anki-list.");
+    throw new PluginUserError("errors.settings.qaGroupMarkerInvalid");
   }
 
   if (!settings.clozeNoteType.trim()) {
-    throw new Error("Cloze note type is required.");
+    throw new PluginUserError("errors.settings.clozeNoteTypeRequired");
   }
 
   if (!settings.semanticQaMarker.trim()) {
-    throw new Error("Semantic QA marker is required.");
+    throw new PluginUserError("errors.settings.semanticQaMarkerRequired");
   }
 
   if (!isValidSemanticQaMarker(settings.semanticQaMarker.trim())) {
-    throw new Error("Semantic QA marker must be a hashtag-style token like #anki-list-qa.");
+    throw new PluginUserError("errors.settings.semanticQaMarkerInvalid");
   }
 
   if (settings.qaGroupMarker.trim() === settings.semanticQaMarker.trim()) {
-    throw new Error("QA Group marker must be different from Semantic QA marker.");
+    throw new PluginUserError("errors.settings.qaGroupMarkerConflict");
   }
 
   if (!settings.semanticQaNoteType.trim()) {
-    throw new Error("Semantic QA note type is required.");
+    throw new PluginUserError("errors.settings.semanticQaNoteTypeRequired");
   }
 
   validateNoteFieldMappings(settings.noteFieldMappings);
 
   if (!settings.defaultDeck.trim()) {
-    throw new Error("Default deck is required.");
+    throw new PluginUserError("errors.settings.defaultDeckRequired");
   }
 
   if (typeof settings.fileDeckEnabled !== "boolean") {
-    throw new Error("File deck enabled must be a boolean.");
+    throw new PluginUserError("errors.settings.fileDeckEnabledBoolean");
   }
 
   if (typeof settings.fileDeckMarker !== "string") {
-    throw new Error("File deck marker must be a string.");
+    throw new PluginUserError("errors.settings.fileDeckMarkerString");
   }
 
   if (typeof settings.fileDeckTemplate !== "string") {
-    throw new Error("File deck template must be a string.");
+    throw new PluginUserError("errors.settings.fileDeckTemplateString");
   }
 
   if (settings.fileDeckInsertLocation !== "yaml" && settings.fileDeckInsertLocation !== "body") {
-    throw new Error("File deck insert location must be yaml or body.");
+    throw new PluginUserError("errors.settings.fileDeckInsertLocationInvalid");
   }
 
   if (settings.folderDeckMode !== "off" && settings.folderDeckMode !== "folder" && settings.folderDeckMode !== "folder-and-file") {
-    throw new Error("Folder deck mode must be off, folder, or folder-and-file.");
+    throw new PluginUserError("errors.settings.folderDeckModeInvalid");
   }
 
   if (settings.scopeMode !== "all" && settings.scopeMode !== "include" && settings.scopeMode !== "exclude") {
-    throw new Error("Scope mode must be one of all, include, or exclude.");
+    throw new PluginUserError("errors.settings.scopeModeInvalid");
   }
 
-  validateFolderList(settings.includeFolders, "Include folders");
-  validateFolderList(settings.excludeFolders, "Exclude folders");
+  validateFolderList(settings.includeFolders, "include");
+  validateFolderList(settings.excludeFolders, "exclude");
 
   if (!settings.ankiConnectUrl.trim()) {
-    throw new Error("AnkiConnect URL is required.");
+    throw new PluginUserError("errors.settings.ankiConnectUrlRequired");
   }
 }
 
-function validateFolderList(folderList: string[], label: string): void {
+function validateFolderList(folderList: string[], label: "include" | "exclude"): void {
   if (!Array.isArray(folderList)) {
-    throw new Error(`${label} must be an array.`);
+    throw new PluginUserError(label === "include" ? "errors.settings.includeFoldersArray" : "errors.settings.excludeFoldersArray");
   }
 
   for (const folder of folderList) {
     if (typeof folder !== "string") {
-      throw new Error(`${label} must only contain strings.`);
+      throw new PluginUserError(label === "include" ? "errors.settings.includeFoldersStrings" : "errors.settings.excludeFoldersStrings");
     }
   }
 }
 
 function validateNoteFieldMappings(noteFieldMappings: Record<string, NoteModelFieldMapping>): void {
   if (!noteFieldMappings || typeof noteFieldMappings !== "object" || Array.isArray(noteFieldMappings)) {
-    throw new Error("Note field mappings must be an object.");
+    throw new PluginUserError("errors.settings.noteFieldMappingsObject");
   }
 
   for (const mapping of Object.values(noteFieldMappings)) {
     if (mapping.cardType !== "basic" && mapping.cardType !== "cloze" && mapping.cardType !== "semantic-qa") {
-      throw new Error("Note field mappings must use a supported card type.");
+      throw new PluginUserError("errors.settings.noteFieldMappingsCardType");
     }
 
     if (!mapping.modelName.trim()) {
-      throw new Error("Note field mappings must include a model name.");
+      throw new PluginUserError("errors.settings.noteFieldMappingsModelName");
     }
 
     if (!Array.isArray(mapping.loadedFieldNames)) {
-      throw new Error("Note field mappings must include loaded field names.");
+      throw new PluginUserError("errors.settings.noteFieldMappingsLoadedFieldNames");
     }
 
     if (!Number.isFinite(mapping.loadedAt)) {
-      throw new Error("Note field mappings must include a loaded timestamp.");
+      throw new PluginUserError("errors.settings.noteFieldMappingsLoadedAt");
     }
   }
 }

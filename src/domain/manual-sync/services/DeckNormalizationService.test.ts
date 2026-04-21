@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { PluginUserError } from "@/application/errors/PluginUserError";
+
 import { DeckNormalizationService } from "./DeckNormalizationService";
 
 describe("DeckNormalizationService", () => {
@@ -14,6 +16,14 @@ describe("DeckNormalizationService", () => {
   it("rejects empty final deck values", () => {
     const service = new DeckNormalizationService();
 
-    expect(() => service.normalize(" / :: ")).toThrow("Deck 不能为空");
+    try {
+      service.normalize(" / :: ");
+    } catch (error) {
+      expect(error).toBeInstanceOf(PluginUserError);
+      expect((error as PluginUserError).userMessage.key).toBe("errors.deck.emptyName");
+      return;
+    }
+
+    throw new Error("Expected PluginUserError for empty deck normalization");
   });
 });

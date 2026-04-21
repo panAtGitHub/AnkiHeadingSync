@@ -1,5 +1,6 @@
 import { createNoteFieldMappingKey, type NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
+import { PluginUserError } from "@/application/errors/PluginUserError";
 import { isBasicLikeCardType, type CardType, type RenderedFields } from "@/domain/card/entities/RenderedFields";
 
 interface RenderedCardInput {
@@ -58,35 +59,45 @@ export class NoteFieldMappingService {
 
     if (isBasicLikeCardType(mapping.cardType)) {
       if (!mapping.titleField || !mapping.bodyField) {
-        throw new Error(
-          `Saved field mapping for ${describeBasicLikeCardType(mapping.cardType)} note type "${mapping.modelName}" is incomplete. Open plugin settings and save both title and body fields.`,
-        );
+        throw new PluginUserError(getIncompleteSavedMappingKey(mapping.cardType), {
+          modelName: mapping.modelName,
+        });
       }
 
       if (mapping.titleField === mapping.bodyField) {
-        throw new Error(`${capitalizeFirstLetter(describeBasicLikeCardType(mapping.cardType))} note type "${mapping.modelName}" must use different title and body fields.`);
+        throw new PluginUserError(getTitleBodyMustDifferKey(mapping.cardType), {
+          modelName: mapping.modelName,
+        });
       }
 
       const missingFields = [mapping.titleField, mapping.bodyField].filter((fieldName) => !availableFields.has(fieldName));
       if (missingFields.length > 0) {
-        throw new Error(this.createStaleMappingError(mapping.modelName, missingFields));
+        throw new PluginUserError("errors.noteFieldMapping.stale", {
+          modelName: mapping.modelName,
+          fields: missingFields.map((fieldName) => `"${fieldName}"`),
+        });
       }
 
       return;
     }
 
     if (!mapping.mainField) {
-      throw new Error(
-        `Saved field mapping for cloze note type "${mapping.modelName}" is incomplete. Open plugin settings and save the main field.`,
-      );
+      throw new PluginUserError("errors.noteFieldMapping.incompleteSavedMapping.cloze", {
+        modelName: mapping.modelName,
+      });
     }
 
     if (!noteModelDetails.isCloze) {
-      throw new Error(`Cloze note type "${mapping.modelName}" is not cloze-compatible in Anki.`);
+      throw new PluginUserError("errors.noteFieldMapping.clozeIncompatible", {
+        modelName: mapping.modelName,
+      });
     }
 
     if (!availableFields.has(mapping.mainField)) {
-      throw new Error(this.createStaleMappingError(mapping.modelName, [mapping.mainField]));
+      throw new PluginUserError("errors.noteFieldMapping.stale", {
+        modelName: mapping.modelName,
+        fields: [`"${mapping.mainField}"`],
+      });
     }
   }
 
@@ -95,7 +106,9 @@ export class NoteFieldMappingService {
     const bodyFieldName = mapping.bodyField;
 
     if (!titleFieldName || !bodyFieldName) {
-      throw new Error(`Saved field mapping for basic note type "${card.noteModel}" is incomplete.`);
+      throw new PluginUserError(getIncompleteSavedMappingKey(card.type), {
+        modelName: card.noteModel,
+      });
     }
 
     return {
@@ -106,11 +119,15 @@ export class NoteFieldMappingService {
 
   private mapCloze(card: RenderedCardInput, noteModelDetails: NoteModelDetails, mapping: NoteModelFieldMapping): Record<string, string> {
     if (!noteModelDetails.isCloze) {
-      throw new Error(`Cloze note type "${card.noteModel}" is not cloze-compatible in Anki.`);
+      throw new PluginUserError("errors.noteFieldMapping.clozeIncompatible", {
+        modelName: card.noteModel,
+      });
     }
 
     if (!mapping.mainField) {
-      throw new Error(`Saved field mapping for cloze note type "${card.noteModel}" is incomplete.`);
+      throw new PluginUserError("errors.noteFieldMapping.incompleteSavedMapping.cloze", {
+        modelName: card.noteModel,
+      });
     }
 
     return {
@@ -125,34 +142,39 @@ export class NoteFieldMappingService {
     const mapping = noteFieldMappings[createNoteFieldMappingKey(card.type, card.noteModel)];
 
     if (!mapping) {
-      throw new Error(
-        `No saved field mapping found for ${describeCardType(card.type)} note type "${card.noteModel}". Open plugin settings and read fields from Anki first.`,
-      );
+      throw new PluginUserError(getMissingSavedMappingKey(card.type), {
+        modelName: card.noteModel,
+      });
     }
 
     return mapping;
   }
-
-  private createStaleMappingError(modelName: string, missingFields: string[]): string {
-    const quotedMissingFields = missingFields.map((fieldName) => `"${fieldName}"`).join(", ");
-    return `Saved field mapping for note type "${modelName}" is stale because these fields no longer exist in Anki: ${quotedMissingFields}. Open plugin settings and read fields from Anki again.`;
-  }
 }
 
-function describeCardType(cardType: CardType): string {
+function getMissingSavedMappingKey(cardType: CardType): "errors.noteFieldMapping.missingSavedMapping.basic" | "errors.noteFieldMapping.missingSavedMapping.cloze" | "errors.noteFieldMapping.missingSavedMapping.semanticQa" {
   if (cardType === "cloze") {
-    return "cloze";
+    return "errors.noteFieldMapping.missingSavedMapping.cloze";
   }
 
-  return describeBasicLikeCardType(cardType);
+  return cardType === "semantic-qa"
+    ? "errors.noteFieldMapping.missingSavedMapping.semanticQa"
+    : "errors.noteFieldMapping.missingSavedMapping.basic";
 }
 
-function describeBasicLikeCardType(cardType: Extract<CardType, "basic" | "semantic-qa">): string {
-  return cardType === "semantic-qa" ? "semantic QA" : "basic";
+function getIncompleteSavedMappingKey(cardType: CardType): "errors.noteFieldMapping.incompleteSavedMapping.basic" | "errors.noteFieldMapping.incompleteSavedMapping.cloze" | "errors.noteFieldMapping.incompleteSavedMapping.semanticQa" {
+  if (cardType === "cloze") {
+    return "errors.noteFieldMapping.incompleteSavedMapping.cloze";
+  }
+
+  return cardType === "semantic-qa"
+    ? "errors.noteFieldMapping.incompleteSavedMapping.semanticQa"
+    : "errors.noteFieldMapping.incompleteSavedMapping.basic";
 }
 
-function capitalizeFirstLetter(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+function getTitleBodyMustDifferKey(cardType: Extract<CardType, "basic" | "semantic-qa">): "errors.noteFieldMapping.titleBodyMustDiffer.basic" | "errors.noteFieldMapping.titleBodyMustDiffer.semanticQa" {
+  return cardType === "semantic-qa"
+    ? "errors.noteFieldMapping.titleBodyMustDiffer.semanticQa"
+    : "errors.noteFieldMapping.titleBodyMustDiffer.basic";
 }
 
 function findFieldName(fieldNames: string[], preferredNames: string[]): string | undefined {

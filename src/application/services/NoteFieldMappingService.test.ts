@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createNoteFieldMappingKey } from "@/application/config/NoteModelFieldMapping";
+import { PluginUserError } from "@/application/errors/PluginUserError";
 import type { CardType } from "@/domain/card/entities/RenderedFields";
 
 import { NoteFieldMappingService } from "./NoteFieldMappingService";
@@ -24,6 +25,17 @@ function createCard(overrides: Partial<RenderedCardInput>): RenderedCardInput {
     },
     ...overrides,
   };
+}
+
+function expectPluginUserError(action: () => void): PluginUserError {
+  try {
+    action();
+  } catch (error) {
+    expect(error).toBeInstanceOf(PluginUserError);
+    return error as PluginUserError;
+  }
+
+  throw new Error("Expected PluginUserError");
 }
 
 describe("NoteFieldMappingService", () => {
@@ -83,15 +95,18 @@ describe("NoteFieldMappingService", () => {
   it("throws when a mapping is missing", () => {
     const service = new NoteFieldMappingService();
 
-    expect(() =>
+    const error = expectPluginUserError(() =>
       service.map(createCard({}), { fieldNames: ["Front", "Back"], isCloze: false }, {}),
-    ).toThrow("Open plugin settings and read fields from Anki first");
+    );
+
+    expect(error.userMessage.key).toBe("errors.noteFieldMapping.missingSavedMapping.basic");
+    expect(error.userMessage.params).toEqual({ modelName: "Basic" });
   });
 
   it("throws when a saved mapping is stale", () => {
     const service = new NoteFieldMappingService();
 
-    expect(() =>
+    const error = expectPluginUserError(() =>
       service.map(
         createCard({}),
         { fieldNames: ["Front", "Body"], isCloze: false },
@@ -106,13 +121,19 @@ describe("NoteFieldMappingService", () => {
           },
         },
       ),
-    ).toThrow("is stale because these fields no longer exist in Anki");
+    );
+
+    expect(error.userMessage.key).toBe("errors.noteFieldMapping.stale");
+    expect(error.userMessage.params).toEqual({
+      modelName: "Basic",
+      fields: ["\"Back\""],
+    });
   });
 
   it("throws when a basic mapping reuses the same field for title and body", () => {
     const service = new NoteFieldMappingService();
 
-    expect(() =>
+    const error = expectPluginUserError(() =>
       service.map(
         createCard({}),
         { fieldNames: ["Front", "Back"], isCloze: false },
@@ -127,6 +148,9 @@ describe("NoteFieldMappingService", () => {
           },
         },
       ),
-    ).toThrow('must use different title and body fields');
+    );
+
+    expect(error.userMessage.key).toBe("errors.noteFieldMapping.titleBodyMustDiffer.basic");
+    expect(error.userMessage.params).toEqual({ modelName: "Basic" });
   });
 });

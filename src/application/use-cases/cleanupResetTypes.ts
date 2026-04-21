@@ -1,3 +1,5 @@
+import type { PluginFileFailure } from "@/application/errors/PluginUserError";
+
 export interface ClearCurrentFileSyncedCardsResult {
   trackedCards: number;
   trackedGroups: number;
@@ -7,7 +9,7 @@ export interface ClearCurrentFileSyncedCardsResult {
   removedGroupMarkers: number;
   deletedLocalRecords: number;
   conflictFiles: string[];
-  failureFiles: Array<{ filePath: string; message: string }>;
+  failureFiles: PluginFileFailure[];
 }
 
 export interface CleanupEmptyDecksResult {

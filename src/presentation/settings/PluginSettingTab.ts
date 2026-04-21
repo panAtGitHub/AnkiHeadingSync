@@ -4,21 +4,21 @@ import { isValidHashtagMarker, isValidSemanticQaMarker, type FileDeckInsertLocat
 import { createNoteFieldMappingKey, type NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
 import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
+import { type UserFacingMessage, renderUserFacingMessage, toUserFacingMessage } from "@/application/errors/PluginUserError";
 import { NoteFieldMappingService } from "@/application/services/NoteFieldMappingService";
 import { buildQaGroupModelDefinition } from "@/application/services/QaGroupModelDefinition";
 import type { CardType } from "@/domain/card/entities/RenderedFields";
 import { SemanticQaListParser } from "@/domain/manual-sync/services/SemanticQaListParser";
+import { t } from "@/presentation/i18n";
 import type AnkiHeadingSyncPlugin from "@/presentation/AnkiHeadingSyncPlugin";
 
 import { buildFolderTreeSelection, toggleFolderTreeSelection, type FolderTreeSelectionNode } from "./FolderScopeTree";
 
-const NOTE_TYPE_STATUS_IDLE = "Refresh note types from Anki to load the available note types.";
-const FOLDER_TREE_STATUS_LOADING = "正在读取当前 vault 文件夹...";
+const NOTE_TYPE_STATUS_IDLE: UserFacingMessage = { key: "settings.mapping.status.idle" };
+const FOLDER_TREE_STATUS_LOADING: UserFacingMessage = { key: "settings.scope.loading" };
 
 interface MappingSectionConfig {
   cardType: CardType;
-  title: string;
-  description: string;
 }
 
 type SimpleDropdown = {
@@ -31,12 +31,12 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private readonly noteFieldMappingService = new NoteFieldMappingService();
   private readonly semanticQaListParser = new SemanticQaListParser();
   private availableNoteModels: string[] = [];
-  private noteTypeStatus = NOTE_TYPE_STATUS_IDLE;
+  private noteTypeStatus: UserFacingMessage = NOTE_TYPE_STATUS_IDLE;
   private readonly draftMappings: Record<string, NoteModelFieldMapping> = {};
   private readonly loadedModelDetails: Record<string, NoteModelDetails> = {};
-  private readonly sectionStatuses: Partial<Record<CardType, string>> = {};
+  private readonly sectionStatuses: Partial<Record<CardType, UserFacingMessage>> = {};
   private folderTree: FolderTreeNode[] = [];
-  private folderTreeStatus = FOLDER_TREE_STATUS_LOADING;
+  private folderTreeStatus: UserFacingMessage = FOLDER_TREE_STATUS_LOADING;
   private folderTreeLoadPromise: Promise<void> | null = null;
   private hasLoadedFolderTree = false;
   private readonly expandedFolderPaths = new Set<string>();
@@ -59,13 +59,13 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const settings = this.plugin.settings;
 
     containerEl.empty();
-    containerEl.createEl("h2", { text: "Anki Heading Sync" });
+    containerEl.createEl("h2", { text: t("settings.pluginTitle") });
 
     new Setting(containerEl)
-      .setName("AnkiConnect URL")
-      .setDesc("Default is http://127.0.0.1:8765")
+      .setName(t("settings.ankiConnectUrl.name"))
+      .setDesc(t("settings.ankiConnectUrl.desc"))
       .addText((text) => {
-        text.setPlaceholder("http://127.0.0.1:8765").setValue(settings.ankiConnectUrl).onChange((value) => {
+        text.setPlaceholder(t("settings.ankiConnectUrl.placeholder")).setValue(settings.ankiConnectUrl).onChange((value) => {
           void this.plugin.updateSettings({ ankiConnectUrl: value.trim() || settings.ankiConnectUrl });
         });
       });
@@ -73,8 +73,8 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     this.renderDeckSection(containerEl, settings);
 
     new Setting(containerEl)
-      .setName("QA heading level")
-      .setDesc("Default is H4")
+      .setName(t("settings.qaHeadingLevel.name"))
+      .setDesc(t("settings.qaHeadingLevel.desc"))
       .addDropdown((dropdown) => {
         for (let level = 1; level <= 6; level += 1) {
           dropdown.addOption(String(level), `H${level}`);
@@ -86,8 +86,8 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName("Cloze heading level")
-      .setDesc("Default is H5")
+      .setName(t("settings.clozeHeadingLevel.name"))
+      .setDesc(t("settings.clozeHeadingLevel.desc"))
       .addDropdown((dropdown) => {
         for (let level = 1; level <= 6; level += 1) {
           dropdown.addOption(String(level), `H${level}`);
@@ -98,13 +98,13 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
       });
 
-    containerEl.createEl("h3", { text: "QA Group 12" });
+    containerEl.createEl("h3", { text: t("settings.qaGroup.title") });
 
     new Setting(containerEl)
-      .setName("QA Group marker")
-      .setDesc("When a QA heading ends with this hashtag marker, the whole heading block syncs as one ObsiAnki QA Group 12 note.")
+      .setName(t("settings.qaGroup.marker.name"))
+      .setDesc(t("settings.qaGroup.marker.desc"))
       .addText((text) => {
-        text.setPlaceholder("#anki-list").setValue(settings.qaGroupMarker).onChange(async (value) => {
+        text.setPlaceholder(t("settings.qaGroup.marker.placeholder")).setValue(settings.qaGroupMarker).onChange(async (value) => {
           const nextValue = value.trim();
           if (!nextValue || !isValidHashtagMarker(nextValue) || nextValue === settings.semanticQaMarker) {
             return;
@@ -116,13 +116,13 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     this.renderQaGroupModelStatus(containerEl);
 
-    containerEl.createEl("h3", { text: "Semantic QA" });
+    containerEl.createEl("h3", { text: t("settings.semanticQa.title") });
 
     new Setting(containerEl)
-      .setName("Semantic QA marker")
-      .setDesc("When a QA heading ends with this hashtag marker, first-level list items with indented child content become separate cards.")
+      .setName(t("settings.semanticQa.marker.name"))
+      .setDesc(t("settings.semanticQa.marker.desc"))
       .addText((text) => {
-        text.setPlaceholder("#anki-list-qa").setValue(settings.semanticQaMarker).onChange(async (value) => {
+        text.setPlaceholder(t("settings.semanticQa.marker.placeholder")).setValue(settings.semanticQaMarker).onChange(async (value) => {
           const nextValue = value.trim();
           if (!nextValue || !isValidSemanticQaMarker(nextValue)) {
             return;
@@ -138,8 +138,8 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     this.renderScopeSection(containerEl, settings);
 
     new Setting(containerEl)
-      .setName("Add Obsidian backlink")
-      .setDesc("Append a backlink to the source heading into synced cards.")
+      .setName(t("settings.syncOptions.addObsidianBacklink.name"))
+      .setDesc(t("settings.syncOptions.addObsidianBacklink.desc"))
       .addToggle((toggle) => {
         toggle.setValue(settings.addObsidianBacklink).onChange((value) => {
           void this.plugin.updateSettings({ addObsidianBacklink: value });
@@ -147,53 +147,43 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName("Highlights to Cloze")
-      .setDesc("Convert ==highlight== segments into cloze deletions for cloze cards.")
+      .setName(t("settings.syncOptions.highlightsToCloze.name"))
+      .setDesc(t("settings.syncOptions.highlightsToCloze.desc"))
       .addToggle((toggle) => {
         toggle.setValue(settings.convertHighlightsToCloze).onChange((value) => {
           void this.plugin.updateSettings({ convertHighlightsToCloze: value });
         });
       });
 
-    containerEl.createEl("h3", { text: "Note type field mappings" });
+    containerEl.createEl("h3", { text: t("settings.mapping.title") });
 
     new Setting(containerEl)
-      .setName("Refresh note types from Anki")
-      .setDesc(this.noteTypeStatus)
+      .setName(t("settings.mapping.refresh.name"))
+      .setDesc(renderUserFacingMessage(this.noteTypeStatus))
       .addButton((button) => {
-        button.setButtonText("Refresh note types").onClick(() => {
+        button.setButtonText(t("settings.mapping.refresh.button")).onClick(() => {
           void this.refreshNoteTypes();
         });
       });
 
-    this.renderMappingSection(containerEl, {
-      cardType: "basic",
-      title: "QA / Basic",
-      description: "Choose the QA note type, read its fields from Anki, then confirm the title/body mapping.",
-    });
-    this.renderMappingSection(containerEl, {
-      cardType: "cloze",
-      title: "Cloze",
-      description: "Choose the cloze note type, read its fields from Anki, then confirm the main field mapping.",
-    });
-    this.renderMappingSection(containerEl, {
-      cardType: "semantic-qa",
-      title: "Semantic QA",
-      description: "Choose the semantic QA note type, read its fields from Anki, then confirm the title/body mapping for child cards.",
-    });
+    this.renderMappingSection(containerEl, { cardType: "basic" });
+    this.renderMappingSection(containerEl, { cardType: "cloze" });
+    this.renderMappingSection(containerEl, { cardType: "semantic-qa" });
   }
 
   private renderMappingSection(containerEl: HTMLElement, config: MappingSectionConfig): void {
+    const sectionText = getMappingSectionText(config.cardType);
+    const sectionTitle = sectionText.title;
     const selectedModelName = this.getSelectedMappingNoteType(config.cardType);
     const mappingKey = createNoteFieldMappingKey(config.cardType, selectedModelName);
     const currentMapping = this.getCurrentMapping(mappingKey);
 
-    containerEl.createEl("h4", { text: config.title });
-    containerEl.createEl("p", { text: config.description });
+    containerEl.createEl("h4", { text: sectionTitle });
+    containerEl.createEl("p", { text: sectionText.description });
 
     new Setting(containerEl)
-      .setName(`${config.title} note type`)
-      .setDesc("Loaded from Anki note types. Refresh if the latest models are not shown.")
+      .setName(t("settings.mapping.noteTypeLabel", { title: sectionTitle }))
+      .setDesc(t("settings.mapping.noteTypeDesc"))
       .addDropdown((dropdown) => {
         for (const noteModel of this.getSelectableNoteModels(config.cardType, selectedModelName)) {
           dropdown.addOption(noteModel, noteModel);
@@ -205,10 +195,10 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName(`${config.title} fields`)
-      .setDesc("Load the current note type fields from Anki, then review the suggested mapping.")
+      .setName(t("settings.mapping.fieldsLabel", { title: sectionTitle }))
+      .setDesc(t("settings.mapping.fieldsDesc"))
       .addButton((button) => {
-        button.setButtonText("Read fields from Anki").onClick(() => {
+        button.setButtonText(t("settings.mapping.readFieldsButton")).onClick(() => {
           void this.loadFieldsFromAnki(config.cardType);
         });
       });
@@ -216,31 +206,31 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     containerEl.createEl("p", {
       text:
         currentMapping?.loadedFieldNames.length
-          ? `Loaded fields: ${currentMapping.loadedFieldNames.join(", ")}`
-          : "Loaded fields: none. Read fields from Anki first.",
+          ? t("settings.mapping.loadedFields", { fields: currentMapping.loadedFieldNames })
+          : t("settings.mapping.loadedFieldsNone"),
     });
 
     if (config.cardType === "cloze") {
       this.renderClozeFieldSelector(containerEl, selectedModelName, currentMapping);
     } else {
-      this.renderBasicFieldSelectors(containerEl, selectedModelName, currentMapping, config.title);
+      this.renderBasicFieldSelectors(containerEl, selectedModelName, currentMapping, config.cardType, sectionTitle);
     }
 
     new Setting(containerEl)
-      .setName(`${config.title} mapping`)
-      .setDesc("Save the current field mapping for this specific note type.")
+      .setName(t("settings.mapping.mappingLabel", { title: sectionTitle }))
+      .setDesc(t("settings.mapping.mappingDesc"))
       .addButton((button) => {
-        button.setButtonText("Save mapping").onClick(() => {
+        button.setButtonText(t("settings.mapping.saveMappingButton")).onClick(() => {
           void this.saveMapping(config.cardType);
         });
       });
 
     containerEl.createEl("p", {
       text:
-        this.sectionStatuses[config.cardType] ??
+        (this.sectionStatuses[config.cardType] ? renderUserFacingMessage(this.sectionStatuses[config.cardType] as UserFacingMessage) : undefined) ??
         (this.plugin.settings.noteFieldMappings[mappingKey]
-          ? `Saved mapping is ready for ${config.title}.`
-          : `No saved mapping for ${config.title}. Read fields from Anki first.`),
+          ? t("settings.mapping.status.savedMappingReady", { title: sectionTitle })
+          : t("settings.mapping.status.noSavedMapping", { title: sectionTitle })),
     });
   }
 
@@ -248,27 +238,28 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     containerEl: HTMLElement,
     selectedModelName: string,
     mapping: NoteModelFieldMapping | undefined,
+    cardType: Extract<CardType, "basic" | "semantic-qa">,
     sectionTitle: string,
   ): void {
     const fieldNames = mapping?.loadedFieldNames ?? [];
 
     new Setting(containerEl)
-      .setName(`${sectionTitle} title field`)
-      .setDesc("Which Anki field should receive the heading/title fragment.")
+      .setName(t("settings.mapping.titleFieldLabel", { title: sectionTitle }))
+      .setDesc(t("settings.mapping.titleFieldDesc"))
       .addDropdown((dropdown) => {
         this.populateFieldDropdown(dropdown, fieldNames, mapping?.titleField);
         dropdown.onChange((value) => {
-          this.updateDraftMapping(mapping?.cardType ?? inferBasicLikeCardType(sectionTitle), selectedModelName, { titleField: value || undefined });
+          this.updateDraftMapping(mapping?.cardType ?? cardType, selectedModelName, { titleField: value || undefined });
         });
       });
 
     new Setting(containerEl)
-      .setName(`${sectionTitle} body field`)
-      .setDesc("Which Anki field should receive the body fragment.")
+      .setName(t("settings.mapping.bodyFieldLabel", { title: sectionTitle }))
+      .setDesc(t("settings.mapping.bodyFieldDesc"))
       .addDropdown((dropdown) => {
         this.populateFieldDropdown(dropdown, fieldNames, mapping?.bodyField);
         dropdown.onChange((value) => {
-          this.updateDraftMapping(mapping?.cardType ?? inferBasicLikeCardType(sectionTitle), selectedModelName, { bodyField: value || undefined });
+          this.updateDraftMapping(mapping?.cardType ?? cardType, selectedModelName, { bodyField: value || undefined });
         });
       });
   }
@@ -281,8 +272,8 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const fieldNames = mapping?.loadedFieldNames ?? [];
 
     new Setting(containerEl)
-      .setName("Cloze main field")
-      .setDesc("The selected field receives title + <br><br> + body during sync.")
+      .setName(t("settings.mapping.mainField.name"))
+      .setDesc(t("settings.mapping.mainField.desc"))
       .addDropdown((dropdown) => {
         this.populateFieldDropdown(dropdown, fieldNames, mapping?.mainField);
         dropdown.onChange((value) => {
@@ -292,7 +283,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private populateFieldDropdown(dropdown: SimpleDropdown, fieldNames: string[], selectedValue: string | undefined): void {
-    dropdown.addOption("", "-- Select field --");
+    dropdown.addOption("", t("settings.mapping.selectFieldPlaceholder"));
 
     for (const fieldName of fieldNames) {
       dropdown.addOption(fieldName, fieldName);
@@ -307,10 +298,10 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       this.availableNoteModels = [...noteModels].sort((left, right) => left.localeCompare(right));
       this.noteTypeStatus =
         this.availableNoteModels.length > 0
-          ? `Loaded ${this.availableNoteModels.length} note types from Anki.`
-          : "Anki returned no note types.";
+          ? { key: "settings.mapping.status.loadedCount", params: { count: this.availableNoteModels.length } }
+          : { key: "settings.mapping.status.empty" };
     } catch (error) {
-      this.noteTypeStatus = error instanceof Error ? error.message : "Failed to load note types from Anki.";
+      this.noteTypeStatus = toUserFacingMessage(error, "settings.mapping.status.failedLoadNoteTypes");
     }
 
     this.display();
@@ -327,8 +318,8 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     const mappingKey = createNoteFieldMappingKey(cardType, modelName);
     this.sectionStatuses[cardType] = this.plugin.settings.noteFieldMappings[mappingKey]
-      ? `Loaded saved mapping for ${modelName}.`
-      : `Selected ${modelName}. Read fields from Anki to create or refresh its mapping.`;
+      ? { key: "settings.mapping.status.loadedSavedMapping", params: { modelName } }
+      : { key: "settings.mapping.status.selectedModel", params: { modelName } };
     this.display();
   }
 
@@ -342,9 +333,9 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
       this.draftMappings[mappingKey] = mapping;
       this.loadedModelDetails[mappingKey] = modelDetails;
-      this.sectionStatuses[cardType] = `Loaded fields for ${modelName}. Review the suggested mapping and save it.`;
+      this.sectionStatuses[cardType] = { key: "settings.mapping.status.loadedFieldsForModel", params: { modelName } };
     } catch (error) {
-      this.sectionStatuses[cardType] = error instanceof Error ? error.message : `Failed to load fields for ${modelName}.`;
+      this.sectionStatuses[cardType] = toUserFacingMessage(error, "settings.mapping.status.failedLoadFields", { modelName });
     }
 
     this.display();
@@ -356,7 +347,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const mapping = this.getCurrentMapping(mappingKey);
 
     if (!mapping) {
-      this.sectionStatuses[cardType] = `No loaded fields for ${modelName}. Read fields from Anki first.`;
+      this.sectionStatuses[cardType] = { key: "settings.mapping.status.noLoadedFields", params: { modelName } };
       this.display();
       return;
     }
@@ -377,9 +368,9 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         },
       });
 
-      this.sectionStatuses[cardType] = `Saved mapping for ${modelName}.`;
+      this.sectionStatuses[cardType] = { key: "settings.mapping.status.savedMapping", params: { modelName } };
     } catch (error) {
-      this.sectionStatuses[cardType] = error instanceof Error ? error.message : `Failed to save mapping for ${modelName}.`;
+      this.sectionStatuses[cardType] = toUserFacingMessage(error, "settings.mapping.status.failedSaveMapping", { modelName });
     }
 
     this.display();
@@ -450,19 +441,26 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private renderQaGroupModelStatus(containerEl: HTMLElement): void {
     const definition = buildQaGroupModelDefinition();
     containerEl.createEl("p", {
-      text: `Managed note type: ${definition.modelName}. QA Group sync writes Stem / GroupId / Src / S01..S12 directly. The same note type can also appear in the field mapping panels below if you want to reuse it for other routes.`,
+      text: t("settings.qaGroup.managedNoteType", {
+        modelName: definition.modelName,
+      }),
     });
     containerEl.createEl("p", {
-      text: `Managed model contract: ${definition.fieldNames.length} fields and ${definition.templates.length} templates are checked automatically during sync.`,
+      text: t("settings.qaGroup.managedModelContract", {
+        fieldCount: definition.fieldNames.length,
+        templateCount: definition.templates.length,
+      }),
     });
   }
 
   private renderSemanticQaPreview(containerEl: HTMLElement, marker: string): void {
-    containerEl.createEl("h4", { text: "Semantic QA preview" });
-    containerEl.createEl("p", { text: `Trigger heading example: 城市更新 ${marker}` });
+    const sampleHeading = `城市更新 ${marker}`;
+
+    containerEl.createEl("h4", { text: t("settings.semanticQa.previewTitle") });
+    containerEl.createEl("p", { text: t("settings.semanticQa.triggerHeadingExample", { heading: sampleHeading }) });
 
     const previewCards = this.semanticQaListParser.parse({
-      parentHeadingText: `城市更新 ${marker}`,
+      parentHeadingText: sampleHeading,
       marker,
       bodyLines: [
         "- 核心产品",
@@ -474,32 +472,32 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     });
 
     if (previewCards.length === 0) {
-      containerEl.createEl("p", { text: "Preview unavailable. Use a trailing hashtag marker such as #anki-list-qa." });
+      containerEl.createEl("p", { text: t("settings.semanticQa.previewUnavailable") });
       return;
     }
 
     const firstPreview = previewCards[0];
-    containerEl.createEl("p", { text: `Question preview: ${firstPreview.heading}` });
-    containerEl.createEl("p", { text: `Answer preview: ${firstPreview.bodyMarkdown}` });
+    containerEl.createEl("p", { text: t("settings.semanticQa.questionPreview", { question: firstPreview.heading }) });
+    containerEl.createEl("p", { text: t("settings.semanticQa.answerPreview", { answer: firstPreview.bodyMarkdown }) });
   }
 
   private renderDeckSection(containerEl: HTMLElement, settings: AnkiHeadingSyncPlugin["settings"]): void {
-    containerEl.createEl("h3", { text: "默认牌组" });
+    containerEl.createEl("h3", { text: t("settings.deck.defaultSectionTitle") });
 
     new Setting(containerEl)
-      .setName("默认牌组")
-      .setDesc("优先级最低：当文件级 deck 与文件夹映射都未命中时使用。")
+      .setName(t("settings.deck.defaultDeck.name"))
+      .setDesc(t("settings.deck.defaultDeck.desc"))
       .addText((text) => {
         text.setValue(settings.defaultDeck).onChange((value) => {
           void this.plugin.updateSettings({ defaultDeck: value });
         });
       });
 
-    containerEl.createEl("h3", { text: "文件级自定义牌组" });
+    containerEl.createEl("h3", { text: t("settings.deck.fileDeckSectionTitle") });
 
     new Setting(containerEl)
-      .setName("开启文件级自定义牌组")
-      .setDesc("开启后，允许用统一 marker 在 YAML 或正文中为整篇笔记指定 deck。")
+      .setName(t("settings.deck.fileDeckEnabled.name"))
+      .setDesc(t("settings.deck.fileDeckEnabled.desc"))
       .addToggle((toggle) => {
         toggle.setValue(settings.fileDeckEnabled).onChange(async (value) => {
           await this.plugin.updateSettings({ fileDeckEnabled: value });
@@ -509,8 +507,8 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     if (settings.fileDeckEnabled) {
       new Setting(containerEl)
-        .setName("牌组识别名")
-        .setDesc("YAML key 与正文 marker 共用同一个识别名。默认是 TARGET DECK。")
+        .setName(t("settings.deck.marker.name"))
+        .setDesc(t("settings.deck.marker.desc"))
         .addText((text) => {
           text.setValue(settings.fileDeckMarker).onChange((value) => {
             const nextValue = value.trim();
@@ -523,8 +521,8 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
 
       new Setting(containerEl)
-        .setName("默认牌组模板")
-        .setDesc("只支持 filename 变量，插入时会展开为当前文件名（不含 .md）。")
+        .setName(t("settings.deck.template.name"))
+        .setDesc(t("settings.deck.template.desc"))
         .addText((text) => {
           text.setValue(settings.fileDeckTemplate).onChange((value) => {
             const nextValue = value.trim();
@@ -537,8 +535,8 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
 
       new Setting(containerEl)
-        .setName("模板插入位置")
-        .setDesc("选择将 deck 模板写入 YAML frontmatter 还是正文前部。")
+        .setName(t("settings.deck.insertLocation.name"))
+        .setDesc(t("settings.deck.insertLocation.desc"))
         .addDropdown((dropdown) => {
           this.populateFileDeckInsertLocationDropdown(dropdown, settings.fileDeckInsertLocation);
           dropdown.onChange((value) => {
@@ -551,20 +549,20 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
 
       new Setting(containerEl)
-        .setName("向当前文件插入 deck 模板")
-        .setDesc("按当前 marker、模板和插入位置，把 deck 声明写入当前活动 Markdown 文件。")
+        .setName(t("settings.deck.insertTemplate.name"))
+        .setDesc(t("settings.deck.insertTemplate.desc"))
         .addButton((button) => {
-          button.setButtonText("插入 deck 模板").onClick(() => {
+          button.setButtonText(t("settings.deck.insertTemplate.button")).onClick(() => {
             void this.plugin.insertDeckTemplateToCurrentFile();
           });
         });
     }
 
-    containerEl.createEl("h3", { text: "高级：文件夹映射" });
+    containerEl.createEl("h3", { text: t("settings.deck.folderMappingSectionTitle") });
 
     new Setting(containerEl)
-      .setName("文件夹映射模式")
-      .setDesc("关闭 / 仅父文件夹 / 父文件夹加当前文件名。")
+      .setName(t("settings.deck.folderDeckMode.name"))
+      .setDesc(t("settings.deck.folderDeckMode.desc"))
       .addDropdown((dropdown) => {
         this.populateFolderDeckModeDropdown(dropdown, settings.folderDeckMode);
         dropdown.onChange((value) => {
@@ -576,37 +574,37 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
       });
 
-    containerEl.createEl("p", { text: "文件夹级映射示例：数学/第一章/第一节.md -> 数学::第一章" });
-    containerEl.createEl("p", { text: "文件夹及文件名级映射示例：数学/第一章/第一节.md -> 数学::第一章::第一节" });
+    containerEl.createEl("p", { text: t("settings.deck.folderExample") });
+    containerEl.createEl("p", { text: t("settings.deck.folderAndFileExample") });
 
-    containerEl.createEl("h3", { text: "最终优先级说明" });
+    containerEl.createEl("h3", { text: t("settings.deck.priorityTitle") });
     containerEl.createEl("p", {
-      text: "最终 deck 优先级：文件级自定义牌组 > 文件夹映射 deck > 默认牌组。旧卡 deck 行为保持当前实现。",
+      text: t("settings.deck.priorityDesc"),
     });
   }
 
   private populateFileDeckInsertLocationDropdown(dropdown: SimpleDropdown, selectedValue: FileDeckInsertLocation): void {
-    dropdown.addOption("body", "正文前部");
-    dropdown.addOption("yaml", "YAML frontmatter");
+    dropdown.addOption("body", t("settings.deck.insertLocation.options.body"));
+    dropdown.addOption("yaml", t("settings.deck.insertLocation.options.yaml"));
     dropdown.setValue(selectedValue);
   }
 
   private populateFolderDeckModeDropdown(dropdown: SimpleDropdown, selectedValue: FolderDeckMode): void {
-    dropdown.addOption("off", "关闭");
-    dropdown.addOption("folder", "文件夹级映射");
-    dropdown.addOption("folder-and-file", "文件夹及文件名级映射");
+    dropdown.addOption("off", t("settings.deck.folderDeckMode.options.off"));
+    dropdown.addOption("folder", t("settings.deck.folderDeckMode.options.folder"));
+    dropdown.addOption("folder-and-file", t("settings.deck.folderDeckMode.options.folderAndFile"));
     dropdown.setValue(selectedValue);
   }
 
   private renderScopeSection(containerEl: HTMLElement, settings: AnkiHeadingSyncPlugin["settings"]): void {
     new Setting(containerEl)
-      .setName("运行范围")
+      .setName(t("settings.scope.name"))
       .setDesc(getScopeModeSummary(settings.scopeMode))
       .addDropdown((dropdown) => {
         dropdown
-          .addOption("all", "全部文件")
-          .addOption("include", "仅在指定文件夹")
-          .addOption("exclude", "排除指定文件夹")
+          .addOption("all", t("settings.scope.option.all"))
+          .addOption("include", t("settings.scope.option.include"))
+          .addOption("exclude", t("settings.scope.option.exclude"))
           .setValue(settings.scopeMode)
           .onChange((value) => {
             if (value !== "all" && value !== "include" && value !== "exclude") {
@@ -627,12 +625,12 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     scopeContainer.createEl("p", { text: getScopeModeTreeDescription(settings.scopeMode) });
 
     if (this.folderTreeLoadPromise) {
-      scopeContainer.createEl("p", { text: this.folderTreeStatus });
+      scopeContainer.createEl("p", { text: renderUserFacingMessage(this.folderTreeStatus) });
       return;
     }
 
     if (this.folderTree.length === 0) {
-      scopeContainer.createEl("p", { text: this.folderTreeStatus });
+      scopeContainer.createEl("p", { text: renderUserFacingMessage(this.folderTreeStatus) });
       return;
     }
 
@@ -676,7 +674,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     toggleControl.style.cursor = hasChildren ? "pointer" : "default";
 
     if (hasChildren) {
-      toggleControl.setAttr("aria-label", expanded ? `收起 ${node.name}` : `展开 ${node.name}`);
+      toggleControl.setAttr("aria-label", expanded ? t("settings.scope.collapseFolder", { name: node.name }) : t("settings.scope.expandFolder", { name: node.name }));
       toggleControl.setAttr("aria-expanded", String(expanded));
       toggleControl.addEventListener("click", () => {
         this.toggleFolderExpanded(node.path);
@@ -721,11 +719,11 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .listFolderTree()
       .then((folderTree) => {
         this.folderTree = folderTree;
-        this.folderTreeStatus = folderTree.length > 0 ? "" : "当前 vault 中没有可选文件夹。";
+        this.folderTreeStatus = folderTree.length > 0 ? { rawMessage: "" } : { key: "settings.scope.empty" };
       })
       .catch((error) => {
         this.folderTree = [];
-        this.folderTreeStatus = error instanceof Error ? error.message : "读取 vault 文件夹失败。";
+        this.folderTreeStatus = toUserFacingMessage(error, "settings.scope.failedLoad");
       })
       .finally(() => {
         this.hasLoadedFolderTree = true;
@@ -758,26 +756,43 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 }
 
-function inferBasicLikeCardType(sectionTitle: string): Extract<CardType, "basic" | "semantic-qa"> {
-  return sectionTitle === "Semantic QA" ? "semantic-qa" : "basic";
+function getMappingSectionText(cardType: CardType): { title: string; description: string } {
+  if (cardType === "cloze") {
+    return {
+      title: t("settings.mapping.section.cloze.title"),
+      description: t("settings.mapping.section.cloze.description"),
+    };
+  }
+
+  if (cardType === "semantic-qa") {
+    return {
+      title: t("settings.mapping.section.semanticQa.title"),
+      description: t("settings.mapping.section.semanticQa.description"),
+    };
+  }
+
+  return {
+    title: t("settings.mapping.section.basic.title"),
+    description: t("settings.mapping.section.basic.description"),
+  };
 }
 
 function getScopeModeSummary(scopeMode: ScopeMode): string {
   if (scopeMode === "include") {
-    return "仅处理下方勾选文件夹中的 Markdown 文件";
+    return t("settings.scope.summary.include");
   }
 
   if (scopeMode === "exclude") {
-    return "处理整个 vault，但跳过下方勾选文件夹中的 Markdown 文件";
+    return t("settings.scope.summary.exclude");
   }
 
-  return "处理整个 vault 中的 Markdown 文件";
+  return t("settings.scope.summary.all");
 }
 
 function getScopeModeTreeDescription(scopeMode: ScopeMode): string {
   if (scopeMode === "include") {
-    return "仅在指定文件夹：只处理下方勾选文件夹中的 Markdown 文件";
+    return t("settings.scope.treeDescription.include");
   }
 
-  return "排除指定文件夹：处理整个 vault，但跳过下方勾选文件夹中的 Markdown 文件";
+  return t("settings.scope.treeDescription.exclude");
 }
