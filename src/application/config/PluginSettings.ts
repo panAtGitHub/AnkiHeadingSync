@@ -4,10 +4,12 @@ import { PluginUserError } from "@/application/errors/PluginUserError";
 export type ScopeMode = "all" | "include" | "exclude";
 export type FileDeckInsertLocation = "yaml" | "body";
 export type FolderDeckMode = "off" | "folder" | "folder-and-file";
+export type CardAnswerCutoffMode = "heading-block" | "double-blank-lines";
 
 export interface PluginSettings {
   qaHeadingLevel: number;
   clozeHeadingLevel: number;
+  cardAnswerCutoffMode: CardAnswerCutoffMode;
   qaGroupMarker: string;
   qaNoteType: string;
   clozeNoteType: string;
@@ -31,6 +33,7 @@ export interface PluginSettings {
 export const DEFAULT_SETTINGS: PluginSettings = {
   qaHeadingLevel: 4,
   clozeHeadingLevel: 5,
+  cardAnswerCutoffMode: "heading-block",
   qaGroupMarker: "#anki-list",
   qaNoteType: "Basic",
   clozeNoteType: "Cloze",
@@ -72,6 +75,10 @@ export function validatePluginSettings(settings: PluginSettings): void {
 
   if (settings.qaHeadingLevel === settings.clozeHeadingLevel) {
     throw new PluginUserError("errors.settings.headingLevelsDifferent");
+  }
+
+  if (settings.cardAnswerCutoffMode !== "heading-block" && settings.cardAnswerCutoffMode !== "double-blank-lines") {
+    throw new PluginUserError("errors.settings.cardAnswerCutoffModeInvalid");
   }
 
   if (!settings.qaNoteType.trim()) {

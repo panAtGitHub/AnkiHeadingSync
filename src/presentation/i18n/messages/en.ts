@@ -25,6 +25,14 @@ export const en = {
       name: "Cloze heading level",
       desc: "Default is H5",
     },
+    cardAnswerCutoffMode: {
+      name: "Card answer cutoff mode",
+      desc: "A valid sync marker always wins. Without a valid marker, either keep the whole heading block or stop before the first 2+ consecutive blank lines.",
+      options: {
+        headingBlock: "heading-block: whole heading block",
+        doubleBlankLines: "double-blank-lines: stop before the first 2+ blank lines",
+      },
+    },
     qaGroup: {
       title: "QA Group 12",
       marker: {
@@ -238,6 +246,7 @@ export const en = {
     settings: {
       headingLevelsRange: "Heading levels must be integers between 1 and 6.",
       headingLevelsDifferent: "QA and Cloze heading levels must be different.",
+      cardAnswerCutoffModeInvalid: "Card answer cutoff mode must be heading-block or double-blank-lines.",
       qaNoteTypeRequired: "QA note type is required.",
       qaGroupMarkerRequired: "QA Group marker is required.",
       qaGroupMarkerInvalid: "QA Group marker must be a hashtag-style token like #anki-list.",

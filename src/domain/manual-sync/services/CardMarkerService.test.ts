@@ -47,4 +47,64 @@ describe("CardMarkerService", () => {
       "<!--ID: 22-->",
     ].join("\n"));
   });
+
+  it("writes a new marker after the answer and keeps exactly two blank lines before trailing remarks", () => {
+    const service = new CardMarkerService();
+    const sourceContent = [
+      "#### Prompt",
+      "Answer",
+      "",
+      "",
+      "Remarks",
+    ].join("\n");
+
+    const nextContent = service.applyBatch(sourceContent, [{
+      filePath: "notes/example.md",
+      noteId: 42,
+      blockStartLine: 1,
+      contentEndLine: 2,
+      blockEndLine: 5,
+      sourceContent,
+    }]);
+
+    expect(nextContent).toBe([
+      "#### Prompt",
+      "Answer",
+      "<!--ID: 42-->",
+      "",
+      "",
+      "Remarks",
+    ].join("\n"));
+  });
+
+  it("preserves the normalized marker-before-remarks layout when replacing an existing marker", () => {
+    const service = new CardMarkerService();
+    const sourceContent = [
+      "#### Prompt",
+      "Answer",
+      "<!--ID: 11-->",
+      "",
+      "",
+      "Remarks",
+    ].join("\n");
+
+    const nextContent = service.applyBatch(sourceContent, [{
+      filePath: "notes/example.md",
+      noteId: 42,
+      blockStartLine: 1,
+      contentEndLine: 2,
+      blockEndLine: 6,
+      markerLine: 3,
+      sourceContent,
+    }]);
+
+    expect(nextContent).toBe([
+      "#### Prompt",
+      "Answer",
+      "<!--ID: 42-->",
+      "",
+      "",
+      "Remarks",
+    ].join("\n"));
+  });
 });

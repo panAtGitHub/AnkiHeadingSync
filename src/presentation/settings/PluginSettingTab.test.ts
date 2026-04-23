@@ -483,6 +483,7 @@ describe("AnkiHeadingSyncSettingTab", () => {
     tab.display();
     expect(container.textNodes).toContain("Anki Heading Sync");
     expect(findSetting(container, "AnkiConnect URL").desc).toBe("Default is http://127.0.0.1:8765");
+    expect(findSetting(container, "Card answer cutoff mode").desc).toBe("A valid sync marker always wins. Without a valid marker, either keep the whole heading block or stop before the first 2+ consecutive blank lines.");
     expect(findSetting(container, "Run scope").desc).toBe("Only process Markdown files in the checked folders below");
 
     await flushAsync();
@@ -507,6 +508,7 @@ describe("AnkiHeadingSyncSettingTab", () => {
 
     tab.display();
     expect(findSetting(container, "QA 标题层级").desc).toBe("默认是 H4");
+    expect(findSetting(container, "卡片正文截止模式").desc).toBe("有效同步标记始终优先。没有有效标记时，选择继续到整个标题块末尾，或在首个 2+ 连续空行前截止。");
     expect(findSetting(container, "运行范围").desc).toBe("仅处理下方勾选文件夹中的 Markdown 文件");
     expect(findSetting(container, "默认牌组").desc).toBe("优先级最低：当文件级 deck 与文件夹映射都未命中时使用。");
 
@@ -675,6 +677,24 @@ describe("AnkiHeadingSyncSettingTab", () => {
 
     expect(plugin.settings.qaGroupMarker).toBe("#anki-list-12");
     expect(plugin.settings.semanticQaMarker).toBe("#anki-list-qa");
+  });
+
+  it("saves and rehydrates the card answer cutoff mode", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+    const container = tab.containerEl as unknown as FakeContainerElInstance;
+
+    tab.display();
+
+    const cutoffDropdown = getDropdown(findSetting(container, "Card answer cutoff mode"));
+    expect(cutoffDropdown.value).toBe("heading-block");
+    expect(cutoffDropdown.options.map((option: { value: string }) => option.value)).toEqual(["heading-block", "double-blank-lines"]);
+
+    await cutoffDropdown.triggerChange("double-blank-lines");
+    expect(plugin.settings.cardAnswerCutoffMode).toBe("double-blank-lines");
+
+    tab.display();
+    expect(getDropdown(findSetting(container, "Card answer cutoff mode")).value).toBe("double-blank-lines");
   });
 
   it("removes the old folder textareas and hides the folder tree in all mode", async () => {

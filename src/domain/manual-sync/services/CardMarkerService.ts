@@ -1,6 +1,8 @@
 import type { IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
 import type { IdMarker } from "@/domain/manual-sync/entities/IdMarker";
 
+import { applyNormalizedMarkerWrite } from "./MarkerWritebackNormalization";
+
 export interface MarkerWriteRequest {
   filePath: string;
   noteId: number;
@@ -112,31 +114,12 @@ export class CardMarkerService {
       throw new CardMarkerError(`Cannot write marker outside the heading block in ${write.filePath}.`);
     }
 
-    const removalIndexes = new Set<number>();
-    if (write.markerLine !== undefined) {
-      removalIndexes.add(write.markerLine - 1);
-    }
-
-    for (let lineIndex = write.contentEndLine; lineIndex < write.blockEndLine; lineIndex += 1) {
-      if (!(lines[lineIndex] ?? "").trim()) {
-        removalIndexes.add(lineIndex);
-      }
-    }
-
-    const sortedRemovals = [...removalIndexes].sort((left, right) => right - left);
-    const insertionIndex = write.contentEndLine - [...removalIndexes].filter((lineIndex) => lineIndex < write.contentEndLine).length;
-
-    for (const lineIndex of sortedRemovals) {
-      lines.splice(lineIndex, 1);
-    }
-
-    lines.splice(insertionIndex, 0, `${write.markerIndent ?? ""}${this.create(write.noteId).raw}`);
-    while (insertionIndex + 1 < lines.length && !(lines[insertionIndex + 1] ?? "").trim()) {
-      lines.splice(insertionIndex + 1, 1);
-    }
-
-    if (insertionIndex + 1 < lines.length) {
-      lines.splice(insertionIndex + 1, 0, "", "");
-    }
+    applyNormalizedMarkerWrite(lines, {
+      contentEndLine: write.contentEndLine,
+      blockEndLine: write.blockEndLine,
+      markerLine: write.markerLine,
+      markerIndent: write.markerIndent,
+      renderedMarker: this.create(write.noteId).raw,
+    });
   }
 }

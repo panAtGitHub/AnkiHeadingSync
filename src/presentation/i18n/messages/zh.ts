@@ -23,6 +23,14 @@ export const zh = {
       name: "Cloze 标题层级",
       desc: "默认是 H5",
     },
+    cardAnswerCutoffMode: {
+      name: "卡片正文截止模式",
+      desc: "有效同步标记始终优先。没有有效标记时，选择继续到整个标题块末尾，或在首个 2+ 连续空行前截止。",
+      options: {
+        headingBlock: "heading-block：整个标题块",
+        doubleBlankLines: "double-blank-lines：在首个 2+ 连续空行前截止",
+      },
+    },
     qaGroup: {
       title: "QA Group 12",
       marker: {
@@ -236,6 +244,7 @@ export const zh = {
     settings: {
       headingLevelsRange: "标题层级必须是 1 到 6 之间的整数。",
       headingLevelsDifferent: "QA 和 Cloze 的标题层级必须不同。",
+      cardAnswerCutoffModeInvalid: "卡片正文截止模式只能是 heading-block 或 double-blank-lines。",
       qaNoteTypeRequired: "QA 笔记类型不能为空。",
       qaGroupMarkerRequired: "QA Group 标记不能为空。",
       qaGroupMarkerInvalid: "QA Group 标记必须是类似 #anki-list 的 hashtag 样式 token。",

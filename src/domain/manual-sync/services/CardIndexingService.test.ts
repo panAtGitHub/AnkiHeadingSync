@@ -154,13 +154,13 @@ describe("CardIndexingService", () => {
     });
   });
 
-  it("does not treat a non-trailing ID marker as the marker slot", () => {
+  it("treats a valid ID marker before trailing remarks as the body cutoff", () => {
     const service = new CardIndexingService();
     const indexedFile = service.index(
       {
         path: "notes/example.md",
         basename: "example",
-        content: ["#### Prompt", "<!--ID: 42-->", "Answer"].join("\n"),
+        content: ["#### Prompt", "Answer", "<!--ID: 42-->", "", "", "Remarks"].join("\n"),
       },
       {
         qaHeadingLevel: 4,
@@ -172,9 +172,92 @@ describe("CardIndexingService", () => {
     );
 
     expect(indexedFile.cards[0]).toMatchObject({
+      noteId: 42,
+      noteIdSource: "marker",
+      idMarkerState: "present-valid",
+      bodyMarkdown: "Answer",
+      contentEndLine: 2,
+      markerLine: 3,
+    });
+  });
+
+  it("cuts normal card content at the first 2+ blank lines when no valid marker exists", () => {
+    const service = new CardIndexingService();
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: ["#### Prompt", "Answer", "", "", "Remarks"].join("\n"),
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        cardAnswerCutoffMode: "double-blank-lines",
+        fileStamp: "1:1",
+        knownCards: [],
+        pendingWriteBack: [],
+      },
+    );
+
+    expect(indexedFile.cards[0]).toMatchObject({
       noteId: undefined,
       idMarkerState: "missing",
-      bodyMarkdown: "<!--ID: 42-->\nAnswer",
+      bodyMarkdown: "Answer",
+      contentEndLine: 2,
+      markerLine: undefined,
+    });
+  });
+
+  it("keeps the old marker-after-remarks layout compatible and lets a valid marker beat blank-line cutoff", () => {
+    const service = new CardIndexingService();
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: ["#### Prompt", "Answer", "", "", "Remarks", "<!--ID: 42-->"].join("\n"),
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        cardAnswerCutoffMode: "double-blank-lines",
+        fileStamp: "1:1",
+        knownCards: [],
+        pendingWriteBack: [],
+      },
+    );
+
+    expect(indexedFile.cards[0]).toMatchObject({
+      noteId: 42,
+      noteIdSource: "marker",
+      idMarkerState: "present-valid",
+      bodyMarkdown: "Answer\n\n\nRemarks",
+      contentEndLine: 5,
+      markerLine: 6,
+    });
+  });
+
+  it("applies the same double-blank-line cutoff to cloze cards", () => {
+    const service = new CardIndexingService();
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: ["##### Cloze", "{{c1::Answer}}", "", "", "Remarks"].join("\n"),
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        cardAnswerCutoffMode: "double-blank-lines",
+        fileStamp: "1:1",
+        knownCards: [],
+        pendingWriteBack: [],
+      },
+    );
+
+    expect(indexedFile.cards[0]).toMatchObject({
+      cardType: "cloze",
+      bodyMarkdown: "{{c1::Answer}}",
+      contentEndLine: 2,
     });
   });
 

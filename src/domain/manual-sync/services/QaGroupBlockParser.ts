@@ -1,7 +1,9 @@
+import type { CardAnswerCutoffMode } from "@/application/config/PluginSettings";
 import { hashString } from "@/domain/shared/hash";
 import type { GroupItem, GroupMarkerState } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
 
 import { GroupMarkerService, type ParsedGroupMarker } from "./GroupMarkerService";
+import { resolveAnswerBoundary } from "./AnswerBoundaryParser";
 
 const LIST_ITEM_REGEXP = /^([ \t]*)(?:[-+*]|\d+[.)])\s+(.*)$/;
 
@@ -10,6 +12,7 @@ export interface QaGroupBlockParserInput {
   marker: string;
   bodyLines: string[];
   bodyStartLine: number;
+  cardAnswerCutoffMode?: CardAnswerCutoffMode;
 }
 
 export interface ParsedQaGroupBlock {
@@ -43,17 +46,23 @@ export class QaGroupBlockParser {
 
   parse(input: QaGroupBlockParserInput): ParsedQaGroupBlock {
     const stem = stripQaGroupMarker(input.parentHeadingText, input.marker);
-    const trailingMarker = extractTrailingGroupMarker(input.bodyLines, input.bodyStartLine, this.groupMarkerService);
-    const rootItems = collectRootListItems(trailingMarker.bodyLines);
+    const boundary = resolveAnswerBoundary({
+      lines: input.bodyLines,
+      startLine: input.bodyStartLine,
+      fallbackLine: input.bodyStartLine - 1,
+      cutoffMode: input.cardAnswerCutoffMode ?? "heading-block",
+      markerAdapter: this.groupMarkerService,
+    });
+    const rootItems = collectRootListItems(boundary.contentLines);
     const items: GroupItem[] = [];
 
     for (let index = 0; index < rootItems.length; index += 1) {
       const item = rootItems[index];
       const nextItem = rootItems[index + 1];
       const childRegion = collectChildRegion(
-        trailingMarker.bodyLines,
+        boundary.contentLines,
         item.index + 1,
-        nextItem?.index ?? trailingMarker.bodyLines.length,
+        nextItem?.index ?? boundary.contentLines.length,
         item.indent.length,
       );
 
@@ -73,7 +82,7 @@ export class QaGroupBlockParser {
       });
     }
 
-    const normalizedBodyLines = trimBlankEdges(trailingMarker.bodyLines.filter((line) => !isLegacyCardMarkerLine(line)));
+    const normalizedBodyLines = trimBlankEdges(boundary.contentLines.filter((line) => !isLegacyCardMarkerLine(line)));
     const rawBlockText = [
       `qa-group:${stem}`,
       ...items.map((item) => `${item.title}\n${item.answer}`),
@@ -83,11 +92,11 @@ export class QaGroupBlockParser {
     return {
       stem,
       items,
-      markerState: trailingMarker.markerState,
-      groupMarker: trailingMarker.groupMarker,
-      contentEndLine: findContentEndLine(trailingMarker.bodyLines, input.bodyStartLine, input.bodyStartLine - 1),
-      markerLine: trailingMarker.markerLine,
-      markerIndent: trailingMarker.markerIndent,
+      markerState: boundary.markerState,
+      groupMarker: boundary.marker,
+      contentEndLine: boundary.contentEndLine,
+      markerLine: boundary.markerLine,
+      markerIndent: boundary.markerIndent,
       rawBlockText,
       rawBlockHash: hashString(rawBlockText),
     };
@@ -101,49 +110,6 @@ function stripQaGroupMarker(headingText: string, marker: string): string {
   }
 
   return trimmedHeading.slice(0, trimmedHeading.length - marker.length).trimEnd();
-}
-
-function extractTrailingGroupMarker(
-  rawLines: string[],
-  bodyStartLine: number,
-  groupMarkerService: GroupMarkerService,
-): {
-  bodyLines: string[];
-  markerState: GroupMarkerState;
-  groupMarker?: ParsedGroupMarker;
-  markerLine?: number;
-  markerIndent?: string;
-} {
-  let lastNonEmptyIndex = rawLines.length - 1;
-  while (lastNonEmptyIndex >= 0 && !rawLines[lastNonEmptyIndex].trim()) {
-    lastNonEmptyIndex -= 1;
-  }
-
-  if (lastNonEmptyIndex < 0) {
-    return {
-      bodyLines: rawLines,
-      markerState: "missing",
-    };
-  }
-
-  const lastLine = rawLines[lastNonEmptyIndex];
-  if (!groupMarkerService.isCandidate(lastLine)) {
-    return {
-      bodyLines: rawLines,
-      markerState: "missing",
-    };
-  }
-
-  const bodyLines = rawLines.filter((_line, index) => index !== lastNonEmptyIndex);
-  const parsedMarker = groupMarkerService.parse(lastLine, bodyStartLine + lastNonEmptyIndex);
-
-  return {
-    bodyLines,
-    markerState: parsedMarker ? "present-valid" : "present-invalid",
-    groupMarker: parsedMarker ?? undefined,
-    markerLine: bodyStartLine + lastNonEmptyIndex,
-    markerIndent: leadingWhitespace(lastLine),
-  };
 }
 
 function collectRootListItems(lines: string[]): ListItemMatch[] {
@@ -266,16 +232,6 @@ function findFirstSecondLevelItem(lines: string[], parentIndentLength: number): 
 
   const directIndentLength = Math.min(...candidates.map((candidate) => candidate.indent.length));
   return candidates.find((candidate) => candidate.indent.length === directIndentLength) ?? null;
-}
-
-function findContentEndLine(bodyLines: string[], bodyStartLine: number, fallbackLine: number): number {
-  for (let index = bodyLines.length - 1; index >= 0; index -= 1) {
-    if (bodyLines[index].trim()) {
-      return bodyStartLine + index;
-    }
-  }
-
-  return fallbackLine;
 }
 
 function trimBlankEdges(lines: string[]): string[] {

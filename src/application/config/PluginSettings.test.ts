@@ -47,6 +47,7 @@ describe("PluginSettings", () => {
     expect(DEFAULT_SETTINGS.fileDeckInsertLocation).toBe("body");
     expect(DEFAULT_SETTINGS.folderDeckMode).toBe("off");
     expect(DEFAULT_SETTINGS.qaGroupMarker).toBe("#anki-list");
+    expect(DEFAULT_SETTINGS.cardAnswerCutoffMode).toBe("heading-block");
   });
 
   it("rejects invalid QA Group markers and semantic marker collisions", () => {
@@ -79,5 +80,12 @@ describe("PluginSettings", () => {
         folderDeckMode: "tree" as never,
       });
     }, "errors.settings.folderDeckModeInvalid");
+
+    expectPluginUserError(() => {
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        cardAnswerCutoffMode: "marker-only" as never,
+      });
+    }, "errors.settings.cardAnswerCutoffModeInvalid");
   });
 });

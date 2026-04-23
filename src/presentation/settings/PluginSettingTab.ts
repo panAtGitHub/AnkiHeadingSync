@@ -1,6 +1,6 @@
 import { PluginSettingTab, Setting } from "obsidian";
 
-import { isValidHashtagMarker, isValidSemanticQaMarker, type FileDeckInsertLocation, type FolderDeckMode, type ScopeMode } from "@/application/config/PluginSettings";
+import { isValidHashtagMarker, isValidSemanticQaMarker, type CardAnswerCutoffMode, type FileDeckInsertLocation, type FolderDeckMode, type ScopeMode } from "@/application/config/PluginSettings";
 import { createNoteFieldMappingKey, type NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
 import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
@@ -98,6 +98,17 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
       });
 
+    new Setting(containerEl)
+      .setName(t("settings.cardAnswerCutoffMode.name"))
+      .setDesc(t("settings.cardAnswerCutoffMode.desc"))
+      .addDropdown((dropdown) => {
+        dropdown.addOption("heading-block", t("settings.cardAnswerCutoffMode.options.headingBlock"));
+        dropdown.addOption("double-blank-lines", t("settings.cardAnswerCutoffMode.options.doubleBlankLines"));
+        dropdown.setValue(settings.cardAnswerCutoffMode).onChange((value) => {
+          void this.plugin.updateSettings({ cardAnswerCutoffMode: value as CardAnswerCutoffMode });
+        });
+      });
+
     containerEl.createEl("h3", { text: t("settings.qaGroup.title") });
 
     new Setting(containerEl)
@@ -133,7 +144,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
       });
 
-    this.renderSemanticQaPreview(containerEl, settings.semanticQaMarker);
+    this.renderSemanticQaPreview(containerEl, settings.semanticQaMarker, settings.cardAnswerCutoffMode);
 
     this.renderScopeSection(containerEl, settings);
 
@@ -453,7 +464,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     });
   }
 
-  private renderSemanticQaPreview(containerEl: HTMLElement, marker: string): void {
+  private renderSemanticQaPreview(containerEl: HTMLElement, marker: string, cardAnswerCutoffMode: CardAnswerCutoffMode): void {
     const sampleHeading = `城市更新 ${marker}`;
 
     containerEl.createEl("h4", { text: t("settings.semanticQa.previewTitle") });
@@ -469,6 +480,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         "  对城市更新有系统学习需求的从业者。",
       ],
       bodyStartLine: 2,
+      cardAnswerCutoffMode,
     });
 
     if (previewCards.length === 0) {

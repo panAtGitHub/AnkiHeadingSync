@@ -1,5 +1,7 @@
 import type { GroupMarker } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
 
+import { applyNormalizedMarkerWrite } from "./MarkerWritebackNormalization";
+
 export interface ParsedGroupMarker extends GroupMarker {
   raw: string;
   lineIndex: number;
@@ -145,32 +147,14 @@ export class GroupMarkerService {
   }
 
   applyWrite(lines: string[], write: GroupMarkerWriteRequest): void {
-    const uniqueRemovals = new Set<number>(collectLegacyIdMarkerLineIndexes(lines, write.blockStartLine, write.blockEndLine));
-    if (write.markerLine !== undefined) {
-      uniqueRemovals.add(write.markerLine - 1);
-    }
-
-    for (let lineIndex = write.contentEndLine; lineIndex < write.blockEndLine; lineIndex += 1) {
-      if (!(lines[lineIndex] ?? "").trim()) {
-        uniqueRemovals.add(lineIndex);
-      }
-    }
-
-    const removalIndexes = [...uniqueRemovals].sort((left, right) => right - left);
-    const insertionIndex = write.contentEndLine - [...uniqueRemovals].filter((lineIndex) => lineIndex < write.contentEndLine).length;
-
-    for (const lineIndex of removalIndexes) {
-      lines.splice(lineIndex, 1);
-    }
-
-    lines.splice(insertionIndex, 0, `${write.markerIndent ?? ""}${serializeGroupMarker(write.noteId, write.itemToSlot, write.freeSlots)}`);
-    while (insertionIndex + 1 < lines.length && !(lines[insertionIndex + 1] ?? "").trim()) {
-      lines.splice(insertionIndex + 1, 1);
-    }
-
-    if (insertionIndex + 1 < lines.length) {
-      lines.splice(insertionIndex + 1, 0, "", "");
-    }
+    applyNormalizedMarkerWrite(lines, {
+      contentEndLine: write.contentEndLine,
+      blockEndLine: write.blockEndLine,
+      markerLine: write.markerLine,
+      markerIndent: write.markerIndent,
+      renderedMarker: serializeGroupMarker(write.noteId, write.itemToSlot, write.freeSlots),
+      additionalRemovalLineIndexes: collectLegacyIdMarkerLineIndexes(lines, write.blockStartLine, write.blockEndLine),
+    });
   }
 }
 

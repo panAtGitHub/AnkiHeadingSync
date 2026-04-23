@@ -1,7 +1,9 @@
-import { hashString } from "@/domain/shared/hash";
 import type { IdMarkerState } from "@/domain/manual-sync/entities/IdMarker";
+import type { CardAnswerCutoffMode } from "@/application/config/PluginSettings";
+import { hashString } from "@/domain/shared/hash";
 
 import { CardMarkerService } from "./CardMarkerService";
+import { resolveAnswerBoundary } from "./AnswerBoundaryParser";
 
 const LIST_ITEM_REGEXP = /^([ \t]*)(?:[-+*]|\d+[.)])\s+(.*)$/;
 
@@ -10,6 +12,7 @@ export interface SemanticQaListParserInput {
   marker: string;
   bodyLines: string[];
   bodyStartLine: number;
+  cardAnswerCutoffMode?: CardAnswerCutoffMode;
 }
 
 export interface SemanticQaListCard {
@@ -38,14 +41,6 @@ interface ChildRegion {
   rawLines: string[];
   startIndex: number;
   endIndex: number;
-}
-
-interface TrailingMarkerExtractionResult {
-  bodyLines: string[];
-  markerNoteId?: number;
-  markerLine?: number;
-  markerIndent?: string;
-  idMarkerState: IdMarkerState;
 }
 
 export class SemanticQaListParser {
@@ -80,8 +75,14 @@ export class SemanticQaListParser {
       }
 
       const absoluteBodyStartLine = input.bodyStartLine + childRegion.startIndex;
-      const trailingMarker = extractTrailingMarker(childRegion.rawLines, absoluteBodyStartLine, this.markerService);
-      const trimmedBodyLines = trimBlankEdges(trailingMarker.bodyLines);
+      const boundary = resolveAnswerBoundary({
+        lines: childRegion.rawLines,
+        startLine: absoluteBodyStartLine,
+        fallbackLine: input.bodyStartLine + item.index,
+        cutoffMode: input.cardAnswerCutoffMode ?? "heading-block",
+        markerAdapter: this.markerService,
+      });
+      const trimmedBodyLines = trimBlankEdges(boundary.contentLines);
       if (trimmedBodyLines.length === 0) {
         continue;
       }
@@ -106,11 +107,11 @@ export class SemanticQaListParser {
         blockStartLine: input.bodyStartLine + item.index,
         bodyStartLine: absoluteBodyStartLine,
         blockEndLine: input.bodyStartLine + childRegion.endIndex,
-        contentEndLine: findContentEndLine(trailingMarker.bodyLines, absoluteBodyStartLine, input.bodyStartLine + item.index),
-        markerLine: trailingMarker.markerLine,
-        markerIndent: trailingMarker.markerIndent ?? deriveMarkerIndent(trimmedBodyLines, item.indent),
-        markerNoteId: trailingMarker.markerNoteId,
-        idMarkerState: trailingMarker.idMarkerState,
+        contentEndLine: boundary.contentEndLine,
+        markerLine: boundary.markerLine,
+        markerIndent: boundary.markerIndent ?? deriveMarkerIndent(trimmedBodyLines, item.indent),
+        markerNoteId: boundary.marker?.noteId,
+        idMarkerState: boundary.markerState,
         rawBlockText,
         rawBlockHash: hashString(rawBlockText),
       });
@@ -213,43 +214,6 @@ function collectChildRegion(
   };
 }
 
-function extractTrailingMarker(
-  rawLines: string[],
-  bodyStartLine: number,
-  markerService: CardMarkerService,
-): TrailingMarkerExtractionResult {
-  let lastNonEmptyIndex = rawLines.length - 1;
-  while (lastNonEmptyIndex >= 0 && !rawLines[lastNonEmptyIndex].trim()) {
-    lastNonEmptyIndex -= 1;
-  }
-
-  if (lastNonEmptyIndex < 0) {
-    return {
-      bodyLines: rawLines,
-      idMarkerState: "missing",
-    };
-  }
-
-  const lastLine = rawLines[lastNonEmptyIndex];
-  if (!markerService.isCandidate(lastLine)) {
-    return {
-      bodyLines: rawLines,
-      idMarkerState: "missing",
-    };
-  }
-
-  const parsedMarker = markerService.parse(lastLine, bodyStartLine + lastNonEmptyIndex);
-  const nextBodyLines = rawLines.filter((_line, index) => index !== lastNonEmptyIndex);
-
-  return {
-    bodyLines: nextBodyLines,
-    markerNoteId: parsedMarker?.noteId,
-    markerLine: bodyStartLine + lastNonEmptyIndex,
-    markerIndent: leadingWhitespace(lastLine),
-    idMarkerState: parsedMarker ? "present-valid" : "present-invalid",
-  };
-}
-
 function trimBlankEdges(lines: string[]): string[] {
   let startIndex = 0;
   let endIndex = lines.length;
@@ -281,16 +245,6 @@ function deriveMarkerIndent(bodyLines: string[], itemIndent: string): string {
   }
 
   return `${itemIndent}  `;
-}
-
-function findContentEndLine(bodyLines: string[], bodyStartLine: number, fallbackLine: number): number {
-  for (let index = bodyLines.length - 1; index >= 0; index -= 1) {
-    if (bodyLines[index].trim()) {
-      return bodyStartLine + index;
-    }
-  }
-
-  return fallbackLine;
 }
 
 function leadingWhitespace(line: string): string {

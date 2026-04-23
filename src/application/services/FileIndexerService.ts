@@ -55,6 +55,7 @@ export class FileIndexerService {
     const indexedFile = this.cardIndexingService.index(sourceFile, {
       qaHeadingLevel: settings.qaHeadingLevel,
       clozeHeadingLevel: settings.clozeHeadingLevel,
+      cardAnswerCutoffMode: settings.cardAnswerCutoffMode,
       qaGroupMarker: settings.qaGroupMarker,
       semanticQaMarker: settings.semanticQaMarker,
       fileStamp,
@@ -137,6 +138,7 @@ export class FileIndexerService {
       const indexedFile = this.cardIndexingService.index(sourceFile, {
         qaHeadingLevel: settings.qaHeadingLevel,
         clozeHeadingLevel: settings.clozeHeadingLevel,
+        cardAnswerCutoffMode: settings.cardAnswerCutoffMode,
         qaGroupMarker: settings.qaGroupMarker,
         semanticQaMarker: settings.semanticQaMarker,
         fileStamp,
@@ -269,13 +271,14 @@ export function createFileStamp(mtime: number, size: number): string {
   return `${mtime}:${size}`;
 }
 
-const DECK_RULES_FINGERPRINT_VERSION = "deck-rules-v1";
+const DECK_RULES_FINGERPRINT_VERSION = "deck-rules-v2";
 
 export function createDeckRulesFingerprint(settings: PluginSettings): string {
   return hashString(JSON.stringify({
     version: DECK_RULES_FINGERPRINT_VERSION,
     qaHeadingLevel: settings.qaHeadingLevel,
     clozeHeadingLevel: settings.clozeHeadingLevel,
+    cardAnswerCutoffMode: settings.cardAnswerCutoffMode,
     qaGroupMarker: settings.qaGroupMarker,
     semanticQaMarker: settings.semanticQaMarker,
     defaultDeck: settings.defaultDeck,

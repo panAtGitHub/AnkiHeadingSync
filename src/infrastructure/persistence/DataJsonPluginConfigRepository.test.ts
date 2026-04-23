@@ -42,6 +42,7 @@ describe("DataJsonPluginConfigRepository", () => {
     expect(settings.fileDeckInsertLocation).toBe("body");
     expect(settings.folderDeckMode).toBe("off");
     expect(settings.qaGroupMarker).toBe("#anki-list");
+    expect(settings.cardAnswerCutoffMode).toBe("heading-block");
     expect(settings.semanticQaMarker).toBe("#anki-list-qa");
     expect(settings.semanticQaNoteType).toBe("Semantic QA");
   });
@@ -84,6 +85,7 @@ describe("DataJsonPluginConfigRepository", () => {
 
     await repository.save({
       ...DEFAULT_SETTINGS,
+      cardAnswerCutoffMode: "double-blank-lines",
       semanticQaMarker: "#semantic-qa",
       semanticQaNoteType: "Semantic QA",
       noteFieldMappings: {
@@ -100,6 +102,7 @@ describe("DataJsonPluginConfigRepository", () => {
 
     const reloaded = await repository.load();
 
+    expect(reloaded.cardAnswerCutoffMode).toBe("double-blank-lines");
     expect(reloaded.semanticQaMarker).toBe("#semantic-qa");
     expect(reloaded.semanticQaNoteType).toBe("Semantic QA");
     expect(reloaded.noteFieldMappings).toEqual({

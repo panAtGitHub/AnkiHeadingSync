@@ -1,3 +1,4 @@
+import type { CardAnswerCutoffMode } from "@/application/config/PluginSettings";
 import type { SourceFile } from "@/domain/card/entities/SourceFile";
 import { createIndexedCardSyncKey, type IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
 import { buildGroupSrc, createIndexedGroupSyncKey, type IndexedGroupCardBlock } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
@@ -9,6 +10,7 @@ import { CardMarkerService } from "./CardMarkerService";
 import { DeckExtractionService } from "./DeckExtractionService";
 import { QaGroupBlockParser } from "./QaGroupBlockParser";
 import { SemanticQaListParser } from "./SemanticQaListParser";
+import { resolveAnswerBoundary } from "./AnswerBoundaryParser";
 
 interface HeadingMatch {
   level: number;
@@ -16,17 +18,10 @@ interface HeadingMatch {
   lineIndex: number;
 }
 
-interface MarkerExtractionResult {
-  bodyLines: string[];
-  markerNoteId?: number;
-  contentEndLine: number;
-  markerLine?: number;
-  idMarkerState: IndexedCard["idMarkerState"];
-}
-
 export interface CardIndexingContext {
   qaHeadingLevel: number;
   clozeHeadingLevel: number;
+  cardAnswerCutoffMode?: CardAnswerCutoffMode;
   qaGroupMarker?: string;
   semanticQaMarker?: string;
   fileStamp: string;
@@ -72,6 +67,7 @@ export class CardIndexingService {
 
       const blockEndLineIndex = findBlockEndLineIndex(headings, headingIndex, lines.length);
       const bodyLines = lines.slice(heading.lineIndex + 1, blockEndLineIndex);
+      const cutoffMode = context.cardAnswerCutoffMode ?? "heading-block";
       const qaGroupMarker = context.qaGroupMarker ?? "#anki-list";
       if (cardType === "basic" && this.qaGroupBlockParser.isQaGroupHeading(heading.text, qaGroupMarker)) {
         const parsedGroupBlock = this.qaGroupBlockParser.parse({
@@ -79,6 +75,7 @@ export class CardIndexingService {
           marker: qaGroupMarker,
           bodyLines,
           bodyStartLine: heading.lineIndex + 2,
+          cardAnswerCutoffMode: cutoffMode,
         });
         const src = buildGroupSrc(sourceFile.path, heading.text);
         const resolvedGroupIdentity = this.resolveGroupIdentity(
@@ -139,6 +136,7 @@ export class CardIndexingService {
           marker: semanticQaMarker,
           bodyLines,
           bodyStartLine: heading.lineIndex + 2,
+          cardAnswerCutoffMode: cutoffMode,
         })) {
           const resolvedIdentity = this.resolveIdentity(
             sourceFile.path,
@@ -188,8 +186,14 @@ export class CardIndexingService {
         continue;
       }
 
-      const marker = extractMarker(bodyLines, heading.lineIndex + 2, heading.lineIndex + 1, this.markerService);
-      const trimmedBodyLines = trimBlankEdges(marker.bodyLines);
+      const boundary = resolveAnswerBoundary({
+        lines: bodyLines,
+        startLine: heading.lineIndex + 2,
+        fallbackLine: heading.lineIndex + 1,
+        cutoffMode,
+        markerAdapter: this.markerService,
+      });
+      const trimmedBodyLines = trimBlankEdges(boundary.contentLines);
       const bodyMarkdown = trimmedBodyLines.join("\n");
       const rawBlockText = [lines[heading.lineIndex], ...trimmedBodyLines].join("\n").trimEnd();
       const rawBlockHash = hashString(rawBlockText);
@@ -197,7 +201,7 @@ export class CardIndexingService {
         sourceFile.path,
         heading.lineIndex + 1,
         rawBlockHash,
-        marker.markerNoteId,
+        boundary.marker?.noteId,
         knownCardsByBlockKey,
         pendingByBlockKey,
         usedNoteIds,
@@ -210,7 +214,7 @@ export class CardIndexingService {
       cards.push({
         noteId: resolvedIdentity.noteId,
         syncKey: createIndexedCardSyncKey(sourceFile.path, heading.lineIndex + 1, rawBlockHash),
-        idMarkerState: marker.idMarkerState,
+        idMarkerState: boundary.markerState,
         noteIdSource: resolvedIdentity.noteIdSource,
         filePath: sourceFile.path,
         cardType,
@@ -223,8 +227,9 @@ export class CardIndexingService {
         blockStartLine: heading.lineIndex + 1,
         bodyStartLine: heading.lineIndex + 2,
         blockEndLine: blockEndLineIndex,
-        contentEndLine: marker.contentEndLine,
-        markerLine: marker.markerLine,
+        contentEndLine: boundary.contentEndLine,
+        markerLine: boundary.markerLine,
+        markerIndent: boundary.markerIndent,
         rawBlockText,
         rawBlockHash,
         deckHint: extractedDeck.explicitDeckHint,
@@ -472,56 +477,6 @@ function trimBlankEdges(lines: string[]): string[] {
   }
 
   return lines.slice(startIndex, endIndex);
-}
-
-function extractMarker(
-  bodyLines: string[],
-  bodyStartLine: number,
-  headingLine: number,
-  markerService: CardMarkerService,
-): MarkerExtractionResult {
-  let lastNonEmptyIndex = bodyLines.length - 1;
-  while (lastNonEmptyIndex >= 0 && !bodyLines[lastNonEmptyIndex].trim()) {
-    lastNonEmptyIndex -= 1;
-  }
-
-  if (lastNonEmptyIndex < 0) {
-    return {
-      bodyLines,
-      contentEndLine: headingLine,
-      idMarkerState: "missing",
-    };
-  }
-
-  const lastLine = bodyLines[lastNonEmptyIndex];
-  if (!markerService.isCandidate(lastLine)) {
-    return {
-      bodyLines,
-      contentEndLine: findContentEndLine(bodyLines, bodyStartLine, headingLine),
-      idMarkerState: "missing",
-    };
-  }
-
-  const parsedMarker = markerService.parse(lastLine, bodyStartLine + lastNonEmptyIndex);
-  const nextBodyLines = bodyLines.filter((_line, index) => index !== lastNonEmptyIndex);
-
-  return {
-    bodyLines: nextBodyLines,
-    markerNoteId: parsedMarker?.noteId,
-    contentEndLine: findContentEndLine(nextBodyLines, bodyStartLine, headingLine),
-    markerLine: bodyStartLine + lastNonEmptyIndex,
-    idMarkerState: parsedMarker ? "present-valid" : "present-invalid",
-  };
-}
-
-function findContentEndLine(bodyLines: string[], bodyStartLine: number, headingLine: number): number {
-  for (let index = bodyLines.length - 1; index >= 0; index -= 1) {
-    if (bodyLines[index].trim()) {
-      return bodyStartLine + index;
-    }
-  }
-
-  return headingLine;
 }
 
 function computeLineStartOffsets(content: string): number[] {
