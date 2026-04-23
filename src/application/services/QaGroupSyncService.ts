@@ -7,6 +7,8 @@ import { GroupMarkerService, type GroupMarkerWriteRequest } from "@/domain/manua
 import { DeckResolutionService } from "@/domain/manual-sync/services/DeckResolutionService";
 import { getDeckResolutionWarningKey, type DeckResolutionWarning } from "@/domain/manual-sync/value-objects/DeckResolution";
 import { hashString } from "@/domain/shared/hash";
+import { preprocessCardBodyMarkdown } from "@/domain/manual-sync/services/preprocessCardBodyMarkdown";
+import { diffTagSets } from "@/domain/manual-sync/services/tagSetUtils";
 
 import { buildQaGroupNoteFields, formatQaGroupSlot, QA_GROUP_MODEL_NAME, QA_GROUP_SLOT_COUNT } from "./QaGroupModelDefinition";
 import { QaGroupModelService } from "./QaGroupModelService";
@@ -110,7 +112,11 @@ export class QaGroupSyncService {
         ensuredDecks.add(deck);
       }
 
-      const fields = buildQaGroupNoteFields(block.stem, groupId, this.buildGroupBacklink(block, settings), resolvedItems);
+      const renderedItems = resolvedItems.map((item) => ({
+        ...item,
+        answer: preprocessCardBodyMarkdown(item.answer, settings.keepPureTagLinesInCardBody),
+      }));
+      const fields = buildQaGroupNoteFields(block.stem, groupId, this.buildGroupBacklink(block, settings), renderedItems);
       let noteId = recovered.noteId ?? block.noteId;
       let existingNote = recovered.noteDetails;
 
@@ -119,45 +125,86 @@ export class QaGroupSyncService {
           deckName: deck,
           modelName: QA_GROUP_MODEL_NAME,
           fields,
-          tags: [],
+          tags: block.tagsHint ?? [],
         });
         created += 1;
         touchedSyncKeys.add(block.syncKey);
       } else {
-        const stateUnchanged = recovered.stateRecord
-          && recovered.stateRecord.rawBlockHash === block.rawBlockHash
-          && recovered.stateRecord.deck === deck
-          && !recovered.stateRecord.orphan;
-
-        let fieldsChanged = !stateUnchanged;
-        let deckChanged = recovered.stateRecord ? recovered.stateRecord.deck !== deck : false;
-
         existingNote ??= await this.tryLoadQaGroupNote(noteId, block);
         if (!existingNote) {
           noteId = await this.ankiGateway.addNote({
             deckName: deck,
             modelName: QA_GROUP_MODEL_NAME,
             fields,
-            tags: [],
+            tags: block.tagsHint ?? [],
           });
           created += 1;
           touchedSyncKeys.add(block.syncKey);
-        } else if (!stateUnchanged) {
-          fieldsChanged = !haveEqualFields(existingNote.fields, fields);
-          deckChanged = !(existingNote.deckNames ?? []).includes(deck);
         }
 
-        if (existingNote && (fieldsChanged || deckChanged)) {
-          await this.ankiGateway.updateNote({
-            noteId,
-            fields,
-            deckName: deckChanged ? deck : undefined,
-          });
+        if (existingNote) {
+          const fieldsChanged = !haveEqualFields(existingNote.fields, fields);
+          const deckChanged = !(existingNote.deckNames ?? []).includes(deck);
+          const tagDiff = diffTagSets(block.tagsHint, existingNote.tags);
+          const tagsChanged = tagDiff.addTags.length > 0 || tagDiff.removeTags.length > 0;
+
+          if (!fieldsChanged && !deckChanged && !tagsChanged) {
+            resolvedNoteIds.set(block.syncKey, noteId);
+            const now = this.now();
+            syncedGroupBlocks.push({
+              groupId,
+              noteId,
+              filePath: block.filePath,
+              headingText: block.headingText,
+              backlinkHeadingText: block.backlinkHeadingText,
+              headingLevel: block.headingLevel,
+              stem: block.stem,
+              src: block.src || buildGroupSrc(block.filePath, block.backlinkHeadingText),
+              blockStartOffset: block.blockStartOffset,
+              blockEndOffset: block.blockEndOffset,
+              blockStartLine: block.blockStartLine,
+              bodyStartLine: block.bodyStartLine,
+              blockEndLine: block.blockEndLine,
+              contentEndLine: block.contentEndLine,
+              markerLine: block.markerLine,
+              markerIndent: block.markerIndent,
+              rawBlockText: block.rawBlockText,
+              rawBlockHash: block.rawBlockHash,
+              deck,
+              deckHint: block.deckHint,
+              deckHintSource: block.deckHintSource,
+              deckWarnings: [...deckResolution.warnings],
+              tagsHint: block.tagsHint ? [...block.tagsHint] : [],
+              items: resolvedItems,
+              freeSlots,
+              lastSyncedAt: recovered.stateRecord?.lastSyncedAt ?? now,
+              orphan: false,
+            });
+            continue;
+          }
+
+          if (fieldsChanged || deckChanged) {
+            await this.ankiGateway.updateNote({
+              noteId,
+              fields,
+              deckName: deckChanged ? deck : undefined,
+            });
+          }
           if (fieldsChanged) {
+            updated += 1;
+          }
+          if (!fieldsChanged && tagsChanged) {
             updated += 1;
           }
           if (deckChanged) {
             migratedDecks += 1;
+          }
+          if (tagsChanged) {
+            await this.ankiGateway.syncNoteTags([{
+              noteId,
+              addTags: tagDiff.addTags,
+              removeTags: tagDiff.removeTags,
+            }]);
           }
           touchedSyncKeys.add(block.syncKey);
         }
@@ -213,6 +260,7 @@ export class QaGroupSyncService {
         deckHint: block.deckHint,
         deckHintSource: block.deckHintSource,
         deckWarnings: [...deckResolution.warnings],
+        tagsHint: block.tagsHint ? [...block.tagsHint] : [],
         items: resolvedItems,
         freeSlots,
         lastSyncedAt: touchedSyncKeys.has(block.syncKey) ? now : recovered.stateRecord?.lastSyncedAt ?? now,

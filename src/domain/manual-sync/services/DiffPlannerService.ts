@@ -5,6 +5,8 @@ import { createPendingWriteBackKey, toNoteIdKey, type PluginState } from "@/doma
 import { getDeckResolutionWarningKey, type DeckResolutionWarning } from "@/domain/manual-sync/value-objects/DeckResolution";
 import type { ManualSyncPlan, PlannedCard } from "@/domain/manual-sync/value-objects/ManualSyncPlan";
 
+import { areTagSetsEqual } from "./tagSetUtils";
+
 export class DiffPlannerService {
   constructor(private readonly renderConfigService = new RenderConfigService()) {}
 
@@ -74,6 +76,7 @@ export class DiffPlannerService {
       const fieldsChanged =
         existingState.rawBlockHash !== card.rawBlockHash ||
         existingState.renderConfigHash !== renderPlan.renderConfigHash ||
+        !areTagSetsEqual(existingState.tagsHint, card.tagsHint) ||
         existingState.orphan;
       const deckChanged = existingState.deck !== renderPlan.deck;
 

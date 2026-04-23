@@ -484,6 +484,8 @@ describe("AnkiHeadingSyncSettingTab", () => {
     expect(container.textNodes).toContain("Anki Heading Sync");
     expect(findSetting(container, "AnkiConnect URL").desc).toBe("Default is http://127.0.0.1:8765");
     expect(findSetting(container, "Card answer cutoff mode").desc).toBe("A valid sync marker always wins. Without a valid marker, either keep the whole heading block or stop before the first 2+ consecutive blank lines.");
+    expect(findSetting(container, "Sync Obsidian tags to Anki").desc).toBe("Sync Obsidian-recognized tags from the current note into Anki note tags, including nested tags. On each sync, these tags overwrite the managed tags in Anki based on the current Obsidian content.");
+    expect(findSetting(container, "Keep pure tag lines in card body").desc).toBe("When turned off, remove every line in the card body that contains only tags, such as \"#ProjectA #重点/案例\". Inline tags like \"This is a #tag example\" and lines with ordinary text like \"标签：#项目A\" are kept. Extra blank lines created by removal are cleaned up automatically.");
     expect(findSetting(container, "Run scope").desc).toBe("Only process Markdown files in the checked folders below");
 
     await flushAsync();
@@ -509,6 +511,8 @@ describe("AnkiHeadingSyncSettingTab", () => {
     tab.display();
     expect(findSetting(container, "QA 标题层级").desc).toBe("默认是 H4");
     expect(findSetting(container, "卡片正文截止模式").desc).toBe("有效同步标记始终优先。没有有效标记时，选择继续到整个标题块末尾，或在首个 2+ 连续空行前截止。");
+    expect(findSetting(container, "同步 Obsidian 标签到 Anki").desc).toBe("将当前笔记中 Obsidian 识别到的标签同步为 Anki 笔记标签，支持嵌套标签。每次同步时，这些标签都会以当前 Obsidian 内容为准覆盖 Anki。");
+    expect(findSetting(container, "在卡片正文中保留纯标签行").desc).toBe("关闭后，会删除正文中所有只包含标签的整行，例如 “#项目A #重点/案例”。像“这是 #标签 的案例”这类行内标签，或“标签：#项目A”这类带普通文字的行，不会被删除。删除后会自动清理多余空行。");
     expect(findSetting(container, "运行范围").desc).toBe("仅处理下方勾选文件夹中的 Markdown 文件");
     expect(findSetting(container, "默认牌组").desc).toBe("优先级最低：当文件级 deck 与文件夹映射都未命中时使用。");
 
@@ -695,6 +699,31 @@ describe("AnkiHeadingSyncSettingTab", () => {
 
     tab.display();
     expect(getDropdown(findSetting(container, "Card answer cutoff mode")).value).toBe("double-blank-lines");
+  });
+
+  it("saves and rehydrates the new sync option toggles", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+    const container = tab.containerEl as unknown as FakeContainerElInstance;
+
+    tab.display();
+
+    const syncTagsToggle = getToggle(findSetting(container, "Sync Obsidian tags to Anki"));
+    const keepPureTagLinesToggle = getToggle(findSetting(container, "Keep pure tag lines in card body"));
+
+    expect(syncTagsToggle.value).toBe(true);
+    expect(keepPureTagLinesToggle.value).toBe(true);
+
+    await syncTagsToggle.triggerChange(false);
+    await keepPureTagLinesToggle.triggerChange(false);
+
+    expect(plugin.settings.syncObsidianTagsToAnki).toBe(false);
+    expect(plugin.settings.keepPureTagLinesInCardBody).toBe(false);
+
+    tab.display();
+
+    expect(getToggle(findSetting(container, "Sync Obsidian tags to Anki")).value).toBe(false);
+    expect(getToggle(findSetting(container, "Keep pure tag lines in card body")).value).toBe(false);
   });
 
   it("removes the old folder textareas and hides the folder tree in all mode", async () => {

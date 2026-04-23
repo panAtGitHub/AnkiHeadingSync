@@ -27,6 +27,7 @@ export class RenderConfigService {
       mapping,
       addObsidianBacklink: settings.addObsidianBacklink,
       convertHighlightsToCloze: settings.convertHighlightsToCloze,
+      keepPureTagLinesInCardBody: settings.keepPureTagLinesInCardBody,
     };
     const renderConfigHash = hashString(JSON.stringify(renderConfigPayload));
 

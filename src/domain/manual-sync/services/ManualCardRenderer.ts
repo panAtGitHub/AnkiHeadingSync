@@ -5,6 +5,8 @@ import type { PlannedCard } from "@/domain/manual-sync/value-objects/ManualSyncP
 import type { MediaAsset } from "@/domain/card/entities/RenderedFields";
 import type { RenderedSyncCard } from "@/domain/manual-sync/entities/RenderedSyncCard";
 
+import { preprocessCardBodyMarkdown } from "./preprocessCardBodyMarkdown";
+
 const markdown = new MarkdownIt({
   breaks: true,
   html: true,
@@ -24,6 +26,7 @@ const WIKILINK_PATTERN = /(?<!!)\[\[([^\]]+)\]\]/g;
 export interface ManualCardRenderContext {
   addObsidianBacklink: boolean;
   convertHighlightsToCloze: boolean;
+  keepPureTagLinesInCardBody: boolean;
   resourceResolver: ManualSyncVaultGateway;
 }
 
@@ -78,7 +81,8 @@ export class ManualCardRenderer {
     cloze: boolean,
     inline: boolean,
   ): RenderResult {
-    const protectedBlocks = protectSegments(markdownText, FENCED_CODE_PATTERN, "FENCED_CODE");
+    const sourceMarkdown = inline ? markdownText : preprocessCardBodyMarkdown(markdownText, context.keepPureTagLinesInCardBody);
+    const protectedBlocks = protectSegments(sourceMarkdown, FENCED_CODE_PATTERN, "FENCED_CODE");
     const protectedInline = protectSegments(protectedBlocks.text, INLINE_CODE_PATTERN, "INLINE_CODE");
     let transformed = protectedInline.text;
     const media: MediaAsset[] = [];

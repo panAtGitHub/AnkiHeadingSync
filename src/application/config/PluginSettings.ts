@@ -27,6 +27,8 @@ export interface PluginSettings {
   excludeFolders: string[];
   addObsidianBacklink: boolean;
   convertHighlightsToCloze: boolean;
+  syncObsidianTagsToAnki: boolean;
+  keepPureTagLinesInCardBody: boolean;
   ankiConnectUrl: string;
 }
 
@@ -51,6 +53,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   excludeFolders: [],
   addObsidianBacklink: true,
   convertHighlightsToCloze: true,
+  syncObsidianTagsToAnki: true,
+  keepPureTagLinesInCardBody: true,
   ankiConnectUrl: "http://127.0.0.1:8765",
 };
 
@@ -121,6 +125,14 @@ export function validatePluginSettings(settings: PluginSettings): void {
 
   if (typeof settings.fileDeckEnabled !== "boolean") {
     throw new PluginUserError("errors.settings.fileDeckEnabledBoolean");
+  }
+
+  if (typeof settings.syncObsidianTagsToAnki !== "boolean") {
+    throw new PluginUserError("errors.settings.syncObsidianTagsToAnkiBoolean");
+  }
+
+  if (typeof settings.keepPureTagLinesInCardBody !== "boolean") {
+    throw new PluginUserError("errors.settings.keepPureTagLinesInCardBodyBoolean");
   }
 
   if (typeof settings.fileDeckMarker !== "string") {

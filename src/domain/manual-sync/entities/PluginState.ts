@@ -73,6 +73,7 @@ export interface GroupBlockState {
   deckHint?: string;
   deckHintSource?: Extract<DeckResolutionSource, "frontmatter" | "body">;
   deckWarnings: DeckResolutionWarning[];
+  tagsHint?: string[];
   items: GroupItem[];
   freeSlots: number[];
   lastSyncedAt: number;

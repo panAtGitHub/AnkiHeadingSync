@@ -233,9 +233,9 @@ describe("AnkiConnectGateway", () => {
         json: {
           error: null,
           result: [
-            { noteId: 100, modelName: "Basic", cards: [1] },
+            { noteId: 100, modelName: "Basic", cards: [1], tags: ["tag-a"] },
             null,
-            { noteId: 102, modelName: "Cloze", cards: [2] },
+            { noteId: 102, modelName: "Cloze", cards: [2], tags: ["tag-b", "tag-c"] },
           ],
         },
       })
@@ -253,8 +253,8 @@ describe("AnkiConnectGateway", () => {
     const summaries = await gateway.getNoteSummaries([100, 101, 102]);
 
     expect(summaries).toEqual([
-      { noteId: 100, modelName: "Basic", cardIds: [1], deckNames: ["Deck::One"] },
-      { noteId: 102, modelName: "Cloze", cardIds: [2], deckNames: ["Deck::Two"] },
+      { noteId: 100, modelName: "Basic", cardIds: [1], deckNames: ["Deck::One"], tags: ["tag-a"] },
+      { noteId: 102, modelName: "Cloze", cardIds: [2], deckNames: ["Deck::Two"], tags: ["tag-b", "tag-c"] },
     ]);
     expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
       action: "notesInfo",
@@ -268,6 +268,59 @@ describe("AnkiConnectGateway", () => {
       version: 6,
       params: {
         cards: [1, 2],
+      },
+    });
+  });
+
+  it("syncs note tags by removing obsolete tags before adding current tags", async () => {
+    requestUrlMock.mockResolvedValue({
+      json: {
+        error: null,
+        result: [null, null, null],
+      },
+    });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    await gateway.syncNoteTags([
+      {
+        noteId: 100,
+        removeTags: ["old", "stale"],
+        addTags: ["fresh", "nested::tag"],
+      },
+      {
+        noteId: 101,
+        removeTags: [],
+        addTags: ["only-add"],
+      },
+    ]);
+
+    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+      action: "multi",
+      version: 6,
+      params: {
+        actions: [
+          {
+            action: "removeTags",
+            params: {
+              notes: [100],
+              tags: "old stale",
+            },
+          },
+          {
+            action: "addTags",
+            params: {
+              notes: [100],
+              tags: "fresh nested::tag",
+            },
+          },
+          {
+            action: "addTags",
+            params: {
+              notes: [101],
+              tags: "only-add",
+            },
+          },
+        ],
       },
     });
   });

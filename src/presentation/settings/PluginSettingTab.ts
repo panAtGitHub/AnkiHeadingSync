@@ -166,6 +166,24 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
       });
 
+    new Setting(containerEl)
+      .setName(t("settings.syncOptions.syncObsidianTagsToAnki.name"))
+      .setDesc(t("settings.syncOptions.syncObsidianTagsToAnki.desc"))
+      .addToggle((toggle) => {
+        toggle.setValue(settings.syncObsidianTagsToAnki).onChange((value) => {
+          void this.plugin.updateSettings({ syncObsidianTagsToAnki: value });
+        });
+      });
+
+    new Setting(containerEl)
+      .setName(t("settings.syncOptions.keepPureTagLinesInCardBody.name"))
+      .setDesc(t("settings.syncOptions.keepPureTagLinesInCardBody.desc"))
+      .addToggle((toggle) => {
+        toggle.setValue(settings.keepPureTagLinesInCardBody).onChange((value) => {
+          void this.plugin.updateSettings({ keepPureTagLinesInCardBody: value });
+        });
+      });
+
     containerEl.createEl("h3", { text: t("settings.mapping.title") });
 
     new Setting(containerEl)

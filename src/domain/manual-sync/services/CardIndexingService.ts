@@ -24,6 +24,7 @@ export interface CardIndexingContext {
   cardAnswerCutoffMode?: CardAnswerCutoffMode;
   qaGroupMarker?: string;
   semanticQaMarker?: string;
+  syncObsidianTagsToAnki?: boolean;
   fileStamp: string;
   knownCards: CardState[];
   knownGroupBlocks?: GroupBlockState[];
@@ -50,6 +51,7 @@ export class CardIndexingService {
     const extractedDeck = context.fileDeckEnabled
       ? this.deckExtractionService.extract(sourceFile, context.fileDeckMarker ?? "TARGET DECK")
       : { warnings: [] };
+    const fileTags = resolveSourceFileTags(sourceFile, context.syncObsidianTagsToAnki);
     const cards: IndexedCard[] = [];
     const groupBlocks: IndexedGroupCardBlock[] = [];
     const knownCardsByBlockKey = groupKnownCardsByBlockKey(context.knownCards);
@@ -120,6 +122,7 @@ export class CardIndexingService {
           deckHint: extractedDeck.explicitDeckHint,
           deckHintSource: extractedDeck.explicitDeckSource,
           deckWarnings: [...extractedDeck.warnings],
+          tagsHint: [...fileTags],
           items: parsedGroupBlock.items,
           groupMarker: parsedGroupBlock.groupMarker,
           freeSlots: parsedGroupBlock.groupMarker?.freeSlots ?? resolvedGroupIdentity.freeSlots,
@@ -178,7 +181,7 @@ export class CardIndexingService {
             deckHint: extractedDeck.explicitDeckHint,
             deckHintSource: extractedDeck.explicitDeckSource,
             deckWarnings: [...extractedDeck.warnings],
-            tagsHint: [],
+            tagsHint: [...fileTags],
             sourceContent: sourceFile.content,
           });
         }
@@ -235,7 +238,7 @@ export class CardIndexingService {
         deckHint: extractedDeck.explicitDeckHint,
         deckHintSource: extractedDeck.explicitDeckSource,
         deckWarnings: [...extractedDeck.warnings],
-        tagsHint: [],
+        tagsHint: [...fileTags],
         sourceContent: sourceFile.content,
       });
     }
@@ -391,6 +394,14 @@ function groupPendingWriteBackByBlockKey(pendingWriteBack: PendingWriteBackState
 
 function createKnownCardBlockKey(filePath: string, rawBlockHash: string): string {
   return `${filePath}\u0000${rawBlockHash}`;
+}
+
+function resolveSourceFileTags(sourceFile: SourceFile, syncObsidianTagsToAnki: boolean | undefined): string[] {
+  if (syncObsidianTagsToAnki === false) {
+    return [];
+  }
+
+  return Array.isArray(sourceFile.tags) ? [...sourceFile.tags] : [];
 }
 
 function validateHeadingPolicy(qaHeadingLevel: number, clozeHeadingLevel: number): void {

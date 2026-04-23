@@ -159,6 +159,57 @@ describe("DiffPlannerService", () => {
     expect(plan.toUpdate).toHaveLength(1);
     expect(plan.toChangeDeck).toHaveLength(0);
   });
+
+  it("schedules an update when only the tag set changed", () => {
+    const service = new DiffPlannerService();
+    const settings = createModule3Settings();
+    const card = createIndexedCard({
+      noteId: 42,
+      tagsHint: ["fresh", "shared"],
+      idMarkerState: "present-valid",
+      noteIdSource: "marker",
+    });
+    const renderPlan = new RenderConfigService().resolve(card, settings);
+    const state = {
+      files: {},
+      cards: {
+        "42": createCardState({ noteId: 42, renderConfigHash: renderPlan.renderConfigHash, deck: renderPlan.deck, tagsHint: ["old", "shared"] }),
+      },
+      pendingWriteBack: [],
+    };
+
+    const plan = service.plan([card], state, ["notes/example.md"], settings);
+
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toChangeDeck).toHaveLength(0);
+  });
+
+  it("schedules an update when only the pure tag line setting changes rendered output", () => {
+    const service = new DiffPlannerService();
+    const oldSettings = createModule3Settings({ keepPureTagLinesInCardBody: true });
+    const newSettings = createModule3Settings({ keepPureTagLinesInCardBody: false });
+    const card = createIndexedCard({
+      noteId: 42,
+      bodyMarkdown: "#项目A #重点/案例\n\nBody",
+      rawBlockText: ["#### Prompt", "#项目A #重点/案例", "", "Body"].join("\n"),
+      rawBlockHash: "same-hash",
+      idMarkerState: "present-valid",
+      noteIdSource: "marker",
+    });
+    const oldRenderPlan = new RenderConfigService().resolve(card, oldSettings);
+    const state = {
+      files: {},
+      cards: {
+        "42": createCardState({ noteId: 42, rawBlockHash: "same-hash", renderConfigHash: oldRenderPlan.renderConfigHash, deck: oldRenderPlan.deck, tagsHint: [] }),
+      },
+      pendingWriteBack: [],
+    };
+
+    const plan = service.plan([card], state, ["notes/example.md"], newSettings);
+
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toChangeDeck).toHaveLength(0);
+  });
 });
 
 function createIndexedCard(overrides: Partial<IndexedCard> = {}): IndexedCard {

@@ -183,6 +183,102 @@ describe("QaGroupSyncService", () => {
     expect(result.markerWrites[0]?.noteId).toBe(result.syncedGroupBlocks[0]?.noteId);
     expect(result.syncedGroupBlocks[0]?.noteId).not.toBe(42);
   });
+
+  it("applies pure tag line cleanup to QA Group answer fields when the setting is disabled", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    const vaultGateway = new FakeManualSyncVaultGateway();
+    const existingState = createStoredGroupBlockState();
+    ankiGateway.noteDetailsById.set(42, {
+      noteId: 42,
+      modelName: QA_GROUP_MODEL_NAME,
+      cardIds: [7001],
+      deckNames: ["notes"],
+      fields: buildQaGroupNoteFields(existingState.stem, existingState.groupId, existingState.src, [
+        { itemId: "item-a", slot: 1, title: "Alpha", answer: "#项目A #重点/案例\n\n第一段", ordinalInMarkdown: 1 },
+        { itemId: "item-b", slot: 3, title: "Beta", answer: "Second answer", ordinalInMarkdown: 2 },
+      ]),
+    });
+    const service = new QaGroupSyncService(
+      ankiGateway,
+      undefined,
+      undefined,
+      undefined,
+      () => 1234,
+      () => "group-x",
+      () => "item-new",
+      vaultGateway.createBacklink.bind(vaultGateway),
+    );
+
+    const result = await service.sync([
+      createIndexedGroupBlock({
+        noteId: 42,
+        groupId: "group-1",
+        rawBlockHash: existingState.rawBlockHash,
+        items: [
+          { title: "Alpha", answer: "#项目A #重点/案例\n\n第一段", ordinalInMarkdown: 1 },
+          { title: "Beta", answer: "Second answer", ordinalInMarkdown: 2 },
+        ],
+      }),
+    ], {
+      ...createEmptyPluginState(),
+      groupBlocks: {
+        "group-1": existingState,
+      },
+    }, createModule3Settings({ keepPureTagLinesInCardBody: false }));
+
+    expect(result.updated).toBe(1);
+    expect(ankiGateway.updatedNotes[0]?.fields).toMatchObject({
+      S01_A: "第一段",
+    });
+  });
+
+  it("syncs QA Group note tags from file-level tag hints", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    const vaultGateway = new FakeManualSyncVaultGateway();
+    const existingState = createStoredGroupBlockState();
+    ankiGateway.noteDetailsById.set(42, {
+      noteId: 42,
+      modelName: QA_GROUP_MODEL_NAME,
+      cardIds: [7001],
+      deckNames: ["notes"],
+      tags: ["old", "shared"],
+      fields: buildQaGroupNoteFields(existingState.stem, existingState.groupId, existingState.src, existingState.items),
+    });
+    const service = new QaGroupSyncService(
+      ankiGateway,
+      undefined,
+      undefined,
+      undefined,
+      () => 1234,
+      () => "group-x",
+      () => "item-new",
+      vaultGateway.createBacklink.bind(vaultGateway),
+    );
+
+    const result = await service.sync([
+      createIndexedGroupBlock({
+        noteId: 42,
+        groupId: "group-1",
+        rawBlockHash: existingState.rawBlockHash,
+        tagsHint: ["shared", "fresh"],
+        items: existingState.items.map(({ title, answer, ordinalInMarkdown }) => ({ title, answer, ordinalInMarkdown })),
+      }),
+    ], {
+      ...createEmptyPluginState(),
+      groupBlocks: {
+        "group-1": existingState,
+      },
+    }, createModule3Settings());
+
+    expect(result.updated).toBe(1);
+    expect(ankiGateway.syncedNoteTags).toEqual([
+      {
+        noteId: 42,
+        addTags: ["fresh"],
+        removeTags: ["old"],
+      },
+    ]);
+  });
 });
 
 function createIndexedGroupBlock(overrides: Partial<IndexedGroupCardBlock> = {}): IndexedGroupCardBlock {
@@ -206,6 +302,7 @@ function createIndexedGroupBlock(overrides: Partial<IndexedGroupCardBlock> = {})
     rawBlockText: overrides.rawBlockText ?? "qa-group:Concepts",
     rawBlockHash: overrides.rawBlockHash ?? "hash-1",
     deckWarnings: overrides.deckWarnings ?? [],
+    tagsHint: overrides.tagsHint,
     items: overrides.items ?? [
       { title: "Alpha", answer: "First answer", ordinalInMarkdown: 1 },
       { title: "Beta", answer: "Second answer", ordinalInMarkdown: 2 },

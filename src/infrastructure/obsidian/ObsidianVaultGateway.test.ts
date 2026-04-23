@@ -2,8 +2,55 @@ import { describe, expect, it } from "vitest";
 import { TFile, TFolder } from "obsidian";
 
 import { ObsidianVaultGateway } from "./ObsidianVaultGateway";
+import { normalizeObsidianTags } from "./normalizeObsidianTags";
 
 describe("ObsidianVaultGateway", () => {
+  it("reads metadata cache tags and normalizes nested, emoji, and Chinese tags", async () => {
+    const file = new TFile("notes/example.md");
+    const gateway = new ObsidianVaultGateway({
+      vault: {
+        getAbstractFileByPath: () => file,
+        cachedRead: async () => "# Title\nBody",
+      },
+      metadataCache: {
+        getFileCache: () => ({
+          frontmatter: {
+            tags: ["#📖/一人公司", "#3地区"],
+          },
+          tags: [
+            { tag: "#3地区" },
+            { tag: "#a/b/c" },
+            { tag: "#📖/一人公司" },
+          ],
+        }),
+      },
+    } as never);
+
+    await expect(gateway.readMarkdownFile("notes/example.md")).resolves.toMatchObject({
+      path: "notes/example.md",
+      basename: "example",
+      content: "# Title\nBody",
+      tags: ["3地区", "a::b::c", "📖::一人公司"],
+    });
+  });
+
+  it("returns an empty tag list when metadata cache is missing or has no tags", async () => {
+    const file = new TFile("notes/example.md");
+    const gateway = new ObsidianVaultGateway({
+      vault: {
+        getAbstractFileByPath: () => file,
+        cachedRead: async () => "# Title\nBody",
+      },
+      metadataCache: {
+        getFileCache: () => null,
+      },
+    } as never);
+
+    await expect(gateway.readMarkdownFile("notes/example.md")).resolves.toMatchObject({
+      tags: [],
+    });
+  });
+
   it("lists vault folders as a tree without exposing the root folder", async () => {
     const FolderCtor = TFolder as unknown as new (path: string, children?: Array<TFolder | TFile>) => TFolder;
     const FileCtor = TFile as unknown as new (path: string) => TFile;
@@ -103,5 +150,22 @@ describe("ObsidianVaultGateway", () => {
     ).toBe(
       "obsidian://open?vault=Vault&file=notes%2Fexample.md%23%E4%BD%AC%E6%8B%93%5B%5B%E5%8D%A1%E7%89%87%E8%AF%95%E9%AA%8C%5D%5D",
     );
+  });
+
+  it("normalizes tag tokens by removing hashes, converting nesting, filtering empties, and deduplicating", () => {
+    expect(normalizeObsidianTags([
+      "#3地区",
+      "#📖/一人公司",
+      "#a/b/c",
+      "#a//b/",
+      "#3地区",
+      "#",
+      "",
+    ])).toEqual([
+      "3地区",
+      "📖::一人公司",
+      "a::b::c",
+      "a::b",
+    ]);
   });
 });

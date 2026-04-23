@@ -58,6 +58,7 @@ export class FileIndexerService {
       cardAnswerCutoffMode: settings.cardAnswerCutoffMode,
       qaGroupMarker: settings.qaGroupMarker,
       semanticQaMarker: settings.semanticQaMarker,
+      syncObsidianTagsToAnki: settings.syncObsidianTagsToAnki,
       fileStamp,
       knownCards: stateIndex.cardsByFilePath.get(filePath) ?? [],
       knownGroupBlocks: stateIndex.groupBlocksByFilePath.get(filePath) ?? [],
@@ -141,6 +142,7 @@ export class FileIndexerService {
         cardAnswerCutoffMode: settings.cardAnswerCutoffMode,
         qaGroupMarker: settings.qaGroupMarker,
         semanticQaMarker: settings.semanticQaMarker,
+        syncObsidianTagsToAnki: settings.syncObsidianTagsToAnki,
         fileStamp,
         knownCards,
         knownGroupBlocks: stateIndex.groupBlocksByFilePath.get(ref.path) ?? [],
@@ -262,6 +264,7 @@ function restoreIndexedGroupBlock(groupBlock: GroupBlockState): IndexedGroupCard
     deckHint: groupBlock.deckHint,
     deckHintSource: groupBlock.deckHintSource,
     deckWarnings: [...groupBlock.deckWarnings],
+    tagsHint: groupBlock.tagsHint ? [...groupBlock.tagsHint] : [],
     items: groupBlock.items.map((item) => ({ ...item })),
     freeSlots: [...groupBlock.freeSlots],
   };
@@ -271,7 +274,7 @@ export function createFileStamp(mtime: number, size: number): string {
   return `${mtime}:${size}`;
 }
 
-const DECK_RULES_FINGERPRINT_VERSION = "deck-rules-v2";
+const DECK_RULES_FINGERPRINT_VERSION = "deck-rules-v3";
 
 export function createDeckRulesFingerprint(settings: PluginSettings): string {
   return hashString(JSON.stringify({
@@ -285,5 +288,7 @@ export function createDeckRulesFingerprint(settings: PluginSettings): string {
     fileDeckEnabled: settings.fileDeckEnabled,
     fileDeckMarker: settings.fileDeckMarker,
     folderDeckMode: settings.folderDeckMode,
+    syncObsidianTagsToAnki: settings.syncObsidianTagsToAnki,
+    keepPureTagLinesInCardBody: settings.keepPureTagLinesInCardBody,
   }));
 }

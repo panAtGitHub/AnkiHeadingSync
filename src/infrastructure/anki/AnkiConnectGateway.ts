@@ -1,7 +1,7 @@
 import { requestUrl } from "obsidian";
 
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
-import type { AddAnkiNoteInput, AnkiGroupGateway, AnkiModelTemplate, AnkiNoteDetails, AnkiNoteSummary, ChangeDeckInput, CreateAnkiModelInput, DeckStat, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
+import type { AddAnkiNoteInput, AnkiGroupGateway, AnkiModelTemplate, AnkiNoteDetails, AnkiNoteSummary, ChangeDeckInput, CreateAnkiModelInput, DeckStat, SyncAnkiNoteTagsInput, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
 import type { MediaAsset } from "@/domain/card/entities/RenderedFields";
 
 interface AnkiResponse<T> {
@@ -14,6 +14,7 @@ interface NoteInfo {
   fields?: Record<string, { value?: string }>;
   modelName?: string;
   noteId?: number;
+  tags?: string[];
 }
 
 interface CardInfo {
@@ -178,6 +179,7 @@ export class AnkiConnectGateway implements AnkiGroupGateway {
         deckNames: Array.from(new Set(cardIds
           .map((cardId) => cardDeckNamesByCardId.get(cardId))
           .filter((deckName): deckName is string => typeof deckName === "string"))),
+        tags: Array.isArray(entry.tags) ? entry.tags.filter((tag): tag is string => typeof tag === "string") : [],
         fields,
       }];
     });
@@ -222,6 +224,7 @@ export class AnkiConnectGateway implements AnkiGroupGateway {
       modelName: note.modelName,
       cardIds: note.cardIds,
       deckNames: note.deckNames,
+      tags: note.tags,
     }));
   }
 
@@ -303,6 +306,34 @@ export class AnkiConnectGateway implements AnkiGroupGateway {
         },
       },
     })));
+  }
+
+  async syncNoteTags(inputs: SyncAnkiNoteTagsInput[]): Promise<void> {
+    const actions: Array<{ action: string; params: Record<string, unknown> }> = [];
+
+    for (const input of inputs) {
+      if (input.removeTags.length > 0) {
+        actions.push({
+          action: "removeTags",
+          params: {
+            notes: [input.noteId],
+            tags: input.removeTags.join(" "),
+          },
+        });
+      }
+
+      if (input.addTags.length > 0) {
+        actions.push({
+          action: "addTags",
+          params: {
+            notes: [input.noteId],
+            tags: input.addTags.join(" "),
+          },
+        });
+      }
+    }
+
+    await this.invokeMulti<void>(actions);
   }
 
   async changeDecks(inputs: ChangeDeckInput[]): Promise<void> {

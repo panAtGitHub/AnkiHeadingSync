@@ -173,6 +173,7 @@ function migrateGroupBlockState(rawGroupBlock: LegacyGroupBlockState, groupId: s
     deckHint: typeof rawGroupBlock.deckHint === "string" ? rawGroupBlock.deckHint : undefined,
     deckHintSource: rawGroupBlock.deckHintSource === "frontmatter" || rawGroupBlock.deckHintSource === "body" ? rawGroupBlock.deckHintSource : undefined,
     deckWarnings: Array.isArray(rawGroupBlock.deckWarnings) ? [...rawGroupBlock.deckWarnings] : [],
+    tagsHint: Array.isArray(rawGroupBlock.tagsHint) ? rawGroupBlock.tagsHint.filter((tag): tag is string => typeof tag === "string") : [],
     items: Array.isArray(rawGroupBlock.items)
       ? rawGroupBlock.items.flatMap((item) => {
         if (!item || typeof item !== "object") {

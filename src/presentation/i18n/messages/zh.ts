@@ -63,6 +63,14 @@ export const zh = {
         name: "高亮转 Cloze",
         desc: "把 ==highlight== 片段转换成 cloze 卡片使用的挖空格式。",
       },
+      syncObsidianTagsToAnki: {
+        name: "同步 Obsidian 标签到 Anki",
+        desc: "将当前笔记中 Obsidian 识别到的标签同步为 Anki 笔记标签，支持嵌套标签。每次同步时，这些标签都会以当前 Obsidian 内容为准覆盖 Anki。",
+      },
+      keepPureTagLinesInCardBody: {
+        name: "在卡片正文中保留纯标签行",
+        desc: "关闭后，会删除正文中所有只包含标签的整行，例如 “#项目A #重点/案例”。像“这是 #标签 的案例”这类行内标签，或“标签：#项目A”这类带普通文字的行，不会被删除。删除后会自动清理多余空行。",
+      },
     },
     mapping: {
       title: "笔记类型字段映射",
@@ -255,6 +263,8 @@ export const zh = {
       semanticQaNoteTypeRequired: "语义 QA 笔记类型不能为空。",
       defaultDeckRequired: "默认牌组不能为空。",
       fileDeckEnabledBoolean: "文件级 deck 开关必须是布尔值。",
+      syncObsidianTagsToAnkiBoolean: "同步 Obsidian 标签到 Anki 开关必须是布尔值。",
+      keepPureTagLinesInCardBodyBoolean: "保留正文纯标签行开关必须是布尔值。",
       fileDeckMarkerString: "文件级 deck marker 必须是字符串。",
       fileDeckTemplateString: "文件级 deck 模板必须是字符串。",
       fileDeckInsertLocationInvalid: "文件级 deck 模板插入位置只能是 yaml 或 body。",

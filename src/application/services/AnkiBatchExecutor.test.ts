@@ -98,6 +98,101 @@ describe("AnkiBatchExecutor", () => {
     expect(ankiGateway.addedNotes[0]?.deckName).toBe("Folder::Deck");
     expect(ankiGateway.updatedNotes[0]?.deckName).toBeUndefined();
   });
+
+  it("creates new notes with the indexed tag hint", async () => {
+    const ankiGateway = new CountingAnkiGateway();
+    const executor = new AnkiBatchExecutor(ankiGateway);
+    const createCard = createPlannedCard("sync-tags");
+    createCard.card.tagsHint = ["📖::一人公司", "3地区"];
+
+    await executor.execute(
+      {
+        toCreate: [createCard],
+        toUpdate: [],
+        toVerifyDeck: [],
+        toChangeDeck: [],
+        toRewriteMarker: [],
+        toOrphan: [],
+        unchangedCards: 0,
+        warnings: [],
+      },
+      new Map([[createCard.card.syncKey, createRenderedSyncCard(createCard)]]),
+      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      createModule3Settings().noteFieldMappings,
+    );
+
+    expect(ankiGateway.addedNotes[0]?.tags).toEqual(["📖::一人公司", "3地区"]);
+  });
+
+  it("syncs tag diffs for existing notes", async () => {
+    const ankiGateway = new CountingAnkiGateway();
+    ankiGateway.noteSummariesById.set(300, {
+      noteId: 300,
+      modelName: "Basic",
+      cardIds: [700],
+      tags: ["old", "shared"],
+    });
+
+    const executor = new AnkiBatchExecutor(ankiGateway);
+    const updateCard = createPlannedCard("sync-update-tags", 300);
+    updateCard.card.tagsHint = ["shared", "fresh"];
+
+    await executor.execute(
+      {
+        toCreate: [],
+        toUpdate: [updateCard],
+        toVerifyDeck: [updateCard],
+        toChangeDeck: [],
+        toRewriteMarker: [],
+        toOrphan: [],
+        unchangedCards: 0,
+        warnings: [],
+      },
+      new Map([[updateCard.card.syncKey, createRenderedSyncCard(updateCard)]]),
+      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      createModule3Settings().noteFieldMappings,
+    );
+
+    expect(ankiGateway.syncedNoteTags).toEqual([
+      {
+        noteId: 300,
+        addTags: ["fresh"],
+        removeTags: ["old"],
+      },
+    ]);
+  });
+
+  it("does not sync note tags when the current and target tag sets already match", async () => {
+    const ankiGateway = new CountingAnkiGateway();
+    ankiGateway.noteSummariesById.set(300, {
+      noteId: 300,
+      modelName: "Basic",
+      cardIds: [700],
+      tags: ["shared", "fresh"],
+    });
+
+    const executor = new AnkiBatchExecutor(ankiGateway);
+    const updateCard = createPlannedCard("sync-update-tags", 300);
+    updateCard.card.tagsHint = ["fresh", "shared"];
+
+    await executor.execute(
+      {
+        toCreate: [],
+        toUpdate: [updateCard],
+        toVerifyDeck: [updateCard],
+        toChangeDeck: [],
+        toRewriteMarker: [],
+        toOrphan: [],
+        unchangedCards: 0,
+        warnings: [],
+      },
+      new Map([[updateCard.card.syncKey, createRenderedSyncCard(updateCard)]]),
+      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      createModule3Settings().noteFieldMappings,
+    );
+
+    expect(ankiGateway.syncedNoteTags).toEqual([]);
+  });
 });
 
 function createPlannedCard(syncKey: string, noteId?: number, deck = "Obsidian"): PlannedCard {

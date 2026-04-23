@@ -4,6 +4,7 @@ import { BatchScheduler } from "@/application/services/BatchScheduler";
 import { NoteFieldMappingService } from "@/application/services/NoteFieldMappingService";
 import type { MediaAsset } from "@/domain/card/entities/RenderedFields";
 import type { RenderedSyncCard } from "@/domain/manual-sync/entities/RenderedSyncCard";
+import { diffTagSets } from "@/domain/manual-sync/services/tagSetUtils";
 import type { PlannedCard, ManualSyncPlan } from "@/domain/manual-sync/value-objects/ManualSyncPlan";
 
 export interface AnkiBatchExecutionResult {
@@ -148,6 +149,30 @@ export class AnkiBatchExecutor {
         }))),
       );
     });
+
+    const tagSyncQueue = updateQueue.flatMap(({ plannedCard }) => {
+      if (!plannedCard.noteId) {
+        return [];
+      }
+
+      const summary = noteSummariesById.get(plannedCard.noteId);
+      if (!summary) {
+        return [];
+      }
+
+      const diff = diffTagSets(plannedCard.card.tagsHint, summary.tags);
+      if (diff.addTags.length === 0 && diff.removeTags.length === 0) {
+        return [];
+      }
+
+      return [{
+        noteId: plannedCard.noteId,
+        addTags: diff.addTags,
+        removeTags: diff.removeTags,
+      }];
+    });
+
+    await this.batchScheduler.runVoidBatches(tagSyncQueue, 50, 1, (batch) => this.ankiGateway.syncNoteTags(batch));
 
     updated += updateQueue.length;
     for (const { plannedCard } of updateQueue) {

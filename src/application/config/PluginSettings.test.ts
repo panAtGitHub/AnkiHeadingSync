@@ -48,6 +48,24 @@ describe("PluginSettings", () => {
     expect(DEFAULT_SETTINGS.folderDeckMode).toBe("off");
     expect(DEFAULT_SETTINGS.qaGroupMarker).toBe("#anki-list");
     expect(DEFAULT_SETTINGS.cardAnswerCutoffMode).toBe("heading-block");
+    expect(DEFAULT_SETTINGS.syncObsidianTagsToAnki).toBe(true);
+    expect(DEFAULT_SETTINGS.keepPureTagLinesInCardBody).toBe(true);
+  });
+
+  it("rejects non-boolean tag sync settings", () => {
+    expectPluginUserError(() => {
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        syncObsidianTagsToAnki: "yes" as never,
+      });
+    }, "errors.settings.syncObsidianTagsToAnkiBoolean");
+
+    expectPluginUserError(() => {
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        keepPureTagLinesInCardBody: 1 as never,
+      });
+    }, "errors.settings.keepPureTagLinesInCardBodyBoolean");
   });
 
   it("rejects invalid QA Group markers and semantic marker collisions", () => {

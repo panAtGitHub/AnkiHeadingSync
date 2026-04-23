@@ -42,6 +42,7 @@ export interface IndexedGroupCardBlock {
   deckHint?: string;
   deckHintSource?: Extract<DeckResolutionSource, "frontmatter" | "body">;
   deckWarnings: DeckResolutionWarning[];
+  tagsHint?: string[];
   items: GroupItem[];
   groupMarker?: GroupMarker;
   freeSlots: number[];

@@ -181,4 +181,59 @@ describe("FileIndexerService", () => {
     expect(result.skippedUnchangedFiles).toBe(0);
     expect(vaultGateway.readCalls).toEqual(["notes/one.md"]);
   });
+
+  it("changes the fingerprint and forces re-read when pure tag line cleanup setting changed", async () => {
+    const content = ["#### One", "#项目A #重点/案例", "", "Body"].join("\n");
+    const oldSettings = createModule3Settings({ keepPureTagLinesInCardBody: true });
+    const newSettings = createModule3Settings({ keepPureTagLinesInCardBody: false });
+    const vaultGateway = new FakeManualSyncVaultGateway({
+      "notes/one.md": content,
+    });
+    const service = new FileIndexerService(vaultGateway);
+    const state = {
+      files: {
+        "notes/one.md": {
+          filePath: "notes/one.md",
+          fileHash: "hash-a",
+          fileStamp: `1:${content.length}`,
+          deckRulesFingerprint: createDeckRulesFingerprint(oldSettings),
+          lastIndexedAt: 1,
+          noteIds: [10],
+        },
+      },
+      cards: {
+        "10": {
+          noteId: 10,
+          filePath: "notes/one.md",
+          heading: "One",
+          backlinkHeadingText: "One",
+          headingLevel: 4,
+          bodyMarkdown: "#项目A #重点/案例\n\nBody",
+          cardType: "basic" as const,
+          blockStartOffset: 0,
+          blockEndOffset: 16,
+          blockStartLine: 1,
+          bodyStartLine: 2,
+          blockEndLine: 4,
+          contentEndLine: 4,
+          rawBlockText: content,
+          rawBlockHash: "hash-card",
+          renderConfigHash: "render-hash",
+          deck: "Obsidian",
+          deckWarnings: [],
+          tagsHint: [],
+          lastSyncedAt: 1,
+          orphan: false,
+        },
+      },
+      pendingWriteBack: [],
+    };
+
+    expect(createDeckRulesFingerprint(oldSettings)).not.toBe(createDeckRulesFingerprint(newSettings));
+
+    const result = await service.indexVault(newSettings, state);
+
+    expect(result.skippedUnchangedFiles).toBe(0);
+    expect(vaultGateway.readCalls).toEqual(["notes/one.md"]);
+  });
 });

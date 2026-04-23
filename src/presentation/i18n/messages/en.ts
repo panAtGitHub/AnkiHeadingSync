@@ -65,6 +65,14 @@ export const en = {
         name: "Highlights to Cloze",
         desc: "Convert ==highlight== segments into cloze deletions for cloze cards.",
       },
+      syncObsidianTagsToAnki: {
+        name: "Sync Obsidian tags to Anki",
+        desc: "Sync Obsidian-recognized tags from the current note into Anki note tags, including nested tags. On each sync, these tags overwrite the managed tags in Anki based on the current Obsidian content.",
+      },
+      keepPureTagLinesInCardBody: {
+        name: "Keep pure tag lines in card body",
+        desc: "When turned off, remove every line in the card body that contains only tags, such as \"#ProjectA #重点/案例\". Inline tags like \"This is a #tag example\" and lines with ordinary text like \"标签：#项目A\" are kept. Extra blank lines created by removal are cleaned up automatically.",
+      },
     },
     mapping: {
       title: "Note type field mappings",
@@ -257,6 +265,8 @@ export const en = {
       semanticQaNoteTypeRequired: "Semantic QA note type is required.",
       defaultDeckRequired: "Default deck is required.",
       fileDeckEnabledBoolean: "File deck enabled must be a boolean.",
+      syncObsidianTagsToAnkiBoolean: "Sync Obsidian tags to Anki must be a boolean.",
+      keepPureTagLinesInCardBodyBoolean: "Keep pure tag lines in card body must be a boolean.",
       fileDeckMarkerString: "File deck marker must be a string.",
       fileDeckTemplateString: "File deck template must be a string.",
       fileDeckInsertLocationInvalid: "File deck insert location must be yaml or body.",

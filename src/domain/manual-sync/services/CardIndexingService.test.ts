@@ -468,6 +468,94 @@ describe("CardIndexingService", () => {
     });
   });
 
+  it("writes file-level tags into basic, cloze, and semantic QA cards", () => {
+    const service = new CardIndexingService();
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: [
+          "#### Basic",
+          "Answer",
+          "",
+          "##### Cloze",
+          "{{c1::Body}}",
+          "",
+          "#### Concepts #anki-list-qa",
+          "- Alpha",
+          "  First answer",
+        ].join("\n"),
+        tags: ["📖::一人公司", "3地区"],
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        semanticQaMarker: "#anki-list-qa",
+        syncObsidianTagsToAnki: true,
+        fileStamp: "1:1",
+        knownCards: [],
+        pendingWriteBack: [],
+      },
+    );
+
+    expect(indexedFile.cards.map((card) => card.tagsHint)).toEqual([
+      ["📖::一人公司", "3地区"],
+      ["📖::一人公司", "3地区"],
+      ["📖::一人公司", "3地区"],
+    ]);
+  });
+
+  it("writes empty tags when Obsidian tag sync is disabled and applies file-level tags to QA Group when enabled", () => {
+    const service = new CardIndexingService();
+    const disabledFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: [
+          "#### Concepts #anki-list",
+          "- Alpha",
+          "  - First answer",
+        ].join("\n"),
+        tags: ["📖::一人公司", "3地区"],
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        qaGroupMarker: "#anki-list",
+        syncObsidianTagsToAnki: false,
+        fileStamp: "1:1",
+        knownCards: [],
+        pendingWriteBack: [],
+      },
+    );
+
+    expect(disabledFile.groupBlocks?.[0]?.tagsHint).toEqual([]);
+
+    const enabledFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: [
+          "#### Concepts #anki-list",
+          "- Alpha",
+          "  - First answer",
+        ].join("\n"),
+        tags: ["📖::一人公司", "3地区"],
+      },
+      {
+        qaHeadingLevel: 4,
+        clozeHeadingLevel: 5,
+        qaGroupMarker: "#anki-list",
+        syncObsidianTagsToAnki: true,
+        fileStamp: "1:1",
+        knownCards: [],
+        pendingWriteBack: [],
+      },
+    );
+
+    expect(enabledFile.groupBlocks?.[0]?.tagsHint).toEqual(["📖::一人公司", "3地区"]);
+  });
+
   it("skips explicit deck extraction when file-level deck mode is disabled", () => {
     const service = new CardIndexingService();
     const indexedFile = service.index(

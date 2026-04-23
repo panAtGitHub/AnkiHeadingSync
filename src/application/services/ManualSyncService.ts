@@ -146,6 +146,7 @@ export class ManualSyncService {
     const renderContext: ManualCardRenderContext = {
       addObsidianBacklink: settings.addObsidianBacklink,
       convertHighlightsToCloze: settings.convertHighlightsToCloze,
+      keepPureTagLinesInCardBody: settings.keepPureTagLinesInCardBody,
       resourceResolver: this.vaultGateway,
     };
     const renderedCards = new Map<string, RenderedSyncCard>();
@@ -398,6 +399,7 @@ export class ManualSyncService {
         deckHint: block.deckHint,
         deckHintSource: block.deckHintSource,
         deckWarnings: [...block.deckWarnings],
+        tagsHint: block.tagsHint ? [...block.tagsHint] : [],
         orphan: false,
       });
 

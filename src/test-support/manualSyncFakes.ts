@@ -1,7 +1,7 @@
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import { DEFAULT_SETTINGS } from "@/application/config/PluginSettings";
 import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
-import type { AddAnkiNoteInput, AnkiGroupGateway, AnkiModelTemplate, AnkiNoteDetails, AnkiNoteSummary, ChangeDeckInput, CreateAnkiModelInput, DeckStat, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
+import type { AddAnkiNoteInput, AnkiGroupGateway, AnkiModelTemplate, AnkiNoteDetails, AnkiNoteSummary, ChangeDeckInput, CreateAnkiModelInput, DeckStat, SyncAnkiNoteTagsInput, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
 import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
 import type { PluginStateRepository } from "@/application/ports/PluginStateRepository";
 import { MarkdownWriteConflictError } from "@/application/ports/VaultGateway";
@@ -91,6 +91,7 @@ export class FakeManualSyncVaultGateway implements ManualSyncVaultGateway {
       path,
       basename: path.split("/").pop()?.replace(/\.md$/i, "") ?? path,
       content: file.content,
+      tags: [],
     };
   }
 
@@ -139,6 +140,7 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
   public addedNotes: AddAnkiNoteInput[] = [];
   public deletedNotes: number[][] = [];
   public updatedNotes: UpdateAnkiNoteInput[] = [];
+  public syncedNoteTags: SyncAnkiNoteTagsInput[] = [];
   public changedDecks: ChangeDeckInput[] = [];
   public deletedDecks: string[][] = [];
   public storedMedia: MediaAsset[] = [];
@@ -241,11 +243,11 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
     return noteIds.flatMap((noteId) => {
       const detail = this.noteDetailsById.get(noteId);
       if (detail) {
-        return [{ ...detail, cardIds: [...detail.cardIds], deckNames: detail.deckNames ? [...detail.deckNames] : undefined, fields: { ...detail.fields } }];
+        return [{ ...detail, cardIds: [...detail.cardIds], deckNames: detail.deckNames ? [...detail.deckNames] : undefined, tags: detail.tags ? [...detail.tags] : undefined, fields: { ...detail.fields } }];
       }
 
       const summary = this.noteSummariesById.get(noteId);
-      return summary ? [{ ...summary, deckNames: summary.deckNames ? [...summary.deckNames] : undefined, fields: {} }] : [];
+      return summary ? [{ ...summary, deckNames: summary.deckNames ? [...summary.deckNames] : undefined, tags: summary.tags ? [...summary.tags] : undefined, fields: {} }] : [];
     });
   }
 
@@ -256,7 +258,7 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
   async getNoteSummaries(noteIds: number[]): Promise<AnkiNoteSummary[]> {
     return noteIds.flatMap((noteId) => {
       const summary = this.noteSummariesById.get(noteId);
-      return summary ? [{ ...summary, deckNames: summary.deckNames ? [...summary.deckNames] : undefined }] : [];
+      return summary ? [{ ...summary, deckNames: summary.deckNames ? [...summary.deckNames] : undefined, tags: summary.tags ? [...summary.tags] : undefined }] : [];
     });
   }
 
@@ -283,6 +285,33 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
 
   async updateNotes(inputs: UpdateAnkiNoteInput[]): Promise<void> {
     this.updatedNotes.push(...inputs);
+  }
+
+  async syncNoteTags(inputs: SyncAnkiNoteTagsInput[]): Promise<void> {
+    this.syncedNoteTags.push(...inputs);
+
+    for (const input of inputs) {
+      const summary = this.noteSummariesById.get(input.noteId);
+      const detail = this.noteDetailsById.get(input.noteId);
+      const currentTags = new Set([...(detail?.tags ?? summary?.tags ?? [])]);
+
+      for (const tag of input.removeTags) {
+        currentTags.delete(tag);
+      }
+
+      for (const tag of input.addTags) {
+        currentTags.add(tag);
+      }
+
+      const nextTags = Array.from(currentTags);
+      if (summary) {
+        this.noteSummariesById.set(input.noteId, { ...summary, tags: nextTags });
+      }
+
+      if (detail) {
+        this.noteDetailsById.set(input.noteId, { ...detail, tags: nextTags });
+      }
+    }
   }
 
   async changeDecks(inputs: ChangeDeckInput[]): Promise<void> {

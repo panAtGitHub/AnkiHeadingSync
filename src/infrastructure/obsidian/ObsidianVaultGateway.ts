@@ -1,11 +1,13 @@
-import { TFile, TFolder } from "obsidian";
-import type { App } from "obsidian";
+import { TFile, TFolder, getAllTags } from "obsidian";
+import type { App, CachedMetadata } from "obsidian";
 
 import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
 import type { MarkdownFileReference, ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
 import { MarkdownFileNotFoundError, MarkdownWriteConflictError, type VaultGateway } from "@/application/ports/VaultGateway";
 import { hashString } from "@/domain/shared/hash";
 import type { SourceLocation } from "@/domain/card/value-objects/SourceLocation";
+
+import { normalizeObsidianTags } from "./normalizeObsidianTags";
 
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "bmp", "svg", "webp", "tiff"]);
 const AUDIO_EXTENSIONS = new Set(["wav", "m4a", "flac", "mp3", "wma", "aac", "webm", "ogg"]);
@@ -110,10 +112,13 @@ export class ObsidianVaultGateway implements VaultGateway, ManualSyncVaultGatewa
   }
 
   private async toSourceFile(file: TFile) {
+    const cache = this.app.metadataCache.getFileCache(file);
+
     return {
       path: file.path,
       basename: file.basename,
       content: await this.app.vault.cachedRead(file),
+      tags: extractSourceFileTags(cache),
     };
   }
 
@@ -161,4 +166,12 @@ function getFullPath(app: App, vaultPath: string): string {
 
 function normalizeHeadingForBacklink(headingText: string): string {
   return headingText.replace(/(?:\s+#\S+)+$/g, (trailingTags) => trailingTags.replace(/(^|\s)#(\S+)/g, "$1$2"));
+}
+
+function extractSourceFileTags(cache: CachedMetadata | null | undefined): string[] {
+  if (!cache) {
+    return [];
+  }
+
+  return normalizeObsidianTags(getAllTags(cache));
 }
