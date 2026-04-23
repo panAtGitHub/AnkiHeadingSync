@@ -31,6 +31,7 @@ describe("ManualCardRenderer", () => {
     expect(rendered.renderedFields.body).toContain('data-tag="项目A"');
     expect(rendered.renderedFields.body).toContain('data-tag="📖::一人公司"');
     expect(rendered.renderedFields.body).toContain('data-tag="3地区"');
+    expect(rendered.renderedFields.body).not.toContain('style="');
   });
 
   it("deletes pure tag lines before rendering remaining inline tags as chips", () => {

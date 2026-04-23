@@ -13,7 +13,7 @@ export interface RenderPlan {
   warnings: DeckResolutionWarning[];
 }
 
-const MANUAL_RENDER_CONFIG_VERSION = "manual-render-v2";
+const MANUAL_RENDER_CONFIG_VERSION = "manual-render-v3";
 
 export class RenderConfigService {
   constructor(private readonly deckResolutionService = new DeckResolutionService()) {}

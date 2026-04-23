@@ -7,16 +7,6 @@ const PRECEDING_TAG_TEXT_PATTERN = /[\p{L}\p{N}_/#]/u;
 const EXCLUDED_HTML_TAGS = new Set(["code", "pre"]);
 
 const TAG_CHIP_CLASS = "ahs-ob-tag";
-const TAG_CHIP_STYLE = [
-  "display:inline-block",
-  "padding:1px 8px",
-  "border-radius:999px",
-  "background:rgba(90,120,255,.12)",
-  "color:#5865d6",
-  "font-weight:500",
-  "line-height:1.5",
-  "margin:0 4px 2px 0",
-].join(";");
 
 export function renderObsidianTagChipsInText(text: string): string {
   if (!text || !text.includes("#")) {
@@ -110,7 +100,7 @@ function hasValidTagBoundary(text: string, startIndex: number): boolean {
 }
 
 function buildTagChip(rawTag: string, normalizedTag: string): string {
-  return `<span class="${TAG_CHIP_CLASS}" data-tag="${escapeHtml(normalizedTag)}" style="${TAG_CHIP_STYLE}">${escapeHtml(rawTag)}</span>`;
+  return `<span class="${TAG_CHIP_CLASS}" data-tag="${escapeHtml(normalizedTag)}">${escapeHtml(rawTag)}</span>`;
 }
 
 function updateExcludedTagStack(tagSource: string, excludedTagStack: string[]): void {
