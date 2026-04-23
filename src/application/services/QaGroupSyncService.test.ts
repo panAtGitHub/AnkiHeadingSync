@@ -232,6 +232,56 @@ describe("QaGroupSyncService", () => {
     });
   });
 
+  it("renders remaining inline tags in QA Group answers as chips after cleanup", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    const vaultGateway = new FakeManualSyncVaultGateway();
+    const existingState = createStoredGroupBlockState();
+    ankiGateway.noteDetailsById.set(42, {
+      noteId: 42,
+      modelName: QA_GROUP_MODEL_NAME,
+      cardIds: [7001],
+      deckNames: ["notes"],
+      fields: buildQaGroupNoteFields(existingState.stem, existingState.groupId, existingState.src, [
+        { itemId: "item-a", slot: 1, title: "Alpha", answer: "旧答案", ordinalInMarkdown: 1 },
+        { itemId: "item-b", slot: 3, title: "Beta", answer: "Second answer", ordinalInMarkdown: 2 },
+      ]),
+    });
+    const service = new QaGroupSyncService(
+      ankiGateway,
+      undefined,
+      undefined,
+      undefined,
+      () => 1234,
+      () => "group-x",
+      () => "item-new",
+      vaultGateway.createBacklink.bind(vaultGateway),
+    );
+
+    const result = await service.sync([
+      createIndexedGroupBlock({
+        noteId: 42,
+        groupId: "group-1",
+        rawBlockHash: existingState.rawBlockHash,
+        items: [
+          { title: "Alpha", answer: "#项目A #重点/案例\n\n这是 #3地区 的案例\n`#代码`", ordinalInMarkdown: 1 },
+          { title: "Beta", answer: "Second answer", ordinalInMarkdown: 2 },
+        ],
+      }),
+    ], {
+      ...createEmptyPluginState(),
+      groupBlocks: {
+        "group-1": existingState,
+      },
+    }, createModule3Settings({ keepPureTagLinesInCardBody: false }));
+
+    expect(result.updated).toBe(1);
+    expect(ankiGateway.updatedNotes[0]?.fields.S01_A).toContain('class="ahs-ob-tag"');
+    expect(ankiGateway.updatedNotes[0]?.fields.S01_A).toContain('data-tag="3地区"');
+    expect(ankiGateway.updatedNotes[0]?.fields.S01_A).not.toContain('data-tag="项目A"');
+    expect(ankiGateway.updatedNotes[0]?.fields.S01_A).not.toContain('data-tag="重点::案例"');
+    expect(ankiGateway.updatedNotes[0]?.fields.S01_A).not.toContain('data-tag="代码"');
+  });
+
   it("syncs QA Group note tags from file-level tag hints", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     const vaultGateway = new FakeManualSyncVaultGateway();

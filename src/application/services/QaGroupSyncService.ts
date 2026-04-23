@@ -8,6 +8,7 @@ import { DeckResolutionService } from "@/domain/manual-sync/services/DeckResolut
 import { getDeckResolutionWarningKey, type DeckResolutionWarning } from "@/domain/manual-sync/value-objects/DeckResolution";
 import { hashString } from "@/domain/shared/hash";
 import { preprocessCardBodyMarkdown } from "@/domain/manual-sync/services/preprocessCardBodyMarkdown";
+import { renderObsidianTagChipsInText } from "@/domain/manual-sync/services/renderObsidianTagChips";
 import { diffTagSets } from "@/domain/manual-sync/services/tagSetUtils";
 
 import { buildQaGroupNoteFields, formatQaGroupSlot, QA_GROUP_MODEL_NAME, QA_GROUP_SLOT_COUNT } from "./QaGroupModelDefinition";
@@ -114,7 +115,7 @@ export class QaGroupSyncService {
 
       const renderedItems = resolvedItems.map((item) => ({
         ...item,
-        answer: preprocessCardBodyMarkdown(item.answer, settings.keepPureTagLinesInCardBody),
+        answer: renderObsidianTagChipsInText(preprocessCardBodyMarkdown(item.answer, settings.keepPureTagLinesInCardBody)),
       }));
       const fields = buildQaGroupNoteFields(block.stem, groupId, this.buildGroupBacklink(block, settings), renderedItems);
       let noteId = recovered.noteId ?? block.noteId;

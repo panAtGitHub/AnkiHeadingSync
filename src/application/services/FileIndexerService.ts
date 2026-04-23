@@ -274,7 +274,7 @@ export function createFileStamp(mtime: number, size: number): string {
   return `${mtime}:${size}`;
 }
 
-const DECK_RULES_FINGERPRINT_VERSION = "deck-rules-v3";
+const DECK_RULES_FINGERPRINT_VERSION = "deck-rules-v4";
 
 export function createDeckRulesFingerprint(settings: PluginSettings): string {
   return hashString(JSON.stringify({

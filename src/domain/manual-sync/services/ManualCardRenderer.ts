@@ -6,6 +6,7 @@ import type { MediaAsset } from "@/domain/card/entities/RenderedFields";
 import type { RenderedSyncCard } from "@/domain/manual-sync/entities/RenderedSyncCard";
 
 import { preprocessCardBodyMarkdown } from "./preprocessCardBodyMarkdown";
+import { renderObsidianTagChipsInHtml } from "./renderObsidianTagChips";
 
 const markdown = new MarkdownIt({
   breaks: true,
@@ -140,9 +141,10 @@ export class ManualCardRenderer {
     transformed = protectedBlocks.restore(transformed);
 
     const renderedHtml = (inline ? markdown.renderInline(transformed) : markdown.render(transformed)).trim();
+    const restoredHtml = protectedMath.restore(renderedHtml, escapeHtml);
 
     return {
-      html: protectedMath.restore(renderedHtml, escapeHtml),
+      html: inline ? restoredHtml : renderObsidianTagChipsInHtml(restoredHtml),
       media,
     };
   }

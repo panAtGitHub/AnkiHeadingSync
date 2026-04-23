@@ -6,7 +6,8 @@ import { normalizeObsidianTags } from "./normalizeObsidianTags";
 
 describe("ObsidianVaultGateway", () => {
   it("reads metadata cache tags and normalizes nested, emoji, and Chinese tags", async () => {
-    const file = new TFile("notes/example.md");
+    const FileCtor = TFile as unknown as new (path: string) => TFile;
+    const file = new FileCtor("notes/example.md");
     const gateway = new ObsidianVaultGateway({
       vault: {
         getAbstractFileByPath: () => file,
@@ -35,7 +36,8 @@ describe("ObsidianVaultGateway", () => {
   });
 
   it("returns an empty tag list when metadata cache is missing or has no tags", async () => {
-    const file = new TFile("notes/example.md");
+    const FileCtor = TFile as unknown as new (path: string) => TFile;
+    const file = new FileCtor("notes/example.md");
     const gateway = new ObsidianVaultGateway({
       vault: {
         getAbstractFileByPath: () => file,

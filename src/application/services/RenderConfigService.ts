@@ -13,6 +13,8 @@ export interface RenderPlan {
   warnings: DeckResolutionWarning[];
 }
 
+const MANUAL_RENDER_CONFIG_VERSION = "manual-render-v2";
+
 export class RenderConfigService {
   constructor(private readonly deckResolutionService = new DeckResolutionService()) {}
 
@@ -22,6 +24,7 @@ export class RenderConfigService {
     const deck = deckResolution.resolvedDeck.value;
     const mapping = settings.noteFieldMappings[createNoteFieldMappingKey(card.cardType, noteModel)] ?? null;
     const renderConfigPayload = {
+      version: MANUAL_RENDER_CONFIG_VERSION,
       cardType: card.cardType,
       noteModel,
       mapping,
