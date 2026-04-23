@@ -6,11 +6,36 @@ import { buildQaGroupModelDefinition } from "./QaGroupModelDefinition";
 import { QaGroupModelService } from "./QaGroupModelService";
 
 describe("QaGroupModelService", () => {
-  it("builds QA Group templates with a clickable Obsidian backlink", () => {
+  it("builds the default QA Group template with a clickable backlink at the answer end", () => {
     const definition = buildQaGroupModelDefinition();
 
     expect(definition.templates[0]?.back).toContain('<a class="anki-heading-sync-backlink" href="{{Src}}">Open in Obsidian</a>');
-    expect(definition.templates[0]?.back).not.toContain('<div class="meta">{{Src}}</div>');
+    expect(definition.templates[0]?.back).toContain('<div class="a">{{S01_A}}</div>');
+  });
+
+  it("escapes a custom QA Group backlink label", () => {
+    const definition = buildQaGroupModelDefinition({
+      obsidianBacklinkLabel: 'Open <Obsidian> & "Now"',
+    });
+
+    expect(definition.templates[0]?.back).toContain('Open &lt;Obsidian&gt; &amp; &quot;Now&quot;');
+    expect(definition.templates[0]?.back).not.toContain('Open <Obsidian> & "Now"');
+  });
+
+  it("builds three different QA Group backlink placements", () => {
+    const questionPlacement = buildQaGroupModelDefinition({
+      obsidianBacklinkPlacement: "question-last-line",
+    });
+    const answerFirstPlacement = buildQaGroupModelDefinition({
+      obsidianBacklinkPlacement: "answer-first-line",
+    });
+    const answerLastPlacement = buildQaGroupModelDefinition({
+      obsidianBacklinkPlacement: "answer-last-line",
+    });
+
+    expect(questionPlacement.templates[0]?.back).toContain('{{FrontSide}}\n{{#Src}}<p><a class="anki-heading-sync-backlink" href="{{Src}}">Open in Obsidian</a></p>{{/Src}}\n\n<hr id="answer">');
+    expect(answerFirstPlacement.templates[0]?.back).toContain('<hr id="answer">\n\n{{#Src}}<p><a class="anki-heading-sync-backlink" href="{{Src}}">Open in Obsidian</a></p>{{/Src}}\n<div class="a">{{S01_A}}</div>');
+    expect(answerLastPlacement.templates[0]?.back).toContain('<div class="a">{{S01_A}}</div>\n{{#Src}}<p><a class="anki-heading-sync-backlink" href="{{Src}}">Open in Obsidian</a></p>{{/Src}}');
   });
 
   it("creates the QA Group model when it is missing", async () => {
@@ -77,6 +102,27 @@ describe("QaGroupModelService", () => {
         template: definition.templates[0],
       },
     ]);
+  });
+
+  it("updates templates when the configured backlink label or placement drifts", async () => {
+    const ankiGateway = createExistingQaGroupGateway();
+    const service = new QaGroupModelService(ankiGateway);
+    const definition = buildQaGroupModelDefinition({
+      obsidianBacklinkLabel: "Open note",
+      obsidianBacklinkPlacement: "question-last-line",
+    });
+
+    await service.ensureModel({
+      obsidianBacklinkLabel: "Open note",
+      obsidianBacklinkPlacement: "question-last-line",
+    });
+
+    expect(ankiGateway.updatedModelTemplates).toEqual(
+      definition.templates.map((template) => ({
+        modelName: definition.modelName,
+        template,
+      })),
+    );
   });
 
   it("updates drifted CSS when the QA Group model already exists", async () => {

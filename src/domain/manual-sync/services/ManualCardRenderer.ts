@@ -4,6 +4,7 @@ import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVault
 import type { PlannedCard } from "@/domain/manual-sync/value-objects/ManualSyncPlan";
 import type { MediaAsset } from "@/domain/card/entities/RenderedFields";
 import type { RenderedSyncCard } from "@/domain/manual-sync/entities/RenderedSyncCard";
+import { applyObsidianBacklinkPlacement, renderObsidianBacklinkAnchor } from "@/domain/shared/renderObsidianBacklink";
 
 import { preprocessCardBodyMarkdown } from "./preprocessCardBodyMarkdown";
 import { renderObsidianTagChipsInHtml } from "./renderObsidianTagChips";
@@ -26,6 +27,8 @@ const WIKILINK_PATTERN = /(?<!!)\[\[([^\]]+)\]\]/g;
 
 export interface ManualCardRenderContext {
   addObsidianBacklink: boolean;
+  obsidianBacklinkLabel: string;
+  obsidianBacklinkPlacement: "question-last-line" | "answer-first-line" | "answer-last-line";
   convertHighlightsToCloze: boolean;
   keepPureTagLinesInCardBody: boolean;
   resourceResolver: ManualSyncVaultGateway;
@@ -46,8 +49,9 @@ export class ManualCardRenderer {
       plannedCard.card.cardType === "cloze",
       false,
     );
-    const backlinkHtml = context.addObsidianBacklink
-      ? `<p><a class="anki-heading-sync-backlink" href="${escapeHtml(context.resourceResolver.createBacklink({
+    const backlinkAnchor = context.addObsidianBacklink
+      ? renderObsidianBacklinkAnchor({
+          href: context.resourceResolver.createBacklink({
           filePath: plannedCard.card.filePath,
           sourceContent: plannedCard.card.sourceContent,
           headingLine: plannedCard.card.blockStartLine,
@@ -58,8 +62,23 @@ export class ManualCardRenderer {
           markerLine: plannedCard.card.markerLine,
           headingLevel: plannedCard.card.headingLevel,
           headingText: plannedCard.card.backlinkHeadingText,
-        }))}">Open in Obsidian</a></p>`
+          }),
+          label: context.obsidianBacklinkLabel,
+        })
       : "";
+    const renderedFields = backlinkAnchor
+      ? applyObsidianBacklinkPlacement(
+          {
+            title: headingResult.html,
+            body: bodyResult.html,
+          },
+          backlinkAnchor,
+          context.obsidianBacklinkPlacement,
+        )
+      : {
+          title: headingResult.html,
+          body: bodyResult.html,
+        };
 
     return {
       card: plannedCard.card,
@@ -67,10 +86,7 @@ export class ManualCardRenderer {
       deck: plannedCard.deck,
       noteModel: plannedCard.noteModel,
       renderConfigHash: plannedCard.renderConfigHash,
-      renderedFields: {
-        title: headingResult.html,
-        body: bodyResult.html + backlinkHtml,
-      },
+      renderedFields,
       media: dedupeMedia([...headingResult.media, ...bodyResult.media]),
     };
   }

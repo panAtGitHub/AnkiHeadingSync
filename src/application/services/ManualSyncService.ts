@@ -145,6 +145,8 @@ export class ManualSyncService {
     const plan = this.diffPlannerService.plan(indexResult.cards, state, indexResult.scopedFilePaths, settings);
     const renderContext: ManualCardRenderContext = {
       addObsidianBacklink: settings.addObsidianBacklink,
+      obsidianBacklinkLabel: settings.obsidianBacklinkLabel,
+      obsidianBacklinkPlacement: settings.obsidianBacklinkPlacement,
       convertHighlightsToCloze: settings.convertHighlightsToCloze,
       keepPureTagLinesInCardBody: settings.keepPureTagLinesInCardBody,
       resourceResolver: this.vaultGateway,

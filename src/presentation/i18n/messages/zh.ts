@@ -59,6 +59,20 @@ export const zh = {
         name: "添加 Obsidian 回链",
         desc: "把来源标题的回链追加到同步后的卡片中。",
       },
+      obsidianBacklinkLabel: {
+        name: "Obsidian 回链显示名称",
+        desc: "设置回链显示的文字。留空或只填空格时会回退为 Open in Obsidian。",
+        placeholder: "Open in Obsidian",
+      },
+      obsidianBacklinkPlacement: {
+        name: "Obsidian 回链放置位置",
+        desc: "选择把回链追加到问题栏最后一行，或放到答案正文的第一行 / 最后一行。",
+        options: {
+          questionLastLine: "问题栏的最后一行",
+          answerFirstLine: "答案正文的第一行",
+          answerLastLine: "答案正文的最后一行",
+        },
+      },
       highlightsToCloze: {
         name: "高亮转 Cloze",
         desc: "把 ==highlight== 片段转换成 cloze 卡片使用的挖空格式。",
@@ -270,6 +284,7 @@ export const zh = {
       fileDeckInsertLocationInvalid: "文件级 deck 模板插入位置只能是 yaml 或 body。",
       folderDeckModeInvalid: "文件夹 deck 模式只能是 off、folder 或 folder-and-file。",
       scopeModeInvalid: "运行范围模式只能是 all、include 或 exclude。",
+      obsidianBacklinkPlacementInvalid: "Obsidian 回链放置位置只能是 question-last-line、answer-first-line 或 answer-last-line。",
       includeFoldersArray: "包含文件夹必须是数组。",
       includeFoldersStrings: "包含文件夹列表中只能包含字符串。",
       excludeFoldersArray: "排除文件夹必须是数组。",

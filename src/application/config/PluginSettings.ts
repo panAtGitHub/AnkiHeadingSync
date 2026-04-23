@@ -5,6 +5,9 @@ export type ScopeMode = "all" | "include" | "exclude";
 export type FileDeckInsertLocation = "yaml" | "body";
 export type FolderDeckMode = "off" | "folder" | "folder-and-file";
 export type CardAnswerCutoffMode = "heading-block" | "double-blank-lines";
+export type ObsidianBacklinkPlacement = "question-last-line" | "answer-first-line" | "answer-last-line";
+
+export const DEFAULT_OBSIDIAN_BACKLINK_LABEL = "Open in Obsidian";
 
 export interface PluginSettings {
   qaHeadingLevel: number;
@@ -26,6 +29,8 @@ export interface PluginSettings {
   includeFolders: string[];
   excludeFolders: string[];
   addObsidianBacklink: boolean;
+  obsidianBacklinkLabel: string;
+  obsidianBacklinkPlacement: ObsidianBacklinkPlacement;
   convertHighlightsToCloze: boolean;
   syncObsidianTagsToAnki: boolean;
   keepPureTagLinesInCardBody: boolean;
@@ -52,6 +57,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   includeFolders: [],
   excludeFolders: [],
   addObsidianBacklink: true,
+  obsidianBacklinkLabel: DEFAULT_OBSIDIAN_BACKLINK_LABEL,
+  obsidianBacklinkPlacement: "answer-last-line",
   convertHighlightsToCloze: true,
   syncObsidianTagsToAnki: true,
   keepPureTagLinesInCardBody: true,
@@ -66,6 +73,34 @@ export function isValidHashtagMarker(marker: string): boolean {
 
 export function isValidSemanticQaMarker(marker: string): boolean {
   return isValidHashtagMarker(marker);
+}
+
+export function normalizeObsidianBacklinkLabel(value: string | null | undefined): string {
+  if (typeof value !== "string") {
+    return DEFAULT_OBSIDIAN_BACKLINK_LABEL;
+  }
+
+  const trimmedValue = value.trim();
+  return trimmedValue.length > 0 ? trimmedValue : DEFAULT_OBSIDIAN_BACKLINK_LABEL;
+}
+
+export function normalizePluginSettings(settings: PluginSettings): PluginSettings {
+  return {
+    ...settings,
+    obsidianBacklinkLabel: normalizeObsidianBacklinkLabel(settings.obsidianBacklinkLabel),
+  };
+}
+
+export function mergePluginSettings(settings?: Partial<PluginSettings> | null): PluginSettings {
+  const partialSettings = settings ?? {};
+
+  return normalizePluginSettings({
+    ...DEFAULT_SETTINGS,
+    ...partialSettings,
+    noteFieldMappings: partialSettings.noteFieldMappings ?? DEFAULT_SETTINGS.noteFieldMappings,
+    includeFolders: partialSettings.includeFolders ?? DEFAULT_SETTINGS.includeFolders,
+    excludeFolders: partialSettings.excludeFolders ?? DEFAULT_SETTINGS.excludeFolders,
+  });
 }
 
 export function validatePluginSettings(settings: PluginSettings): void {
@@ -153,6 +188,14 @@ export function validatePluginSettings(settings: PluginSettings): void {
 
   if (settings.scopeMode !== "all" && settings.scopeMode !== "include" && settings.scopeMode !== "exclude") {
     throw new PluginUserError("errors.settings.scopeModeInvalid");
+  }
+
+  if (
+    settings.obsidianBacklinkPlacement !== "question-last-line"
+    && settings.obsidianBacklinkPlacement !== "answer-first-line"
+    && settings.obsidianBacklinkPlacement !== "answer-last-line"
+  ) {
+    throw new PluginUserError("errors.settings.obsidianBacklinkPlacementInvalid");
   }
 
   validateFolderList(settings.includeFolders, "include");

@@ -1,6 +1,6 @@
 import { Plugin } from "obsidian";
 
-import { DEFAULT_SETTINGS, type PluginSettings } from "@/application/config/PluginSettings";
+import { DEFAULT_SETTINGS, normalizePluginSettings, type PluginSettings } from "@/application/config/PluginSettings";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
 import { DeckTemplateInsertionService } from "@/application/services/DeckTemplateInsertionService";
 import { CleanupEmptyDecksUseCase } from "@/application/use-cases/CleanupEmptyDecksUseCase";
@@ -69,10 +69,10 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
       return;
     }
 
-    const nextSettings: PluginSettings = {
+    const nextSettings = normalizePluginSettings({
       ...this.settings,
       ...partialSettings,
-    };
+    });
 
     try {
       await this.pluginConfigRepository.save(nextSettings);

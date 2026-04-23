@@ -43,6 +43,31 @@ describe("QaGroupSyncService", () => {
     expect(result.markerWrites[0]?.itemToSlot).toEqual({ "item-1": 1, "item-2": 2 });
   });
 
+  it("ensures the QA Group model using the current backlink settings before syncing", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    const vaultGateway = new FakeManualSyncVaultGateway();
+    const service = new QaGroupSyncService(
+      ankiGateway,
+      undefined,
+      undefined,
+      undefined,
+      () => 1234,
+      () => "group-1",
+      () => "item-1",
+      vaultGateway.createBacklink.bind(vaultGateway),
+    );
+
+    await service.sync([
+      createIndexedGroupBlock(),
+    ], createEmptyPluginState(), createModule3Settings({
+      obsidianBacklinkLabel: 'Open <Vault>',
+      obsidianBacklinkPlacement: "answer-first-line",
+    }));
+
+    expect(ankiGateway.createdModels[0]?.templates[0]?.back).toContain('Open &lt;Vault&gt;');
+    expect(ankiGateway.createdModels[0]?.templates[0]?.back).toContain('<hr id="answer">\n\n{{#Src}}<p><a class="anki-heading-sync-backlink" href="{{Src}}">Open &lt;Vault&gt;</a></p>{{/Src}}\n<div class="a">{{S01_A}}</div>');
+  });
+
   it("preserves slots across reorder and reuses a free slot for a new item", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     const vaultGateway = new FakeManualSyncVaultGateway();

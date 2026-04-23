@@ -71,7 +71,10 @@ export class QaGroupSyncService {
       };
     }
 
-    await this.qaGroupModelService.ensureModel();
+    await this.qaGroupModelService.ensureModel({
+      obsidianBacklinkLabel: settings.obsidianBacklinkLabel,
+      obsidianBacklinkPlacement: settings.obsidianBacklinkPlacement,
+    });
 
     const stateIndex = buildGroupStateIndex(state.groupBlocks ?? {});
     const ensuredDecks = new Set<string>();

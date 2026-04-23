@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, type PluginSettings, validatePluginSettings } from "@/application/config/PluginSettings";
+import { mergePluginSettings, normalizePluginSettings, type PluginSettings, validatePluginSettings } from "@/application/config/PluginSettings";
 import type { PluginConfigRepository } from "@/application/ports/PluginConfigRepository";
 import type { PluginDataStore } from "@/application/ports/PluginDataStore";
 import type { PluginState } from "@/domain/manual-sync/entities/PluginState";
@@ -13,25 +13,20 @@ export class DataJsonPluginConfigRepository implements PluginConfigRepository {
 
   async load(): Promise<PluginSettings> {
     const snapshot = (await this.pluginDataStore.load()) ?? {};
-    const mergedSettings: PluginSettings = {
-      ...DEFAULT_SETTINGS,
-      ...snapshot.settings,
-      noteFieldMappings: snapshot.settings?.noteFieldMappings ?? DEFAULT_SETTINGS.noteFieldMappings,
-      includeFolders: snapshot.settings?.includeFolders ?? DEFAULT_SETTINGS.includeFolders,
-      excludeFolders: snapshot.settings?.excludeFolders ?? DEFAULT_SETTINGS.excludeFolders,
-    };
+    const mergedSettings = mergePluginSettings(snapshot.settings);
 
     validatePluginSettings(mergedSettings);
     return mergedSettings;
   }
 
   async save(settings: PluginSettings): Promise<void> {
-    validatePluginSettings(settings);
+    const normalizedSettings = normalizePluginSettings(settings);
+    validatePluginSettings(normalizedSettings);
     const snapshot = (await this.pluginDataStore.load()) ?? {};
 
     await this.pluginDataStore.save({
       ...snapshot,
-      settings,
+      settings: normalizedSettings,
     });
   }
 }

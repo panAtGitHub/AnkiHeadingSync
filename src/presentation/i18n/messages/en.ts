@@ -61,6 +61,20 @@ export const en = {
         name: "Add Obsidian backlink",
         desc: "Append a backlink to the source heading into synced cards.",
       },
+      obsidianBacklinkLabel: {
+        name: "Obsidian backlink label",
+        desc: "The text shown for the backlink. Blank input falls back to Open in Obsidian.",
+        placeholder: "Open in Obsidian",
+      },
+      obsidianBacklinkPlacement: {
+        name: "Obsidian backlink placement",
+        desc: "Choose whether the backlink is appended to the question field or placed at the start or end of the answer body.",
+        options: {
+          questionLastLine: "Last line of question field",
+          answerFirstLine: "First line of answer body",
+          answerLastLine: "Last line of answer body",
+        },
+      },
       highlightsToCloze: {
         name: "Highlights to Cloze",
         desc: "Convert ==highlight== segments into cloze deletions for cloze cards.",
@@ -272,6 +286,7 @@ export const en = {
       fileDeckInsertLocationInvalid: "File deck insert location must be yaml or body.",
       folderDeckModeInvalid: "Folder deck mode must be off, folder, or folder-and-file.",
       scopeModeInvalid: "Scope mode must be one of all, include, or exclude.",
+      obsidianBacklinkPlacementInvalid: "Obsidian backlink placement must be question-last-line, answer-first-line, or answer-last-line.",
       includeFoldersArray: "Include folders must be an array.",
       includeFoldersStrings: "Include folders must only contain strings.",
       excludeFoldersArray: "Exclude folders must be an array.",

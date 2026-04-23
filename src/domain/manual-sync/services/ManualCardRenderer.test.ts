@@ -11,6 +11,8 @@ describe("ManualCardRenderer", () => {
   const resourceResolver = new FakeManualSyncVaultGateway();
   const baseContext: ManualCardRenderContext = {
     addObsidianBacklink: false,
+    obsidianBacklinkLabel: "Open in Obsidian",
+    obsidianBacklinkPlacement: "answer-last-line",
     convertHighlightsToCloze: false,
     keepPureTagLinesInCardBody: true,
     resourceResolver,
@@ -70,6 +72,72 @@ describe("ManualCardRenderer", () => {
     expect(rendered.renderedFields.body).toContain('data-tag="标签"');
     expect(rendered.renderedFields.body).not.toContain('data-tag="行内代码"');
     expect(rendered.renderedFields.body).not.toContain('data-tag="代码块"');
+  });
+
+  it("keeps the default backlink behavior at the end of the answer body", () => {
+    const rendered = renderer.render(createPlannedCard(), {
+      ...baseContext,
+      addObsidianBacklink: true,
+    });
+
+    expect(rendered.renderedFields.title).toBe("标题");
+    expect(rendered.renderedFields.body).toContain('<p><a class="anki-heading-sync-backlink" href="obsidian://open?vault=Vault&amp;file=notes/example.md#标题">Open in Obsidian</a></p>');
+  });
+
+  it("escapes a custom backlink label", () => {
+    const rendered = renderer.render(createPlannedCard({ heading: 'Title & "Quote"' }), {
+      ...baseContext,
+      addObsidianBacklink: true,
+      obsidianBacklinkLabel: '<Open & "Obsidian">',
+    });
+
+    expect(rendered.renderedFields.body).toContain('&lt;Open &amp; &quot;Obsidian&quot;&gt;');
+    expect(rendered.renderedFields.body).toContain('href="obsidian://open?vault=Vault&amp;file=notes/example.md#Title &amp; &quot;Quote&quot;"');
+  });
+
+  it("places the backlink on the last line of the question field when configured", () => {
+    const rendered = renderer.render(createPlannedCard(), {
+      ...baseContext,
+      addObsidianBacklink: true,
+      obsidianBacklinkPlacement: "question-last-line",
+    });
+
+    expect(rendered.renderedFields.title).toContain('<br><a class="anki-heading-sync-backlink"');
+    expect(rendered.renderedFields.body).toBe('<p>正文</p>');
+  });
+
+  it("places the backlink at the first line of the answer body when configured", () => {
+    const rendered = renderer.render(createPlannedCard(), {
+      ...baseContext,
+      addObsidianBacklink: true,
+      obsidianBacklinkPlacement: "answer-first-line",
+    });
+
+    expect(rendered.renderedFields.body).toMatch(/^<p><a class="anki-heading-sync-backlink"/);
+    expect(rendered.renderedFields.body).toContain('<p>正文</p>');
+  });
+
+  it("routes question-last-line backlinks through the title field for cloze cards", () => {
+    const rendered = renderer.render(createPlannedCard({ cardType: "cloze" }), {
+      ...baseContext,
+      addObsidianBacklink: true,
+      obsidianBacklinkPlacement: "question-last-line",
+    });
+
+    expect(rendered.renderedFields.title).toContain('anki-heading-sync-backlink');
+    expect(rendered.renderedFields.body).not.toContain('anki-heading-sync-backlink');
+  });
+
+  it("does not render backlinks when the toggle is disabled", () => {
+    const rendered = renderer.render(createPlannedCard(), {
+      ...baseContext,
+      addObsidianBacklink: false,
+      obsidianBacklinkLabel: "Custom Label",
+      obsidianBacklinkPlacement: "question-last-line",
+    });
+
+    expect(rendered.renderedFields.title).not.toContain('anki-heading-sync-backlink');
+    expect(rendered.renderedFields.body).not.toContain('anki-heading-sync-backlink');
   });
 });
 

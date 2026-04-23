@@ -1,6 +1,15 @@
 import { PluginSettingTab, Setting } from "obsidian";
 
-import { isValidHashtagMarker, isValidSemanticQaMarker, type CardAnswerCutoffMode, type FileDeckInsertLocation, type FolderDeckMode, type ScopeMode } from "@/application/config/PluginSettings";
+import {
+  DEFAULT_OBSIDIAN_BACKLINK_LABEL,
+  isValidHashtagMarker,
+  isValidSemanticQaMarker,
+  type CardAnswerCutoffMode,
+  type FileDeckInsertLocation,
+  type FolderDeckMode,
+  type ObsidianBacklinkPlacement,
+  type ScopeMode,
+} from "@/application/config/PluginSettings";
 import { createNoteFieldMappingKey, type NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
 import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
@@ -154,6 +163,33 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .addToggle((toggle) => {
         toggle.setValue(settings.addObsidianBacklink).onChange((value) => {
           void this.plugin.updateSettings({ addObsidianBacklink: value });
+        });
+      });
+
+    new Setting(containerEl)
+      .setName(t("settings.syncOptions.obsidianBacklinkLabel.name"))
+      .setDesc(t("settings.syncOptions.obsidianBacklinkLabel.desc"))
+      .addText((text) => {
+        text
+          .setPlaceholder(t("settings.syncOptions.obsidianBacklinkLabel.placeholder"))
+          .setValue(settings.obsidianBacklinkLabel)
+          .onChange((value) => {
+            const nextValue = value.trim();
+            void this.plugin.updateSettings({
+              obsidianBacklinkLabel: nextValue || DEFAULT_OBSIDIAN_BACKLINK_LABEL,
+            });
+          });
+      });
+
+    new Setting(containerEl)
+      .setName(t("settings.syncOptions.obsidianBacklinkPlacement.name"))
+      .setDesc(t("settings.syncOptions.obsidianBacklinkPlacement.desc"))
+      .addDropdown((dropdown) => {
+        dropdown.addOption("question-last-line", t("settings.syncOptions.obsidianBacklinkPlacement.options.questionLastLine"));
+        dropdown.addOption("answer-first-line", t("settings.syncOptions.obsidianBacklinkPlacement.options.answerFirstLine"));
+        dropdown.addOption("answer-last-line", t("settings.syncOptions.obsidianBacklinkPlacement.options.answerLastLine"));
+        dropdown.setValue(settings.obsidianBacklinkPlacement).onChange((value) => {
+          void this.plugin.updateSettings({ obsidianBacklinkPlacement: value as ObsidianBacklinkPlacement });
         });
       });
 

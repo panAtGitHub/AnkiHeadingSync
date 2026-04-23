@@ -45,6 +45,30 @@ describe("DataJsonPluginConfigRepository", () => {
     expect(settings.cardAnswerCutoffMode).toBe("heading-block");
     expect(settings.semanticQaMarker).toBe("#anki-list-qa");
     expect(settings.semanticQaNoteType).toBe("Semantic QA");
+    expect(settings.obsidianBacklinkLabel).toBe("Open in Obsidian");
+    expect(settings.obsidianBacklinkPlacement).toBe("answer-last-line");
+  });
+
+  it("normalizes blank backlink labels on load and save", async () => {
+    const store = new InMemoryPluginDataStore({
+      settings: {
+        obsidianBacklinkLabel: "   ",
+      },
+    });
+    const repository = new DataJsonPluginConfigRepository(store);
+
+    const loaded = await repository.load();
+
+    expect(loaded.obsidianBacklinkLabel).toBe("Open in Obsidian");
+
+    await repository.save({
+      ...loaded,
+      obsidianBacklinkLabel: "  Custom Label  ",
+    });
+
+    const reloaded = await repository.load();
+
+    expect(reloaded.obsidianBacklinkLabel).toBe("Custom Label");
   });
 
   it("persists note field mappings across save and reload", async () => {

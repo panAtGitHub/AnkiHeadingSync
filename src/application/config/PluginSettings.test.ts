@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { PluginUserError } from "@/application/errors/PluginUserError";
 
-import { DEFAULT_SETTINGS, validatePluginSettings } from "./PluginSettings";
+import {
+  DEFAULT_OBSIDIAN_BACKLINK_LABEL,
+  DEFAULT_SETTINGS,
+  mergePluginSettings,
+  normalizeObsidianBacklinkLabel,
+  normalizePluginSettings,
+  validatePluginSettings,
+} from "./PluginSettings";
 
 function expectPluginUserError(action: () => void, key: string): void {
   try {
@@ -48,8 +55,42 @@ describe("PluginSettings", () => {
     expect(DEFAULT_SETTINGS.folderDeckMode).toBe("off");
     expect(DEFAULT_SETTINGS.qaGroupMarker).toBe("#anki-list");
     expect(DEFAULT_SETTINGS.cardAnswerCutoffMode).toBe("heading-block");
+    expect(DEFAULT_SETTINGS.obsidianBacklinkLabel).toBe(DEFAULT_OBSIDIAN_BACKLINK_LABEL);
+    expect(DEFAULT_SETTINGS.obsidianBacklinkPlacement).toBe("answer-last-line");
     expect(DEFAULT_SETTINGS.syncObsidianTagsToAnki).toBe(true);
     expect(DEFAULT_SETTINGS.keepPureTagLinesInCardBody).toBe(true);
+  });
+
+  it("fills new backlink defaults when loading legacy snapshots", () => {
+    const settings = mergePluginSettings({
+      qaNoteType: "Legacy Basic",
+      clozeNoteType: "Legacy Cloze",
+    });
+
+    expect(settings.obsidianBacklinkLabel).toBe(DEFAULT_OBSIDIAN_BACKLINK_LABEL);
+    expect(settings.obsidianBacklinkPlacement).toBe("answer-last-line");
+  });
+
+  it("rejects invalid backlink placement values", () => {
+    expectPluginUserError(() => {
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        obsidianBacklinkPlacement: "body-middle" as never,
+      });
+    }, "errors.settings.obsidianBacklinkPlacementInvalid");
+  });
+
+  it("normalizes blank backlink labels on load and save paths", () => {
+    expect(normalizeObsidianBacklinkLabel("   ")).toBe(DEFAULT_OBSIDIAN_BACKLINK_LABEL);
+    expect(normalizePluginSettings({
+      ...DEFAULT_SETTINGS,
+      obsidianBacklinkLabel: "  Custom Link  ",
+    }).obsidianBacklinkLabel).toBe("Custom Link");
+    expect(mergePluginSettings({
+      qaNoteType: "Basic",
+      clozeNoteType: "Cloze",
+      obsidianBacklinkLabel: "\n\t  ",
+    }).obsidianBacklinkLabel).toBe(DEFAULT_OBSIDIAN_BACKLINK_LABEL);
   });
 
   it("rejects non-boolean tag sync settings", () => {

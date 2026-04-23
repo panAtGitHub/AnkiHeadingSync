@@ -210,6 +210,54 @@ describe("DiffPlannerService", () => {
     expect(plan.toUpdate).toHaveLength(1);
     expect(plan.toChangeDeck).toHaveLength(0);
   });
+
+  it("schedules an update when only the backlink label changes", () => {
+    const service = new DiffPlannerService();
+    const oldSettings = createModule3Settings({ obsidianBacklinkLabel: "Open in Obsidian" });
+    const newSettings = createModule3Settings({ obsidianBacklinkLabel: "Open note" });
+    const card = createIndexedCard({
+      noteId: 42,
+      rawBlockHash: "same-hash",
+      idMarkerState: "present-valid",
+      noteIdSource: "marker",
+    });
+    const oldRenderPlan = new RenderConfigService().resolve(card, oldSettings);
+    const state = {
+      files: {},
+      cards: {
+        "42": createCardState({ noteId: 42, rawBlockHash: "same-hash", renderConfigHash: oldRenderPlan.renderConfigHash, deck: oldRenderPlan.deck, tagsHint: [] }),
+      },
+      pendingWriteBack: [],
+    };
+
+    const plan = service.plan([card], state, ["notes/example.md"], newSettings);
+
+    expect(plan.toUpdate).toHaveLength(1);
+  });
+
+  it("schedules an update when only the backlink placement changes", () => {
+    const service = new DiffPlannerService();
+    const oldSettings = createModule3Settings({ obsidianBacklinkPlacement: "answer-last-line" });
+    const newSettings = createModule3Settings({ obsidianBacklinkPlacement: "question-last-line" });
+    const card = createIndexedCard({
+      noteId: 42,
+      rawBlockHash: "same-hash",
+      idMarkerState: "present-valid",
+      noteIdSource: "marker",
+    });
+    const oldRenderPlan = new RenderConfigService().resolve(card, oldSettings);
+    const state = {
+      files: {},
+      cards: {
+        "42": createCardState({ noteId: 42, rawBlockHash: "same-hash", renderConfigHash: oldRenderPlan.renderConfigHash, deck: oldRenderPlan.deck, tagsHint: [] }),
+      },
+      pendingWriteBack: [],
+    };
+
+    const plan = service.plan([card], state, ["notes/example.md"], newSettings);
+
+    expect(plan.toUpdate).toHaveLength(1);
+  });
 });
 
 function createIndexedCard(overrides: Partial<IndexedCard> = {}): IndexedCard {

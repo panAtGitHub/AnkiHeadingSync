@@ -1,14 +1,28 @@
 import type { AnkiModelTemplate, CreateAnkiModelInput } from "@/application/ports/AnkiGateway";
+import {
+  DEFAULT_OBSIDIAN_BACKLINK_LABEL,
+  type ObsidianBacklinkPlacement,
+  normalizeObsidianBacklinkLabel,
+} from "@/application/config/PluginSettings";
 import type { GroupItem } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
+import { renderObsidianBacklinkAnchor } from "@/domain/shared/renderObsidianBacklink";
 
 export const QA_GROUP_MODEL_NAME = "ObsiAnki QA Group 12";
 export const QA_GROUP_SLOT_COUNT = 12;
 
-export function buildQaGroupModelDefinition(): CreateAnkiModelInput {
+interface QaGroupModelDefinitionOptions {
+  obsidianBacklinkLabel?: string;
+  obsidianBacklinkPlacement?: ObsidianBacklinkPlacement;
+}
+
+export function buildQaGroupModelDefinition(options: QaGroupModelDefinitionOptions = {}): CreateAnkiModelInput {
+  const backlinkLabel = normalizeObsidianBacklinkLabel(options.obsidianBacklinkLabel ?? DEFAULT_OBSIDIAN_BACKLINK_LABEL);
+  const backlinkPlacement = options.obsidianBacklinkPlacement ?? "answer-last-line";
+
   return {
     modelName: QA_GROUP_MODEL_NAME,
     fieldNames: buildQaGroupFieldNames(),
-    templates: buildQaGroupTemplates(),
+    templates: buildQaGroupTemplates(backlinkLabel, backlinkPlacement),
     css: QA_GROUP_MODEL_CSS,
   };
 }
@@ -24,15 +38,24 @@ export function buildQaGroupFieldNames(): string[] {
   return fieldNames;
 }
 
-export function buildQaGroupTemplates(): AnkiModelTemplate[] {
+export function buildQaGroupTemplates(
+  backlinkLabel = DEFAULT_OBSIDIAN_BACKLINK_LABEL,
+  backlinkPlacement: ObsidianBacklinkPlacement = "answer-last-line",
+): AnkiModelTemplate[] {
   const templates: AnkiModelTemplate[] = [];
+  const backlinkAnchor = renderObsidianBacklinkAnchor({
+    href: "{{Src}}",
+    label: backlinkLabel,
+    escapeHref: false,
+  });
+  const backlinkLine = `{{#Src}}<p>${backlinkAnchor}</p>{{/Src}}`;
 
   for (let slot = 1; slot <= QA_GROUP_SLOT_COUNT; slot += 1) {
     const slotId = formatQaGroupSlot(slot);
     templates.push({
       name: `Q${slotId.slice(1)}`,
       front: `{{#${slotId}_Q}}{{#${slotId}_A}}<div class="stem">{{Stem}}</div>\n<div class="q">{{${slotId}_Q}}</div>{{/${slotId}_A}}{{/${slotId}_Q}}`,
-      back: `{{FrontSide}}\n\n<hr id="answer">\n\n<div class="a">{{${slotId}_A}}</div>\n{{#Src}}<p><a class="anki-heading-sync-backlink" href="{{Src}}">Open in Obsidian</a></p>{{/Src}}`,
+      back: buildQaGroupBackTemplate(slotId, backlinkLine, backlinkPlacement),
     });
   }
 
@@ -61,6 +84,22 @@ export function buildQaGroupNoteFields(stem: string, groupId: string, src: strin
 
 export function formatQaGroupSlot(slot: number): string {
   return `S${String(slot).padStart(2, "0")}`;
+}
+
+function buildQaGroupBackTemplate(
+  slotId: string,
+  backlinkLine: string,
+  backlinkPlacement: ObsidianBacklinkPlacement,
+): string {
+  if (backlinkPlacement === "question-last-line") {
+    return `{{FrontSide}}\n${backlinkLine}\n\n<hr id="answer">\n\n<div class="a">{{${slotId}_A}}</div>`;
+  }
+
+  if (backlinkPlacement === "answer-first-line") {
+    return `{{FrontSide}}\n\n<hr id="answer">\n\n${backlinkLine}\n<div class="a">{{${slotId}_A}}</div>`;
+  }
+
+  return `{{FrontSide}}\n\n<hr id="answer">\n\n<div class="a">{{${slotId}_A}}</div>\n${backlinkLine}`;
 }
 
 export const QA_GROUP_MODEL_CSS = [

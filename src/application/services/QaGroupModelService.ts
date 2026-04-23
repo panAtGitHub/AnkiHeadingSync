@@ -1,3 +1,4 @@
+import type { PluginSettings } from "@/application/config/PluginSettings";
 import type { AnkiGroupGateway } from "@/application/ports/AnkiGateway";
 
 import { buildQaGroupModelDefinition } from "./QaGroupModelDefinition";
@@ -5,8 +6,8 @@ import { buildQaGroupModelDefinition } from "./QaGroupModelDefinition";
 export class QaGroupModelService {
   constructor(private readonly ankiGateway: AnkiGroupGateway) {}
 
-  async ensureModel(): Promise<void> {
-    const definition = buildQaGroupModelDefinition();
+  async ensureModel(settings?: Pick<PluginSettings, "obsidianBacklinkLabel" | "obsidianBacklinkPlacement">): Promise<void> {
+    const definition = buildQaGroupModelDefinition(settings);
     const modelNames = await this.runModelAction(
       "listNoteModels",
       definition.modelName,

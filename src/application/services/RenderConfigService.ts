@@ -29,6 +29,8 @@ export class RenderConfigService {
       noteModel,
       mapping,
       addObsidianBacklink: settings.addObsidianBacklink,
+      obsidianBacklinkLabel: settings.obsidianBacklinkLabel,
+      obsidianBacklinkPlacement: settings.obsidianBacklinkPlacement,
       convertHighlightsToCloze: settings.convertHighlightsToCloze,
       keepPureTagLinesInCardBody: settings.keepPureTagLinesInCardBody,
     };
