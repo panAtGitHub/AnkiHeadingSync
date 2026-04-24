@@ -258,11 +258,12 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     const ankiRow = blockEl.createDiv();
     ankiRow.style.display = "grid";
-    ankiRow.style.gridTemplateColumns = "max-content clamp(140px, 20vw, 220px) max-content clamp(96px, 12vw, 140px) max-content clamp(96px, 12vw, 140px)";
+    ankiRow.style.gridTemplateColumns = "minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr)";
     ankiRow.style.alignItems = "center";
-    ankiRow.style.columnGap = "12px";
+    ankiRow.style.columnGap = "16px";
     ankiRow.style.rowGap = "8px";
     ankiRow.style.overflow = "hidden";
+    ankiRow.style.width = "100%";
 
     const noteTypeGroup = this.createGridControlSlot(ankiRow, t("settings.cards.cardTypes.labels.noteType"));
     const noteTypeSelect = this.createSelect(noteTypeGroup, `card-type-note-type:${configId}`);
@@ -897,10 +898,19 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private createGridControlSlot(containerEl: HTMLElement, label: string): HTMLElement {
-    const labelEl = containerEl.createEl("span", { text: label });
-    labelEl.style.whiteSpace = "nowrap";
+    const groupEl = containerEl.createEl("label");
+    groupEl.style.display = "flex";
+    groupEl.style.alignItems = "center";
+    groupEl.style.gap = "8px";
+    groupEl.style.minWidth = "0";
+    groupEl.style.overflow = "hidden";
 
-    const slotEl = containerEl.createDiv();
+    const labelEl = groupEl.createEl("span", { text: label });
+    labelEl.style.whiteSpace = "nowrap";
+    labelEl.style.flex = "0 0 auto";
+
+    const slotEl = groupEl.createDiv();
+    slotEl.style.flex = "1 1 0";
     slotEl.style.minWidth = "0";
     slotEl.style.overflow = "hidden";
 
