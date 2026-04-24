@@ -751,6 +751,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     checkbox.type = "checkbox";
     checkbox.checked = node.checked;
     checkbox.indeterminate = node.indeterminate;
+    checkbox.setAttr("aria-checked", node.indeterminate ? "mixed" : String(node.checked));
     checkbox.dataset.folderPath = node.path;
     checkbox.style.margin = "0";
     checkbox.addEventListener("change", () => {

@@ -74,13 +74,12 @@ function buildSelectionNode(
     };
   }
 
-  const allChildrenChecked = children.length > 0 && children.every((child) => child.checked && !child.indeterminate);
   const someChildrenChecked = children.some((child) => child.checked || child.indeterminate);
 
   return {
     ...node,
-    checked: allChildrenChecked,
-    indeterminate: someChildrenChecked && !allChildrenChecked,
+    checked: false,
+    indeterminate: someChildrenChecked,
     children,
   };
 }
@@ -88,33 +87,22 @@ function buildSelectionNode(
 function compressSelectionNode(
   node: FolderTreeNode,
   explicitSelections: Set<string>,
-): { fullySelected: boolean; paths: string[] } {
+): { paths: string[] } {
   if (explicitSelections.has(node.path)) {
     return {
-      fullySelected: true,
       paths: [node.path],
     };
   }
 
   if (node.children.length === 0) {
     return {
-      fullySelected: false,
       paths: [],
     };
   }
 
   const childResults = node.children.map((child) => compressSelectionNode(child, explicitSelections));
-  const allChildrenSelected = childResults.length > 0 && childResults.every((child) => child.fullySelected);
-
-  if (allChildrenSelected) {
-    return {
-      fullySelected: true,
-      paths: [node.path],
-    };
-  }
 
   return {
-    fullySelected: false,
     paths: childResults.flatMap((child) => child.paths),
   };
 }

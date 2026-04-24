@@ -817,6 +817,7 @@ describe("AnkiHeadingSyncSettingTab", () => {
 
     expect(parentCheckbox.checked).toBe(false);
     expect(parentCheckbox.indeterminate).toBe(true);
+    expect((parentCheckbox as unknown as { [key: string]: string })["aria-checked"]).toBe("mixed");
     expect(queryCheckboxByPath(container, "notes/sub")).toBeUndefined();
 
     await getFolderToggle(container, "notes").trigger("click");
@@ -831,6 +832,58 @@ describe("AnkiHeadingSyncSettingTab", () => {
     expect(parentRow.style.paddingLeft).toBe("0px");
     expect(childRow.style.paddingLeft).toBe("18px");
     expect(container.textNodes).toContain("empty");
+  });
+
+  it("keeps a single selected child folder from being promoted to its parent", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = {
+      ...plugin.settings,
+      scopeMode: "include",
+    };
+    plugin.folderTree = [
+      {
+        path: "9Anki背诵",
+        name: "9Anki背诵",
+        children: [
+          {
+            path: "9Anki背诵/随感",
+            name: "随感",
+            children: [],
+          },
+        ],
+      },
+    ];
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+    const container = tab.containerEl as unknown as FakeContainerElInstance;
+
+    tab.display();
+    await flushAsync();
+    tab.display();
+    await getFolderToggle(container, "9Anki背诵").trigger("click");
+
+    const childCheckbox = getCheckboxByPath(container, "9Anki背诵/随感");
+    childCheckbox.checked = true;
+    await childCheckbox.trigger("change");
+    await flushAsync();
+
+    expect(plugin.settings.includeFolders).toEqual(["9Anki背诵/随感"]);
+    expect(getCheckboxByPath(container, "9Anki背诵/随感").checked).toBe(true);
+    expect(getCheckboxByPath(container, "9Anki背诵").checked).toBe(false);
+    expect(getCheckboxByPath(container, "9Anki背诵").indeterminate).toBe(true);
+    expect((getCheckboxByPath(container, "9Anki背诵") as unknown as { [key: string]: string })["aria-checked"]).toBe("mixed");
+
+    tab.hide();
+    tab.display();
+    await flushAsync();
+    tab.display();
+
+    expect(plugin.settings.includeFolders).toEqual(["9Anki背诵/随感"]);
+    expect(getCheckboxByPath(container, "9Anki背诵").checked).toBe(false);
+    expect(getCheckboxByPath(container, "9Anki背诵").indeterminate).toBe(true);
+
+    await getFolderToggle(container, "9Anki背诵").trigger("click");
+
+    expect(getCheckboxByPath(container, "9Anki背诵/随感").checked).toBe(true);
   });
 
   it("reloads folder tree after the settings tab is reopened and shows newly created folders", async () => {
