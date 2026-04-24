@@ -258,7 +258,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     const ankiRow = blockEl.createDiv();
     ankiRow.style.display = "grid";
-    ankiRow.style.gridTemplateColumns = "max-content 260px max-content 160px max-content 160px";
+    ankiRow.style.gridTemplateColumns = "max-content clamp(140px, 20vw, 220px) max-content clamp(96px, 12vw, 140px) max-content clamp(96px, 12vw, 140px)";
     ankiRow.style.alignItems = "center";
     ankiRow.style.columnGap = "12px";
     ankiRow.style.rowGap = "8px";
@@ -267,7 +267,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const noteTypeGroup = this.createGridControlSlot(ankiRow, t("settings.cards.cardTypes.labels.noteType"));
     const noteTypeSelect = this.createSelect(noteTypeGroup, `card-type-note-type:${configId}`);
     noteTypeSelect.dataset.cardTypeNoteType = configId;
-    this.applyEllipsisWidth(noteTypeSelect, "260px");
+    this.applyFluidEllipsis(noteTypeSelect);
     for (const noteModel of this.getSelectableNoteModels(config.noteType)) {
       this.appendOption(noteTypeSelect, noteModel, noteModel);
     }
@@ -286,7 +286,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       const mainFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.mainField"));
       const mainFieldSelect = this.createFieldSelect(mainFieldGroup, `card-type-question-field:${configId}`);
       mainFieldSelect.dataset.cardTypeQuestionField = configId;
-      this.applyEllipsisWidth(mainFieldSelect, "180px");
+      this.applyFluidEllipsis(mainFieldSelect);
       this.populateFieldSelect(mainFieldSelect, mapping?.loadedFieldNames ?? [], mapping?.mainField);
       mainFieldSelect.addEventListener("change", () => {
         void this.saveFieldMapping(configId, { mainField: mainFieldSelect.value || undefined });
@@ -297,7 +297,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const titleFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.questionField"));
     const titleFieldSelect = this.createFieldSelect(titleFieldGroup, `card-type-question-field:${configId}`);
     titleFieldSelect.dataset.cardTypeQuestionField = configId;
-    this.applyEllipsisWidth(titleFieldSelect, "160px");
+    this.applyFluidEllipsis(titleFieldSelect);
     this.populateFieldSelect(titleFieldSelect, mapping?.loadedFieldNames ?? [], mapping?.titleField);
     titleFieldSelect.addEventListener("change", () => {
       void this.saveFieldMapping(configId, { titleField: titleFieldSelect.value || undefined });
@@ -306,7 +306,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const bodyFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.answerField"));
     const bodyFieldSelect = this.createFieldSelect(bodyFieldGroup, `card-type-answer-field:${configId}`);
     bodyFieldSelect.dataset.cardTypeAnswerField = configId;
-    this.applyEllipsisWidth(bodyFieldSelect, "160px");
+    this.applyFluidEllipsis(bodyFieldSelect);
     this.populateFieldSelect(bodyFieldSelect, mapping?.loadedFieldNames ?? [], mapping?.bodyField);
     bodyFieldSelect.addEventListener("change", () => {
       void this.saveFieldMapping(configId, { bodyField: bodyFieldSelect.value || undefined });
@@ -907,10 +907,10 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     return slotEl;
   }
 
-  private applyEllipsisWidth(element: HTMLElement, width: string): void {
-    element.style.width = width;
-    element.style.maxWidth = width;
-    element.style.minWidth = width;
+  private applyFluidEllipsis(element: HTMLElement): void {
+    element.style.width = "100%";
+    element.style.maxWidth = "100%";
+    element.style.minWidth = "0";
     element.style.overflow = "hidden";
     element.style.textOverflow = "ellipsis";
     element.style.whiteSpace = "nowrap";
