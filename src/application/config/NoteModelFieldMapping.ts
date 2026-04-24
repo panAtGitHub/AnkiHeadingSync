@@ -1,7 +1,9 @@
 import type { CardType } from "@/domain/card/entities/RenderedFields";
 
+export type NoteModelFieldMappingCardType = CardType | "qa-group";
+
 export interface NoteModelFieldMapping {
-  cardType: CardType;
+  cardType: NoteModelFieldMappingCardType;
   modelName: string;
   loadedFieldNames: string[];
   titleField?: string;
@@ -10,6 +12,6 @@ export interface NoteModelFieldMapping {
   loadedAt: number;
 }
 
-export function createNoteFieldMappingKey(cardType: CardType, modelName: string): string {
+export function createNoteFieldMappingKey(cardType: NoteModelFieldMappingCardType, modelName: string): string {
   return `${cardType}:${modelName}`;
 }

@@ -276,7 +276,8 @@ import { AnkiHeadingSyncSettingTab } from "./PluginSettingTab";
 type FakeContainer = InstanceType<typeof FakePluginSettingTab>["containerEl"];
 type FakeSettingInstance = InstanceType<typeof FakeSetting>;
 type FakeToggleInstance = { triggerChange(value: boolean): Promise<void> };
-type QueryRoot = FakeContainer | HTMLElement;
+type FakeElementInstance = InstanceType<typeof FakeElement>;
+type QueryRoot = FakeContainer | FakeElementInstance | HTMLElement;
 
 class FakePlugin {
   public readonly app = {};
@@ -441,6 +442,12 @@ function collectTexts(container: QueryRoot): string[] {
     .filter((text): text is string => Boolean(text));
 }
 
+function collectOptionValues(selectEl: FakeElementInstance): string[] {
+  return selectEl.children
+    .filter((element) => element.tag === "option")
+    .map((element) => element.value);
+}
+
 function getEmptyCallCount(container: QueryRoot): number {
   return asFakeContainer(container).emptyCallCount;
 }
@@ -475,22 +482,24 @@ describe("PluginSettingTab", () => {
     expect(queryByDataset(tab.containerEl, "settingsCardBody", "deck").style.display).toBe("none");
   });
 
-  it("renders card 1 table with four rows and the required columns", () => {
+  it("renders card 1 as three readable card type blocks", () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
 
-    const headerTexts = findElements(tab.containerEl, (element) => element.tag === "th").map((element) => element.textContent);
-    expect(headerTexts).toEqual(["启用", "卡片类型", "卡片标记", "额外标记", "Anki 笔记模板", "问题字段", "答案字段"]);
+    expect(queryByDataset(tab.containerEl, "cardTypeList", "true")).toBeDefined();
+    expect(findElements(tab.containerEl, (element) => element.tag === "th")).toHaveLength(0);
+    expect(() => findSetting(tab.containerEl, "AnkiConnect URL")).toThrow("Setting not found");
 
-    const rowLabels = findElements(tab.containerEl, (element) => element.dataset.cardTypeConfig !== undefined).map((row) => row.children[1]?.textContent);
+    const rowLabels = findElements(tab.containerEl, (element) => element.dataset.cardTypeConfig !== undefined)
+      .map((row) => collectTexts(row).find((text) => text.includes("题")));
     expect(rowLabels).toEqual([
       "问答题（常规段落形式）",
       "问答题（多级列表形式）",
       "填空题",
-      "语义问答题",
     ]);
+    expect(() => queryByDataset(tab.containerEl, "cardTypeMarker", "semantic-qa")).toThrow("Element not found");
   });
 
   it("auto saves toggle, heading, note type and field mapping edits", async () => {
@@ -516,6 +525,11 @@ describe("PluginSettingTab", () => {
     await basicNoteType.trigger("change");
     expect(plugin.settings.cardTypeConfigs.basic.noteType).toBe("Basic");
 
+    const qaGroupNoteType = queryByDataset(tab.containerEl, "cardTypeNoteType", "qa-group");
+    qaGroupNoteType.value = "Custom Basic";
+    await qaGroupNoteType.trigger("change");
+    expect(plugin.settings.cardTypeConfigs["qa-group"].noteType).toBe("Custom Basic");
+
     await flushPromises();
     const basicQuestionField = queryByDataset(tab.containerEl, "cardTypeQuestionField", "basic");
     basicQuestionField.value = "Hint";
@@ -528,6 +542,18 @@ describe("PluginSettingTab", () => {
       titleField: "Hint",
       bodyField: "Body",
     }));
+
+    const qaGroupQuestionField = queryByDataset(tab.containerEl, "cardTypeQuestionField", "qa-group");
+    qaGroupQuestionField.value = "Title";
+    await qaGroupQuestionField.trigger("change");
+    const qaGroupAnswerField = queryByDataset(tab.containerEl, "cardTypeAnswerField", "qa-group");
+    qaGroupAnswerField.value = "Body";
+    await qaGroupAnswerField.trigger("change");
+
+    expect(plugin.settings.noteFieldMappings[createNoteFieldMappingKey("qa-group", plugin.settings.cardTypeConfigs["qa-group"].noteType)]).toEqual(expect.objectContaining({
+      titleField: "Title",
+      bodyField: "Body",
+    }));
   });
 
   it("debounces text input saves instead of saving every keystroke", async () => {
@@ -537,10 +563,10 @@ describe("PluginSettingTab", () => {
 
     tab.display();
 
-    const markerInput = queryByDataset(tab.containerEl, "cardTypeMarker", "semantic-qa");
-    markerInput.value = "#semantic-a";
+    const markerInput = queryByDataset(tab.containerEl, "cardTypeMarker", "cloze");
+    markerInput.value = "#cloze-a";
     await markerInput.trigger("input");
-    markerInput.value = "#semantic-ab";
+    markerInput.value = "#cloze-ab";
     await markerInput.trigger("input");
 
     expect(plugin.updateCalls).toHaveLength(0);
@@ -551,7 +577,7 @@ describe("PluginSettingTab", () => {
 
     vi.advanceTimersByTime(1);
     await flushPromises();
-    expect(plugin.settings.cardTypeConfigs["semantic-qa"].extraMarker).toBe("#semantic-ab");
+    expect(plugin.settings.cardTypeConfigs.cloze.extraMarker).toBe("#cloze-ab");
     expect(plugin.updateCalls).toHaveLength(1);
   });
 
@@ -595,6 +621,45 @@ describe("PluginSettingTab", () => {
 
     expect(plugin.listNoteModelsCalls).toBe(1);
     expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
+  });
+
+  it("persists loaded Anki note types and uses the cache before the next manual refresh", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await queryByDataset(tab.containerEl, "cardTypesRefresh", "true").trigger("click");
+    await flushPromises();
+
+    expect(plugin.settings.ankiNoteTypeCache).toEqual([
+      "Basic",
+      "Cloze",
+      "Custom Basic",
+      "Custom Cloze",
+      QA_GROUP_MODEL_NAME,
+      "Semantic QA",
+    ]);
+    expect(plugin.updateCalls.some((call) => Array.isArray(call.ankiNoteTypeCache))).toBe(true);
+
+    const cachedPlugin = new FakePlugin();
+    cachedPlugin.settings = normalizePluginSettings({
+      ...cachedPlugin.settings,
+      ankiNoteTypeCache: ["Basic", "Cached Basic", "Cached Cloze"],
+      cardTypeConfigs: {
+        ...cachedPlugin.settings.cardTypeConfigs,
+        basic: {
+          ...cachedPlugin.settings.cardTypeConfigs.basic,
+          noteType: "Cached Basic",
+        },
+      },
+    });
+    const cachedTab = new AnkiHeadingSyncSettingTab(cachedPlugin as never);
+
+    cachedTab.display();
+
+    const basicNoteTypeSelect = queryByDataset(cachedTab.containerEl, "cardTypeNoteType", "basic");
+    expect(collectOptionValues(basicNoteTypeSelect)).toEqual(["Basic", "Cached Basic", "Cached Cloze"]);
+    expect(cachedPlugin.listNoteModelsCalls).toBe(0);
   });
 
   it("folder tree expand and check refresh only the scope card", async () => {

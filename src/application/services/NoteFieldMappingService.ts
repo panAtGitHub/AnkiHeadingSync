@@ -1,4 +1,4 @@
-import { createNoteFieldMappingKey, type NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
+import { createNoteFieldMappingKey, type NoteModelFieldMapping, type NoteModelFieldMappingCardType } from "@/application/config/NoteModelFieldMapping";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
 import { PluginUserError } from "@/application/errors/PluginUserError";
 import { isBasicLikeCardType, type CardType, type RenderedFields } from "@/domain/card/entities/RenderedFields";
@@ -33,8 +33,8 @@ export class NoteFieldMappingService {
     return this.mapCloze(card, noteModelDetails, mapping);
   }
 
-  suggest(cardType: CardType, modelName: string, fieldNames: string[], loadedAt = Date.now()): NoteModelFieldMapping {
-    return isBasicLikeCardType(cardType)
+  suggest(cardType: NoteModelFieldMappingCardType, modelName: string, fieldNames: string[], loadedAt = Date.now()): NoteModelFieldMapping {
+    return isBasicLikeMappingCardType(cardType)
       ? {
           cardType,
           modelName,
@@ -57,7 +57,7 @@ export class NoteFieldMappingService {
   validateMapping(mapping: NoteModelFieldMapping, noteModelDetails: NoteModelDetails): void {
     const availableFields = new Set(noteModelDetails.fieldNames);
 
-    if (isBasicLikeCardType(mapping.cardType)) {
+    if (isBasicLikeMappingCardType(mapping.cardType)) {
       if (!mapping.titleField || !mapping.bodyField) {
         throw new PluginUserError(getIncompleteSavedMappingKey(mapping.cardType), {
           modelName: mapping.modelName,
@@ -151,6 +151,10 @@ export class NoteFieldMappingService {
   }
 }
 
+function isBasicLikeMappingCardType(cardType: NoteModelFieldMappingCardType): cardType is Extract<NoteModelFieldMappingCardType, "basic" | "qa-group" | "semantic-qa"> {
+  return cardType === "qa-group" || cardType === "basic" || cardType === "semantic-qa";
+}
+
 function getMissingSavedMappingKey(cardType: CardType): "errors.noteFieldMapping.missingSavedMapping.basic" | "errors.noteFieldMapping.missingSavedMapping.cloze" | "errors.noteFieldMapping.missingSavedMapping.semanticQa" {
   if (cardType === "cloze") {
     return "errors.noteFieldMapping.missingSavedMapping.cloze";
@@ -161,7 +165,7 @@ function getMissingSavedMappingKey(cardType: CardType): "errors.noteFieldMapping
     : "errors.noteFieldMapping.missingSavedMapping.basic";
 }
 
-function getIncompleteSavedMappingKey(cardType: CardType): "errors.noteFieldMapping.incompleteSavedMapping.basic" | "errors.noteFieldMapping.incompleteSavedMapping.cloze" | "errors.noteFieldMapping.incompleteSavedMapping.semanticQa" {
+function getIncompleteSavedMappingKey(cardType: NoteModelFieldMappingCardType): "errors.noteFieldMapping.incompleteSavedMapping.basic" | "errors.noteFieldMapping.incompleteSavedMapping.cloze" | "errors.noteFieldMapping.incompleteSavedMapping.semanticQa" {
   if (cardType === "cloze") {
     return "errors.noteFieldMapping.incompleteSavedMapping.cloze";
   }
@@ -171,7 +175,7 @@ function getIncompleteSavedMappingKey(cardType: CardType): "errors.noteFieldMapp
     : "errors.noteFieldMapping.incompleteSavedMapping.basic";
 }
 
-function getTitleBodyMustDifferKey(cardType: Extract<CardType, "basic" | "semantic-qa">): "errors.noteFieldMapping.titleBodyMustDiffer.basic" | "errors.noteFieldMapping.titleBodyMustDiffer.semanticQa" {
+function getTitleBodyMustDifferKey(cardType: Extract<NoteModelFieldMappingCardType, "basic" | "qa-group" | "semantic-qa">): "errors.noteFieldMapping.titleBodyMustDiffer.basic" | "errors.noteFieldMapping.titleBodyMustDiffer.semanticQa" {
   return cardType === "semantic-qa"
     ? "errors.noteFieldMapping.titleBodyMustDiffer.semanticQa"
     : "errors.noteFieldMapping.titleBodyMustDiffer.basic";

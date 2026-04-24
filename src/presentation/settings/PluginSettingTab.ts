@@ -1,8 +1,6 @@
 import { PluginSettingTab, Setting } from "obsidian";
 
-import { QA_GROUP_MODEL_NAME } from "@/application/config/ManagedNoteModels";
 import {
-  CARD_TYPE_CONFIG_IDS,
   DEFAULT_OBSIDIAN_BACKLINK_LABEL,
   normalizePluginSettings,
   type CardAnswerCutoffMode,
@@ -13,12 +11,11 @@ import {
   type ScopeMode,
   validatePluginSettings,
 } from "@/application/config/PluginSettings";
-import { createNoteFieldMappingKey, type NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
+import { createNoteFieldMappingKey, type NoteModelFieldMapping, type NoteModelFieldMappingCardType } from "@/application/config/NoteModelFieldMapping";
 import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
 import { renderUserFacingMessage, toUserFacingMessage, type UserFacingMessage } from "@/application/errors/PluginUserError";
 import { NoteFieldMappingService } from "@/application/services/NoteFieldMappingService";
-import type { CardType } from "@/domain/card/entities/RenderedFields";
 import { t } from "@/presentation/i18n";
 import type AnkiHeadingSyncPlugin from "@/presentation/AnkiHeadingSyncPlugin";
 
@@ -28,6 +25,7 @@ const NOTE_TYPE_STATUS_IDLE: UserFacingMessage = { key: "settings.mapping.status
 const FOLDER_TREE_STATUS_LOADING: UserFacingMessage = { key: "settings.scope.loading" };
 const TEXT_SAVE_DEBOUNCE_MS = 500;
 const SETTINGS_CARD_ORDER = ["card-types", "sync-content", "scope", "deck", "commands"] as const;
+const VISIBLE_CARD_TYPE_CONFIG_IDS = ["basic", "qa-group", "cloze"] as const;
 
 type SettingsCardId = (typeof SETTINGS_CARD_ORDER)[number];
 
@@ -166,6 +164,10 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     containerEl.createEl("p", { text: t("settings.cards.cardTypes.desc") });
 
     const actionRow = containerEl.createDiv();
+    actionRow.style.display = "flex";
+    actionRow.style.flexDirection = "column";
+    actionRow.style.alignItems = "flex-start";
+    actionRow.style.gap = "8px";
     const loadButton = actionRow.createEl("button", {
       text: this.ankiConfigLoading
         ? t("settings.cards.cardTypes.loadAnki.loading")
@@ -177,52 +179,38 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     loadButton.addEventListener("click", () => {
       void this.loadAnkiCardTypeConfig();
     });
-    actionRow.createEl("span", { text: renderUserFacingMessage(this.cardTypeStatus) });
+    actionRow.createEl("span", {
+      text: `${t("settings.cards.cardTypes.statusLabel")}${renderUserFacingMessage(this.cardTypeStatus)}`,
+    });
 
-    const table = containerEl.createEl("table");
-    table.dataset.cardTypeTable = "true";
-    const headerRow = table.createEl("tr");
-    for (const columnLabel of [
-      t("settings.cards.cardTypes.columns.enabled"),
-      t("settings.cards.cardTypes.columns.type"),
-      t("settings.cards.cardTypes.columns.headingLevel"),
-      t("settings.cards.cardTypes.columns.extraMarker"),
-      t("settings.cards.cardTypes.columns.noteType"),
-      t("settings.cards.cardTypes.columns.questionField"),
-      t("settings.cards.cardTypes.columns.answerField"),
-    ]) {
-      headerRow.createEl("th", { text: columnLabel });
+    const cardTypeList = containerEl.createDiv();
+    cardTypeList.dataset.cardTypeList = "true";
+    cardTypeList.style.display = "flex";
+    cardTypeList.style.flexDirection = "column";
+    cardTypeList.style.gap = "14px";
+
+    for (const configId of VISIBLE_CARD_TYPE_CONFIG_IDS) {
+      this.renderCardTypeBlock(cardTypeList, configId);
     }
-
-    for (const configId of CARD_TYPE_CONFIG_IDS) {
-      this.renderCardTypeRow(table, configId);
-    }
-
-    containerEl.createEl("p", { text: t("settings.cards.cardTypes.advancedHint") });
-    new Setting(containerEl)
-      .setName(t("settings.ankiConnectUrl.name"))
-      .setDesc(t("settings.ankiConnectUrl.desc"))
-      .addText((text) => {
-        text
-          .setPlaceholder(t("settings.ankiConnectUrl.placeholder"))
-          .setValue(this.getDraftValue("anki-connect-url", this.plugin.settings.ankiConnectUrl))
-          .onChange((value) => {
-            this.scheduleDebouncedTextSave("anki-connect-url", value, async (draftValue) => {
-              const nextValue = draftValue.trim() || this.plugin.settings.ankiConnectUrl;
-              await this.plugin.updateSettings({ ankiConnectUrl: nextValue });
-              this.textDraftValues.delete("anki-connect-url");
-            });
-          });
-      });
   }
 
-  private renderCardTypeRow(tableEl: HTMLElement, configId: CardTypeConfigId): void {
+  private renderCardTypeBlock(containerEl: HTMLElement, configId: CardTypeConfigId): void {
     const config = this.plugin.settings.cardTypeConfigs[configId];
-    const row = tableEl.createEl("tr");
-    row.dataset.cardTypeConfig = configId;
+    const blockEl = containerEl.createDiv();
+    blockEl.dataset.cardTypeConfig = configId;
+    blockEl.style.display = "flex";
+    blockEl.style.flexDirection = "column";
+    blockEl.style.gap = "8px";
+    blockEl.style.padding = "12px";
+    blockEl.style.border = "1px solid var(--background-modifier-border)";
+    blockEl.style.borderRadius = "8px";
 
-    const enabledCell = row.createEl("td");
-    const enabledCheckbox = enabledCell.createEl("input") as HTMLInputElement;
+    const headerRow = blockEl.createDiv();
+    headerRow.style.display = "flex";
+    headerRow.style.alignItems = "center";
+    headerRow.style.gap = "10px";
+
+    const enabledCheckbox = headerRow.createEl("input") as HTMLInputElement;
     enabledCheckbox.type = "checkbox";
     enabledCheckbox.checked = config.enabled;
     enabledCheckbox.dataset.cardTypeEnabled = configId;
@@ -230,11 +218,19 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       void this.saveCardTypeConfig(configId, { enabled: enabledCheckbox.checked });
     });
 
-    row.createEl("td", { text: this.getCardTypeLabel(configId) });
+    const titleEl = headerRow.createEl("strong", { text: this.getCardTypeLabel(configId) });
+    titleEl.style.fontSize = "var(--font-ui-medium)";
 
-    const headingCell = row.createEl("td");
-    const headingSelect = this.createSelect(headingCell, `card-type-heading:${configId}`);
+    const recognitionRow = blockEl.createDiv();
+    recognitionRow.style.display = "flex";
+    recognitionRow.style.flexWrap = "wrap";
+    recognitionRow.style.alignItems = "center";
+    recognitionRow.style.gap = "10px 14px";
+
+    const headingGroup = this.createInlineControlGroup(recognitionRow, t("settings.cards.cardTypes.labels.headingLevel"));
+    const headingSelect = this.createSelect(headingGroup, `card-type-heading:${configId}`);
     headingSelect.dataset.cardTypeHeading = configId;
+    headingSelect.style.width = "88px";
     for (let level = 1; level <= 6; level += 1) {
       this.appendOption(headingSelect, String(level), `H${level}`);
     }
@@ -243,11 +239,12 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       void this.saveCardTypeConfig(configId, { headingLevel: Number(headingSelect.value) });
     });
 
-    const markerCell = row.createEl("td");
-    const markerInput = markerCell.createEl("input") as HTMLInputElement;
+    const markerGroup = this.createInlineControlGroup(recognitionRow, t("settings.cards.cardTypes.labels.extraMarker"));
+    const markerInput = markerGroup.createEl("input") as HTMLInputElement;
     markerInput.type = "text";
     markerInput.dataset.cardTypeMarker = configId;
     markerInput.placeholder = t("settings.cards.cardTypes.markerPlaceholder");
+    markerInput.style.width = "220px";
     markerInput.value = this.getDraftValue(`card-type-marker:${configId}`, config.extraMarker);
     markerInput.addEventListener("input", () => {
       this.scheduleDebouncedTextSave(`card-type-marker:${configId}`, markerInput.value, async (draftValue) => {
@@ -258,59 +255,57 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       });
     });
 
-    const noteTypeCell = row.createEl("td");
-    if (configId === "qa-group") {
-      const noteTypeText = noteTypeCell.createEl("span", {
-        text: t("settings.cards.cardTypes.qaGroupManagedNoteType", { modelName: QA_GROUP_MODEL_NAME }),
-      });
-      noteTypeText.dataset.cardTypeNoteType = configId;
-    } else {
-      const noteTypeSelect = this.createSelect(noteTypeCell, `card-type-note-type:${configId}`);
-      noteTypeSelect.dataset.cardTypeNoteType = configId;
-      for (const noteModel of this.getSelectableNoteModels(config.noteType)) {
-        this.appendOption(noteTypeSelect, noteModel, noteModel);
-      }
-      noteTypeSelect.value = config.noteType;
-      noteTypeSelect.disabled = this.ankiConfigLoading;
-      noteTypeSelect.addEventListener("change", () => {
-        void this.saveCardTypeConfig(configId, { noteType: noteTypeSelect.value });
-      });
-    }
+    const ankiRow = blockEl.createDiv();
+    ankiRow.style.display = "grid";
+    ankiRow.style.gridTemplateColumns = "max-content 260px max-content 160px max-content 160px";
+    ankiRow.style.alignItems = "center";
+    ankiRow.style.columnGap = "12px";
+    ankiRow.style.rowGap = "8px";
+    ankiRow.style.overflow = "hidden";
 
-    this.renderCardTypeFieldCells(row, configId);
+    const noteTypeGroup = this.createGridControlSlot(ankiRow, t("settings.cards.cardTypes.labels.noteType"));
+    const noteTypeSelect = this.createSelect(noteTypeGroup, `card-type-note-type:${configId}`);
+    noteTypeSelect.dataset.cardTypeNoteType = configId;
+    this.applyEllipsisWidth(noteTypeSelect, "260px");
+    for (const noteModel of this.getSelectableNoteModels(config.noteType)) {
+      this.appendOption(noteTypeSelect, noteModel, noteModel);
+    }
+    noteTypeSelect.value = config.noteType;
+    noteTypeSelect.disabled = this.ankiConfigLoading;
+    noteTypeSelect.addEventListener("change", () => {
+      void this.saveCardTypeConfig(configId, { noteType: noteTypeSelect.value });
+    });
+
+    this.renderCardTypeFieldControls(ankiRow, configId);
   }
 
-  private renderCardTypeFieldCells(rowEl: HTMLElement, configId: CardTypeConfigId): void {
-    const questionCell = rowEl.createEl("td");
-    const answerCell = rowEl.createEl("td");
-
-    if (configId === "qa-group") {
-      questionCell.createEl("span", { text: t("settings.cards.cardTypes.autoManagedField") });
-      answerCell.createEl("span", { text: t("settings.cards.cardTypes.autoManagedField") });
-      return;
-    }
-
+  private renderCardTypeFieldControls(containerEl: HTMLElement, configId: CardTypeConfigId): void {
     const mapping = this.getCurrentMappingForConfig(configId);
     if (configId === "cloze") {
-      const mainFieldSelect = this.createFieldSelect(questionCell, `card-type-question-field:${configId}`);
+      const mainFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.mainField"));
+      const mainFieldSelect = this.createFieldSelect(mainFieldGroup, `card-type-question-field:${configId}`);
       mainFieldSelect.dataset.cardTypeQuestionField = configId;
+      this.applyEllipsisWidth(mainFieldSelect, "180px");
       this.populateFieldSelect(mainFieldSelect, mapping?.loadedFieldNames ?? [], mapping?.mainField);
       mainFieldSelect.addEventListener("change", () => {
         void this.saveFieldMapping(configId, { mainField: mainFieldSelect.value || undefined });
       });
-      answerCell.createEl("span", { text: t("settings.cards.cardTypes.autoComposedAnswer") });
       return;
     }
 
-    const titleFieldSelect = this.createFieldSelect(questionCell, `card-type-question-field:${configId}`);
+    const titleFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.questionField"));
+    const titleFieldSelect = this.createFieldSelect(titleFieldGroup, `card-type-question-field:${configId}`);
     titleFieldSelect.dataset.cardTypeQuestionField = configId;
+    this.applyEllipsisWidth(titleFieldSelect, "160px");
     this.populateFieldSelect(titleFieldSelect, mapping?.loadedFieldNames ?? [], mapping?.titleField);
     titleFieldSelect.addEventListener("change", () => {
       void this.saveFieldMapping(configId, { titleField: titleFieldSelect.value || undefined });
     });
 
-    const bodyFieldSelect = this.createFieldSelect(answerCell, `card-type-answer-field:${configId}`);
+    const bodyFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.answerField"));
+    const bodyFieldSelect = this.createFieldSelect(bodyFieldGroup, `card-type-answer-field:${configId}`);
     bodyFieldSelect.dataset.cardTypeAnswerField = configId;
+    this.applyEllipsisWidth(bodyFieldSelect, "160px");
     this.populateFieldSelect(bodyFieldSelect, mapping?.loadedFieldNames ?? [], mapping?.bodyField);
     bodyFieldSelect.addEventListener("change", () => {
       void this.saveFieldMapping(configId, { bodyField: bodyFieldSelect.value || undefined });
@@ -606,7 +601,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     return true;
   }
 
-  private async saveFieldMapping(configId: Exclude<CardTypeConfigId, "qa-group">, partialMapping: Partial<NoteModelFieldMapping>): Promise<void> {
+  private async saveFieldMapping(configId: CardTypeConfigId, partialMapping: Partial<NoteModelFieldMapping>): Promise<void> {
     const mapping = this.getCurrentMappingForConfig(configId);
     const runtimeCardType = this.getRuntimeCardType(configId);
     const modelName = this.plugin.settings.cardTypeConfigs[configId].noteType;
@@ -637,20 +632,32 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     try {
       const noteModels = await this.plugin.listNoteModels();
       this.availableNoteModels.splice(0, this.availableNoteModels.length, ...[...noteModels].sort((left, right) => left.localeCompare(right)));
-      const selectedConfigs = CARD_TYPE_CONFIG_IDS.filter((configId) => configId !== "qa-group") as Array<Exclude<CardTypeConfigId, "qa-group">>;
+      await this.plugin.updateSettings({ ankiNoteTypeCache: this.getAvailableNoteModels() });
+      const selectedConfigs = [...VISIBLE_CARD_TYPE_CONFIG_IDS];
+      let configuredCount = 0;
 
       for (const configId of selectedConfigs) {
         const runtimeCardType = this.getRuntimeCardType(configId);
         const modelName = this.plugin.settings.cardTypeConfigs[configId].noteType;
         const mappingKey = createNoteFieldMappingKey(runtimeCardType, modelName);
-        const modelDetails = await this.plugin.getNoteModelDetails(modelName);
+        let modelDetails: NoteModelDetails;
+        try {
+          modelDetails = await this.plugin.getNoteModelDetails(modelName);
+        } catch {
+          continue;
+        }
 
         this.loadedModelDetails[mappingKey] = modelDetails;
         this.seedDraftMapping(runtimeCardType, modelName, modelDetails);
+        configuredCount += 1;
       }
 
       this.cardTypeStatus = {
-        rawMessage: `${t("settings.mapping.status.loadedCount", { count: this.availableNoteModels.length })} ${t("settings.cards.cardTypes.loadedFieldsStatus", { count: selectedConfigs.length })}`,
+        key: "settings.cards.cardTypes.loadedSummary",
+        params: {
+          noteTypeCount: this.availableNoteModels.length,
+          configuredCount,
+        },
       };
     } catch (error) {
       this.cardTypeStatus = toUserFacingMessage(error, "settings.cards.cardTypes.failedLoad");
@@ -660,7 +667,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     }
   }
 
-  private seedDraftMapping(runtimeCardType: CardType, modelName: string, modelDetails: NoteModelDetails): void {
+  private seedDraftMapping(runtimeCardType: NoteModelFieldMappingCardType, modelName: string, modelDetails: NoteModelDetails): void {
     const mappingKey = createNoteFieldMappingKey(runtimeCardType, modelName);
     const currentMapping = this.plugin.settings.noteFieldMappings[mappingKey] ?? this.draftMappings[mappingKey];
 
@@ -677,7 +684,9 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private getSelectableNoteModels(selectedModelName: string): string[] {
-    const noteModels = this.availableNoteModels.length > 0 ? [...this.availableNoteModels] : [];
+    const noteModels = this.availableNoteModels.length > 0
+      ? this.getAvailableNoteModels()
+      : [...this.plugin.settings.ankiNoteTypeCache];
     if (!noteModels.includes(selectedModelName)) {
       noteModels.unshift(selectedModelName);
     }
@@ -685,7 +694,11 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     return noteModels;
   }
 
-  private getCurrentMappingForConfig(configId: Exclude<CardTypeConfigId, "qa-group">): NoteModelFieldMapping | undefined {
+  private getAvailableNoteModels(): string[] {
+    return [...this.availableNoteModels];
+  }
+
+  private getCurrentMappingForConfig(configId: CardTypeConfigId): NoteModelFieldMapping | undefined {
     const runtimeCardType = this.getRuntimeCardType(configId);
     const modelName = this.plugin.settings.cardTypeConfigs[configId].noteType;
     const mappingKey = createNoteFieldMappingKey(runtimeCardType, modelName);
@@ -711,7 +724,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     };
   }
 
-  private createFallbackMapping(runtimeCardType: CardType, modelName: string): NoteModelFieldMapping {
+  private createFallbackMapping(runtimeCardType: NoteModelFieldMappingCardType, modelName: string): NoteModelFieldMapping {
     const mappingKey = createNoteFieldMappingKey(runtimeCardType, modelName);
     const modelDetails = this.loadedModelDetails[mappingKey];
 
@@ -727,7 +740,11 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     };
   }
 
-  private getRuntimeCardType(configId: Exclude<CardTypeConfigId, "qa-group">): CardType {
+  private getRuntimeCardType(configId: CardTypeConfigId): NoteModelFieldMapping["cardType"] {
+    if (configId === "qa-group") {
+      return "qa-group";
+    }
+
     return configId === "cloze" ? "cloze" : configId === "semantic-qa" ? "semantic-qa" : "basic";
   }
 
@@ -823,6 +840,39 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     for (const child of node.children) {
       this.renderFolderNode(childrenContainer, child, scopeMode, depth + 1);
     }
+  }
+
+  private createInlineControlGroup(containerEl: HTMLElement, label: string): HTMLElement {
+    const groupEl = containerEl.createEl("label");
+    groupEl.style.display = "inline-flex";
+    groupEl.style.alignItems = "center";
+    groupEl.style.gap = "6px";
+    groupEl.style.flexWrap = "nowrap";
+
+    const labelEl = groupEl.createEl("span", { text: label });
+    labelEl.style.whiteSpace = "nowrap";
+
+    return groupEl;
+  }
+
+  private createGridControlSlot(containerEl: HTMLElement, label: string): HTMLElement {
+    const labelEl = containerEl.createEl("span", { text: label });
+    labelEl.style.whiteSpace = "nowrap";
+
+    const slotEl = containerEl.createDiv();
+    slotEl.style.minWidth = "0";
+    slotEl.style.overflow = "hidden";
+
+    return slotEl;
+  }
+
+  private applyEllipsisWidth(element: HTMLElement, width: string): void {
+    element.style.width = width;
+    element.style.maxWidth = width;
+    element.style.minWidth = width;
+    element.style.overflow = "hidden";
+    element.style.textOverflow = "ellipsis";
+    element.style.whiteSpace = "nowrap";
   }
 
   private scheduleDebouncedTextSave(key: string, value: string, saveAction: (draftValue: string) => Promise<void>): void {

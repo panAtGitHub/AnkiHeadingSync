@@ -80,6 +80,7 @@ describe("PluginSettings", () => {
     expect(DEFAULT_SETTINGS.obsidianBacklinkPlacement).toBe("answer-last-line");
     expect(DEFAULT_SETTINGS.syncObsidianTagsToAnki).toBe(true);
     expect(DEFAULT_SETTINGS.keepPureTagLinesInCardBody).toBe(true);
+    expect(DEFAULT_SETTINGS.ankiNoteTypeCache).toEqual([]);
     expect(DEFAULT_SETTINGS.cardTypeConfigs).toEqual({
       basic: {
         enabled: true,
@@ -106,6 +107,34 @@ describe("PluginSettings", () => {
         noteType: "Semantic QA",
       },
     });
+  });
+
+  it("normalizes cached Anki note types on load and save paths", () => {
+    const settings = mergePluginSettings({
+      ankiNoteTypeCache: ["  Custom Basic  ", "", "Cloze", "Custom Basic"],
+    });
+
+    expect(settings.ankiNoteTypeCache).toEqual(["Cloze", "Custom Basic"]);
+    expect(normalizePluginSettings({
+      ...DEFAULT_SETTINGS,
+      ankiNoteTypeCache: ["Basic", "  ", "Cloze", "Basic"],
+    }).ankiNoteTypeCache).toEqual(["Basic", "Cloze"]);
+  });
+
+  it("rejects invalid cached Anki note type lists", () => {
+    expectPluginUserError(() => {
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        ankiNoteTypeCache: "Basic" as never,
+      });
+    }, "errors.settings.ankiNoteTypeCacheArray");
+
+    expectPluginUserError(() => {
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        ankiNoteTypeCache: ["Basic", 1] as never,
+      });
+    }, "errors.settings.ankiNoteTypeCacheStrings");
   });
 
   it("fills new backlink defaults when loading legacy snapshots", () => {
@@ -195,7 +224,7 @@ describe("PluginSettings", () => {
     })).not.toThrow();
   });
 
-  it("writes managed QA Group model back during normalization", () => {
+  it("preserves user-selected QA Group model during normalization", () => {
     const settings = mergePluginSettings({
       cardTypeConfigs: {
         ...DEFAULT_SETTINGS.cardTypeConfigs,
@@ -206,7 +235,7 @@ describe("PluginSettings", () => {
       },
     });
 
-    expect(settings.cardTypeConfigs["qa-group"].noteType).toBe(QA_GROUP_MODEL_NAME);
+    expect(settings.cardTypeConfigs["qa-group"].noteType).toBe("Custom QA Group");
   });
 
   it("rejects invalid module 5 enum values", () => {

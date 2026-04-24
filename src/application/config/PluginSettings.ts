@@ -40,6 +40,7 @@ export interface PluginSettings {
   semanticQaNoteType: string;
   cardTypeConfigs: CardTypeConfigs;
   noteFieldMappings: Record<string, NoteModelFieldMapping>;
+  ankiNoteTypeCache: string[];
   defaultDeck: string;
   fileDeckEnabled: boolean;
   fileDeckMarker: string;
@@ -69,6 +70,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   semanticQaNoteType: DEFAULT_SEMANTIC_QA_NOTE_TYPE,
   cardTypeConfigs: createDefaultCardTypeConfigs(),
   noteFieldMappings: {},
+  ankiNoteTypeCache: [],
   defaultDeck: "Obsidian",
   fileDeckEnabled: false,
   fileDeckMarker: "TARGET DECK",
@@ -114,6 +116,7 @@ export function normalizePluginSettings(settings: PluginSettings): PluginSetting
     ...settings,
     ...legacySettings,
     cardTypeConfigs,
+    ankiNoteTypeCache: normalizeAnkiNoteTypeCache(settings.ankiNoteTypeCache),
     obsidianBacklinkLabel: normalizeObsidianBacklinkLabel(settings.obsidianBacklinkLabel),
   };
 }
@@ -140,6 +143,7 @@ export function validatePluginSettings(settings: PluginSettings): void {
   }
 
   validateNoteFieldMappings(settings.noteFieldMappings);
+  validateAnkiNoteTypeCache(settings.ankiNoteTypeCache);
 
   if (!settings.defaultDeck.trim()) {
     throw new PluginUserError("errors.settings.defaultDeckRequired");
@@ -193,6 +197,18 @@ export function validatePluginSettings(settings: PluginSettings): void {
   }
 }
 
+function validateAnkiNoteTypeCache(ankiNoteTypeCache: string[]): void {
+  if (!Array.isArray(ankiNoteTypeCache)) {
+    throw new PluginUserError("errors.settings.ankiNoteTypeCacheArray");
+  }
+
+  for (const noteType of ankiNoteTypeCache) {
+    if (typeof noteType !== "string") {
+      throw new PluginUserError("errors.settings.ankiNoteTypeCacheStrings");
+    }
+  }
+}
+
 function validateFolderList(folderList: string[], label: "include" | "exclude"): void {
   if (!Array.isArray(folderList)) {
     throw new PluginUserError(label === "include" ? "errors.settings.includeFoldersArray" : "errors.settings.excludeFoldersArray");
@@ -234,6 +250,10 @@ export function validateCardTypeConfigs(cardTypeConfigs: CardTypeConfigs): void 
       throw new PluginUserError("errors.settings.qaNoteTypeRequired");
     }
 
+    if (configId === "qa-group" && !config.noteType.trim()) {
+      throw new PluginUserError("errors.settings.qaNoteTypeRequired");
+    }
+
     if (configId === "cloze" && !config.noteType.trim()) {
       throw new PluginUserError("errors.settings.clozeNoteTypeRequired");
     }
@@ -264,7 +284,7 @@ function validateNoteFieldMappings(noteFieldMappings: Record<string, NoteModelFi
   }
 
   for (const mapping of Object.values(noteFieldMappings)) {
-    if (mapping.cardType !== "basic" && mapping.cardType !== "cloze" && mapping.cardType !== "semantic-qa") {
+    if (mapping.cardType !== "basic" && mapping.cardType !== "qa-group" && mapping.cardType !== "cloze" && mapping.cardType !== "semantic-qa") {
       throw new PluginUserError("errors.settings.noteFieldMappingsCardType");
     }
 
@@ -324,7 +344,7 @@ function createLegacyBackfilledCardTypeConfigs(settings: Partial<PluginSettings>
       ...defaults["qa-group"],
       headingLevel: sanitizeHeadingLevel(settings.qaHeadingLevel, defaults["qa-group"].headingLevel),
       extraMarker: sanitizeMarker(settings.qaGroupMarker, defaults["qa-group"].extraMarker),
-      noteType: QA_GROUP_MODEL_NAME,
+      noteType: sanitizeNoteType(settings.cardTypeConfigs?.["qa-group"]?.noteType ?? QA_GROUP_MODEL_NAME, defaults["qa-group"].noteType),
     },
     cloze: {
       ...defaults.cloze,
@@ -358,9 +378,7 @@ function mergeCardTypeConfigs(
       enabled: typeof mergedConfig.enabled === "boolean" ? mergedConfig.enabled : fallbackConfig.enabled,
       headingLevel: sanitizeHeadingLevel(mergedConfig.headingLevel, fallbackConfig.headingLevel),
       extraMarker: sanitizeMarker(mergedConfig.extraMarker, fallbackConfig.extraMarker),
-      noteType: configId === "qa-group"
-        ? QA_GROUP_MODEL_NAME
-        : sanitizeNoteType(mergedConfig.noteType, fallbackConfig.noteType),
+      noteType: sanitizeNoteType(mergedConfig.noteType, fallbackConfig.noteType),
     };
   }
 
@@ -398,4 +416,24 @@ function sanitizeNoteType(value: string | undefined, fallback: string): string {
 
   const trimmedValue = value.trim();
   return trimmedValue.length > 0 ? trimmedValue : fallback;
+}
+
+function normalizeAnkiNoteTypeCache(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const noteTypeSet = new Set<string>();
+  for (const noteType of value) {
+    if (typeof noteType !== "string") {
+      continue;
+    }
+
+    const trimmedNoteType = noteType.trim();
+    if (trimmedNoteType.length > 0) {
+      noteTypeSet.add(trimmedNoteType);
+    }
+  }
+
+  return [...noteTypeSet].sort((left, right) => left.localeCompare(right));
 }
