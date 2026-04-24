@@ -10,6 +10,8 @@ import type { SourceFile } from "@/domain/card/entities/SourceFile";
 import type { MediaAsset } from "@/domain/card/entities/RenderedFields";
 import { createEmptyPluginState, type PluginState } from "@/domain/manual-sync/entities/PluginState";
 
+export const QA_GROUP_USER_NOTE_TYPE = "问答题（多级列表）";
+
 export class InMemoryPluginStateRepository implements PluginStateRepository {
   public savedState: PluginState | null = null;
 
@@ -157,6 +159,10 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
   public modelDetailsByName: Record<string, NoteModelDetails> = {
     Basic: { fieldNames: ["Front", "Back"], isCloze: false },
     Cloze: { fieldNames: ["Text", "Extra"], isCloze: true },
+    [QA_GROUP_USER_NOTE_TYPE]: {
+      fieldNames: ["题目", "问题01", "答案01", "问题02", "答案02", "问题03", "答案03"],
+      isCloze: false,
+    },
   };
   public modelTemplatesByName: Record<string, Record<string, AnkiModelTemplate>> = {};
   public modelStylingByName: Record<string, string> = {};
@@ -341,6 +347,23 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
 export function createModule3Settings(overrides: Partial<PluginSettings> = {}): PluginSettings {
   return {
     ...DEFAULT_SETTINGS,
+    qaNoteType: "Basic",
+    clozeNoteType: "Cloze",
+    cardTypeConfigs: {
+      ...DEFAULT_SETTINGS.cardTypeConfigs,
+      basic: {
+        ...DEFAULT_SETTINGS.cardTypeConfigs.basic,
+        noteType: "Basic",
+      },
+      "qa-group": {
+        ...DEFAULT_SETTINGS.cardTypeConfigs["qa-group"],
+        noteType: QA_GROUP_USER_NOTE_TYPE,
+      },
+      cloze: {
+        ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+        noteType: "Cloze",
+      },
+    },
     fileDeckEnabled: true,
     fileDeckMarker: "TARGET DECK",
     fileDeckTemplate: "obsidian::filename",
@@ -360,6 +383,19 @@ export function createModule3Settings(overrides: Partial<PluginSettings> = {}): 
         modelName: "Cloze",
         loadedFieldNames: ["Text", "Extra"],
         mainField: "Text",
+        loadedAt: 1,
+      },
+      [`qa-group:${QA_GROUP_USER_NOTE_TYPE}`]: {
+        cardType: "qa-group",
+        modelName: QA_GROUP_USER_NOTE_TYPE,
+        loadedFieldNames: ["题目", "问题01", "答案01", "问题02", "答案02", "问题03", "答案03"],
+        titleField: "题目",
+        slots: [
+          { index: 1, questionField: "问题01", answerField: "答案01" },
+          { index: 2, questionField: "问题02", answerField: "答案02" },
+          { index: 3, questionField: "问题03", answerField: "答案03" },
+        ],
+        warnings: [],
         loadedAt: 1,
       },
     },

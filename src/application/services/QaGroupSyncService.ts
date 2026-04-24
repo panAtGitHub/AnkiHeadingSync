@@ -1,20 +1,22 @@
 import MarkdownIt from "markdown-it";
 
+import { createNoteFieldMappingKey, isQaGroupFieldMapping, type QaGroupFieldMapping } from "@/application/config/NoteModelFieldMapping";
 import type { PluginSettings } from "@/application/config/PluginSettings";
+import { PluginUserError } from "@/application/errors/PluginUserError";
 import type { AnkiGroupGateway, AnkiNoteDetails } from "@/application/ports/AnkiGateway";
 import type { SourceLocation } from "@/domain/card/value-objects/SourceLocation";
 import { buildGroupSrc, type GroupItem, type IndexedGroupCardBlock } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
 import type { GroupBlockState, PluginState } from "@/domain/manual-sync/entities/PluginState";
 import { GroupMarkerService, type GroupMarkerWriteRequest } from "@/domain/manual-sync/services/GroupMarkerService";
+import { preprocessCardBodyMarkdown } from "@/domain/manual-sync/services/preprocessCardBodyMarkdown";
+import { renderObsidianTagChipsInHtml } from "@/domain/manual-sync/services/renderObsidianTagChips";
 import { DeckResolutionService } from "@/domain/manual-sync/services/DeckResolutionService";
 import { getDeckResolutionWarningKey, type DeckResolutionWarning } from "@/domain/manual-sync/value-objects/DeckResolution";
 import { hashString } from "@/domain/shared/hash";
-import { preprocessCardBodyMarkdown } from "@/domain/manual-sync/services/preprocessCardBodyMarkdown";
-import { renderObsidianTagChipsInHtml } from "@/domain/manual-sync/services/renderObsidianTagChips";
+import { applyObsidianBacklinkPlacement, renderObsidianBacklinkAnchor } from "@/domain/shared/renderObsidianBacklink";
 import { diffTagSets } from "@/domain/manual-sync/services/tagSetUtils";
 
-import { buildQaGroupNoteFields, formatQaGroupSlot, QA_GROUP_MODEL_NAME, QA_GROUP_SLOT_COUNT } from "./QaGroupModelDefinition";
-import { QaGroupModelService } from "./QaGroupModelService";
+import { QaGroupFieldMappingService } from "./QaGroupFieldMappingService";
 
 const markdown = new MarkdownIt({
   breaks: true,
@@ -56,7 +58,7 @@ export class QaGroupSyncService {
 
   constructor(
     private readonly ankiGateway: AnkiGroupGateway,
-    private readonly qaGroupModelService = new QaGroupModelService(ankiGateway),
+    private readonly qaGroupFieldMappingService = new QaGroupFieldMappingService(),
     private readonly deckResolutionService = new DeckResolutionService(),
     private readonly groupMarkerService = new GroupMarkerService(),
     private readonly now: () => number = () => Date.now(),
@@ -82,10 +84,7 @@ export class QaGroupSyncService {
       };
     }
 
-    await this.qaGroupModelService.ensureModel({
-      obsidianBacklinkLabel: settings.obsidianBacklinkLabel,
-      obsidianBacklinkPlacement: settings.obsidianBacklinkPlacement,
-    });
+    const { modelName, mapping, availableSlots, legacyInternalFields } = await this.resolveQaGroupModel(settings);
 
     const stateIndex = buildGroupStateIndex(state.groupBlocks ?? {});
     const ensuredDecks = new Set<string>();
@@ -97,20 +96,34 @@ export class QaGroupSyncService {
     let created = 0;
     let updated = 0;
     let migratedDecks = 0;
+    const backlinkAnchor = this.buildGroupBacklinkAnchor(blocks[0] ?? null, settings);
 
     for (const block of blocks) {
-      if (block.items.length > QA_GROUP_SLOT_COUNT) {
-        throw new Error(`QA Group block exceeds 12 items at ${block.filePath}:${block.blockStartLine}.`);
+      if (block.items.length > availableSlots.length) {
+        throw new PluginUserError("errors.noteFieldMapping.qaGroupSlotCapacityExceeded", {
+          modelName,
+          capacity: availableSlots.length,
+          itemCount: block.items.length,
+          filePath: block.filePath,
+          blockStartLine: block.blockStartLine,
+        });
       }
 
-      const recovered = await this.resolveRecoveredGroup(block, stateIndex);
+      const recovered = await this.resolveRecoveredGroup(block, stateIndex, modelName, mapping, availableSlots);
       const groupId = recovered.groupId ?? block.groupId ?? this.createGroupId();
-      const resolvedItems = reconcileGroupItems(block.items, recovered.items, this.createItemId);
-      if (resolvedItems.length > QA_GROUP_SLOT_COUNT) {
-        throw new Error(`QA Group block exceeds 12 items after recovery at ${block.filePath}:${block.blockStartLine}.`);
+      const recoveredItems = normalizeRecoveredItemsForAvailableSlots(recovered.items, availableSlots);
+      const resolvedItems = reconcileGroupItems(block.items, recoveredItems, this.createItemId, availableSlots);
+      if (resolvedItems.length > availableSlots.length) {
+        throw new PluginUserError("errors.noteFieldMapping.qaGroupSlotCapacityExceeded", {
+          modelName,
+          capacity: availableSlots.length,
+          itemCount: resolvedItems.length,
+          filePath: block.filePath,
+          blockStartLine: block.blockStartLine,
+        });
       }
 
-      const freeSlots = buildFreeSlotsFromItems(resolvedItems);
+      const freeSlots = buildFreeSlotsFromItems(resolvedItems, availableSlots);
       const deckResolution = this.deckResolutionService.resolve({
         filePath: block.filePath,
         deckHint: block.deckHint,
@@ -136,10 +149,12 @@ export class QaGroupSyncService {
         ),
       }));
       const fields = buildQaGroupNoteFields(
+        mapping,
         renderQaGroupInlineMarkdown(block.stem, false),
-        groupId,
-        this.buildGroupBacklink(block, settings),
         renderedItems,
+        this.buildGroupBacklinkAnchor(block, settings) || backlinkAnchor,
+        settings.obsidianBacklinkPlacement,
+        legacyInternalFields,
       );
       let noteId = recovered.noteId ?? block.noteId;
       let existingNote = recovered.noteDetails;
@@ -147,18 +162,18 @@ export class QaGroupSyncService {
       if (noteId === undefined) {
         noteId = await this.ankiGateway.addNote({
           deckName: deck,
-          modelName: QA_GROUP_MODEL_NAME,
+          modelName,
           fields,
           tags: block.tagsHint ?? [],
         });
         created += 1;
         touchedSyncKeys.add(block.syncKey);
       } else {
-        existingNote ??= await this.tryLoadQaGroupNote(noteId, block);
+        existingNote ??= await this.tryLoadQaGroupNote(noteId, block, modelName);
         if (!existingNote) {
           noteId = await this.ankiGateway.addNote({
             deckName: deck,
-            modelName: QA_GROUP_MODEL_NAME,
+            modelName,
             fields,
             tags: block.tagsHint ?? [],
           });
@@ -304,7 +319,13 @@ export class QaGroupSyncService {
     };
   }
 
-  private async resolveRecoveredGroup(block: IndexedGroupCardBlock, stateIndex: GroupStateIndex): Promise<RecoveredGroupRecord> {
+  private async resolveRecoveredGroup(
+    block: IndexedGroupCardBlock,
+    stateIndex: GroupStateIndex,
+    modelName: string,
+    mapping: QaGroupFieldMapping,
+    availableSlots: number[],
+  ): Promise<RecoveredGroupRecord> {
     const stateRecord = (block.groupId ? stateIndex.byGroupId.get(block.groupId) : undefined)
       ?? (block.noteId !== undefined ? stateIndex.byNoteId.get(block.noteId) : undefined)
       ?? uniqueMatch(stateIndex.bySrc.get(block.src));
@@ -319,75 +340,135 @@ export class QaGroupSyncService {
       };
     }
 
-    if (block.groupId) {
-      const recoveredByGroupId = await this.findSingleQaGroupNote(`note:${quoteAnkiValue(QA_GROUP_MODEL_NAME)} GroupId:${quoteAnkiValue(block.groupId)}`, block);
-      if (recoveredByGroupId) {
-        return noteDetailsToRecoveredGroup(recoveredByGroupId, block.groupId);
-      }
-    }
-
     if (block.noteId !== undefined) {
-      const note = await this.tryLoadQaGroupNote(block.noteId, block);
+      const note = await this.tryLoadQaGroupNote(block.noteId, block, modelName);
       if (note) {
-        return noteDetailsToRecoveredGroup(note, block.groupId);
+        return noteDetailsToRecoveredGroup(note, mapping, availableSlots, block.groupId);
       }
-    }
-
-    const recoveredBySrc = await this.findSingleQaGroupNote(`note:${quoteAnkiValue(QA_GROUP_MODEL_NAME)} Src:${quoteAnkiValue(block.src)}`, block);
-    if (recoveredBySrc) {
-      return noteDetailsToRecoveredGroup(recoveredBySrc, block.groupId);
     }
 
     return {
       items: [],
-      freeSlots: Array.from({ length: QA_GROUP_SLOT_COUNT }, (_value, index) => index + 1),
+      freeSlots: [...availableSlots],
     };
   }
 
-  private async findSingleQaGroupNote(query: string, block: IndexedGroupCardBlock): Promise<AnkiNoteDetails | undefined> {
-    const noteIds = await this.ankiGateway.findNoteIds(query);
-    if (noteIds.length === 0) {
-      return undefined;
-    }
-
-    if (noteIds.length > 1) {
-      throw new Error(`QA Group recovery is ambiguous at ${block.filePath}:${block.blockStartLine}. Query: ${query}`);
-    }
-
-    return this.tryLoadQaGroupNote(noteIds[0], block);
-  }
-
-  private async tryLoadQaGroupNote(noteId: number, block: IndexedGroupCardBlock): Promise<AnkiNoteDetails | undefined> {
+  private async tryLoadQaGroupNote(noteId: number, block: IndexedGroupCardBlock, modelName: string): Promise<AnkiNoteDetails | undefined> {
     const note = (await this.ankiGateway.getNoteDetails([noteId]))[0];
     if (!note) {
       return undefined;
     }
 
-    if (note.modelName !== QA_GROUP_MODEL_NAME) {
-      throw new Error(`Note ${noteId} for ${block.filePath}:${block.blockStartLine} is ${note.modelName}, expected ${QA_GROUP_MODEL_NAME}.`);
+    if (note.modelName !== modelName) {
+      throw new Error(`Note ${noteId} for ${block.filePath}:${block.blockStartLine} is ${note.modelName}, expected ${modelName}.`);
     }
 
     return note;
   }
 
-  private buildGroupBacklink(block: IndexedGroupCardBlock, settings: PluginSettings): string {
-    if (!settings.addObsidianBacklink || !this.createBacklink) {
+  private buildGroupBacklinkAnchor(block: IndexedGroupCardBlock | null, settings: PluginSettings): string {
+    if (!block || !settings.addObsidianBacklink || !this.createBacklink) {
       return "";
     }
 
-    return this.createBacklink({
-      filePath: block.filePath,
-      sourceContent: block.sourceContent,
-      headingLine: block.blockStartLine,
-      blockStartLine: block.blockStartLine,
-      bodyStartLine: block.bodyStartLine,
-      blockEndLine: block.blockEndLine,
-      contentEndLine: block.contentEndLine,
-      markerLine: block.markerLine,
-      headingLevel: block.headingLevel,
-      headingText: block.backlinkHeadingText,
+    return renderObsidianBacklinkAnchor({
+      href: this.createBacklink({
+        filePath: block.filePath,
+        sourceContent: block.sourceContent,
+        headingLine: block.blockStartLine,
+        blockStartLine: block.blockStartLine,
+        bodyStartLine: block.bodyStartLine,
+        blockEndLine: block.blockEndLine,
+        contentEndLine: block.contentEndLine,
+        markerLine: block.markerLine,
+        headingLevel: block.headingLevel,
+        headingText: block.backlinkHeadingText,
+      }),
+      label: settings.obsidianBacklinkLabel,
     });
   }
+
+  private async resolveQaGroupModel(settings: PluginSettings): Promise<{
+    modelName: string;
+    mapping: QaGroupFieldMapping;
+    availableSlots: number[];
+    legacyInternalFields: string[];
+  }> {
+    const modelName = settings.cardTypeConfigs["qa-group"].noteType.trim();
+    if (!modelName) {
+      throw new PluginUserError("errors.noteFieldMapping.noteTypeNotSelected.qaGroup");
+    }
+
+    const storedMapping = settings.noteFieldMappings[createNoteFieldMappingKey("qa-group", modelName)];
+    const fieldNames = await this.ankiGateway.getModelFieldNames(modelName);
+    const mapping = this.qaGroupFieldMappingService.suggest(
+      modelName,
+      fieldNames,
+      this.now(),
+      isQaGroupFieldMapping(storedMapping) ? storedMapping.acceptedWarnings : undefined,
+    );
+    this.qaGroupFieldMappingService.validateMapping(mapping, fieldNames);
+    this.qaGroupFieldMappingService.validateWarningsAccepted(mapping);
+
+    return {
+      modelName,
+      mapping,
+      availableSlots: mapping.slots.map((slot) => slot.index),
+      legacyInternalFields: collectLegacyManagedInternalFields(fieldNames),
+    };
+  }
+}
+
+function buildQaGroupNoteFields(
+  mapping: QaGroupFieldMapping,
+  stem: string,
+  items: GroupItem[],
+  backlinkAnchor: string,
+  backlinkPlacement: PluginSettings["obsidianBacklinkPlacement"],
+  legacyInternalFields: string[],
+): Record<string, string> {
+  if (!mapping.titleField) {
+    throw new PluginUserError("errors.noteFieldMapping.qaGroupMissingTitle", {
+      modelName: mapping.modelName,
+    });
+  }
+
+  const titleFieldValue = backlinkAnchor && backlinkPlacement === "question-last-line"
+    ? applyObsidianBacklinkPlacement({ title: stem, body: "" }, backlinkAnchor, backlinkPlacement).title
+    : stem;
+
+  const fields: Record<string, string> = {
+    [mapping.titleField]: titleFieldValue,
+  };
+
+  for (const slot of mapping.slots) {
+    fields[slot.questionField] = "";
+    fields[slot.answerField] = "";
+  }
+
+  for (const fieldName of legacyInternalFields) {
+    fields[fieldName] = "";
+  }
+
+  const slotByIndex = new Map(mapping.slots.map((slot) => [slot.index, slot]));
+  for (const item of items) {
+    if (item.slot === undefined) {
+      continue;
+    }
+
+    const slot = slotByIndex.get(item.slot);
+    if (!slot) {
+      continue;
+    }
+
+    const answerValue = backlinkAnchor && backlinkPlacement !== "question-last-line"
+      ? applyObsidianBacklinkPlacement({ title: item.title, body: item.answer }, backlinkAnchor, backlinkPlacement).body
+      : item.answer;
+    fields[slot.questionField] = item.title;
+    fields[slot.answerField] = answerValue;
+  }
+
+  return fields;
 }
 
 function buildGroupStateIndex(groupBlocks: Record<string, GroupBlockState>): GroupStateIndex {
@@ -418,39 +499,42 @@ function buildGroupStateIndex(groupBlocks: Record<string, GroupBlockState>): Gro
   };
 }
 
-function noteDetailsToRecoveredGroup(note: AnkiNoteDetails, fallbackGroupId?: string): RecoveredGroupRecord {
+function noteDetailsToRecoveredGroup(
+  note: AnkiNoteDetails,
+  mapping: QaGroupFieldMapping,
+  availableSlots: number[],
+  fallbackGroupId?: string,
+): RecoveredGroupRecord {
   const items: GroupItem[] = [];
   const occupiedSlots = new Set<number>();
 
-  for (let slot = 1; slot <= QA_GROUP_SLOT_COUNT; slot += 1) {
-    const slotId = formatQaGroupSlot(slot);
-    const itemId = (note.fields[`${slotId}_Id`] ?? "").trim() || `legacy_${slotId.toLowerCase()}`;
-    const title = (note.fields[`${slotId}_Q`] ?? "").trim();
-    const answer = (note.fields[`${slotId}_A`] ?? "").trim();
-    if (!title && !answer && !(note.fields[`${slotId}_Id`] ?? "").trim()) {
+  for (const slot of mapping.slots) {
+    const title = sanitizeRecoveredQaGroupField(note.fields[slot.questionField] ?? "");
+    const answer = sanitizeRecoveredQaGroupField(note.fields[slot.answerField] ?? "");
+    if (!title && !answer) {
       continue;
     }
 
-    occupiedSlots.add(slot);
+    occupiedSlots.add(slot.index);
     items.push({
-      itemId,
+      itemId: `recovered-slot-${String(slot.index).padStart(2, "0")}`,
       title,
       answer,
-      slot,
-      ordinalInMarkdown: slot,
+      slot: slot.index,
+      ordinalInMarkdown: slot.index,
     });
   }
 
   return {
     noteId: note.noteId,
-    groupId: (note.fields.GroupId ?? "").trim() || fallbackGroupId,
+    groupId: fallbackGroupId,
     items,
-    freeSlots: Array.from({ length: QA_GROUP_SLOT_COUNT }, (_value, index) => index + 1).filter((slot) => !occupiedSlots.has(slot)),
+    freeSlots: availableSlots.filter((slot) => !occupiedSlots.has(slot)),
     noteDetails: note,
   };
 }
 
-function reconcileGroupItems(currentItems: GroupItem[], recoveredItems: GroupItem[], createItemId: () => string): GroupItem[] {
+function reconcileGroupItems(currentItems: GroupItem[], recoveredItems: GroupItem[], createItemId: () => string, availableSlots: number[]): GroupItem[] {
   const recoveredQueues = new Map<string, GroupItem[]>();
   const unmatchedRecovered: GroupItem[] = [];
 
@@ -505,7 +589,7 @@ function reconcileGroupItems(currentItems: GroupItem[], recoveredItems: GroupIte
   }
 
   const occupiedSlots = new Set<number>(resolvedItems.map((item) => item.slot).filter((slot): slot is number => typeof slot === "number"));
-  const freeSlots = Array.from({ length: QA_GROUP_SLOT_COUNT }, (_value, index) => index + 1).filter((slot) => !occupiedSlots.has(slot));
+  const freeSlots = [...availableSlots].filter((slot) => !occupiedSlots.has(slot));
   for (const item of resolvedItems) {
     if (item.slot !== undefined) {
       continue;
@@ -525,9 +609,9 @@ function reconcileGroupItems(currentItems: GroupItem[], recoveredItems: GroupIte
   }));
 }
 
-function buildFreeSlotsFromItems(items: GroupItem[]): number[] {
+function buildFreeSlotsFromItems(items: GroupItem[], availableSlots: number[]): number[] {
   const occupiedSlots = new Set<number>(items.map((item) => item.slot).filter((slot): slot is number => typeof slot === "number"));
-  return Array.from({ length: QA_GROUP_SLOT_COUNT }, (_value, index) => index + 1).filter((slot) => !occupiedSlots.has(slot));
+  return availableSlots.filter((slot) => !occupiedSlots.has(slot));
 }
 
 function createItemContentKey(title: string, answer: string): string {
@@ -550,18 +634,9 @@ function uniqueMatch<T>(items: T[] | undefined): T | undefined {
 }
 
 function haveEqualFields(left: Record<string, string>, right: Record<string, string>): boolean {
-  const leftKeys = Object.keys(left).sort();
   const rightKeys = Object.keys(right).sort();
-  if (leftKeys.length !== rightKeys.length) {
-    return false;
-  }
-
-  for (let index = 0; index < leftKeys.length; index += 1) {
-    if (leftKeys[index] !== rightKeys[index]) {
-      return false;
-    }
-
-    if ((left[leftKeys[index]] ?? "") !== (right[rightKeys[index]] ?? "")) {
+  for (const key of rightKeys) {
+    if ((left[key] ?? "") !== (right[key] ?? "")) {
       return false;
     }
   }
@@ -593,6 +668,35 @@ function renderQaGroupInlineMarkdown(markdownText: string, renderTagChips: boole
   return renderTagChips ? renderObsidianTagChipsInHtml(html) : html;
 }
 
+function normalizeRecoveredItemsForAvailableSlots(items: GroupItem[], availableSlots: number[]): GroupItem[] {
+  const availableSlotSet = new Set(availableSlots);
+  return items.map((item) => ({
+    ...item,
+    slot: typeof item.slot === "number" && availableSlotSet.has(item.slot) ? item.slot : undefined,
+  }));
+}
+
+function sanitizeRecoveredQaGroupField(value: string): string {
+  return value
+    .replace(/<p><a class="anki-heading-sync-backlink"[^>]*>.*?<\/a><\/p>/g, "")
+    .replace(/<br><a class="anki-heading-sync-backlink"[^>]*>.*?<\/a>/g, "")
+    .trim();
+}
+
+function collectLegacyManagedInternalFields(fieldNames: string[]): string[] {
+  const hasLegacyShape = fieldNames.includes("GroupId")
+    && fieldNames.includes("Src")
+    && fieldNames.some((fieldName) => /^S\d+_Id$/i.test(fieldName))
+    && fieldNames.some((fieldName) => /^S\d+_Q$/i.test(fieldName))
+    && fieldNames.some((fieldName) => /^S\d+_A$/i.test(fieldName));
+
+  if (!hasLegacyShape) {
+    return [];
+  }
+
+  return fieldNames.filter((fieldName) => fieldName === "GroupId" || fieldName === "Src" || /^S\d+_Id$/i.test(fieldName));
+}
+
 function protectInlineCode(text: string): { text: string; restore: (value: string) => string } {
   const matches: string[] = [];
   const nextText = text.replace(INLINE_CODE_PATTERN, (segment) => {
@@ -606,8 +710,4 @@ function protectInlineCode(text: string): { text: string; restore: (value: strin
     restore: (value: string) =>
       matches.reduce((current, segment, index) => current.split(`@@QA_GROUP_INLINE_CODE_${index}@@`).join(segment), value),
   };
-}
-
-function quoteAnkiValue(value: string): string {
-  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`;
 }

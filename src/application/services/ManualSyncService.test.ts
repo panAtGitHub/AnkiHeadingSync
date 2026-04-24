@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { QA_GROUP_MODEL_NAME } from "@/application/services/QaGroupModelDefinition";
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import { createDeckRulesFingerprint } from "@/application/services/FileIndexerService";
 import { RenderConfigService } from "@/application/services/RenderConfigService";
@@ -8,7 +7,7 @@ import type { CardState } from "@/domain/manual-sync/entities/PluginState";
 import { hashString } from "@/domain/shared/hash";
 
 import { CurrentFileOutOfScopeError, ManualSyncService } from "./ManualSyncService";
-import { createModule3Settings, FakeManualSyncAnkiGateway, FakeManualSyncVaultGateway, InMemoryPluginStateRepository } from "@/test-support/manualSyncFakes";
+import { createModule3Settings, FakeManualSyncAnkiGateway, FakeManualSyncVaultGateway, InMemoryPluginStateRepository, QA_GROUP_USER_NOTE_TYPE } from "@/test-support/manualSyncFakes";
 
 describe("ManualSyncService", () => {
   it("syncs one file, creates Anki notes, writes the new marker format, and saves plugin state", async () => {
@@ -50,7 +49,7 @@ describe("ManualSyncService", () => {
     expect(stateRepository.savedState?.pendingWriteBack[0]).toMatchObject({ filePath: "notes/example.md", targetNoteId: 9001 });
   });
 
-  it("syncs a #anki-list block into one QA Group 12 note and writes one GI marker", async () => {
+  it("syncs a #anki-list block into one user-template QA Group note and writes one GI marker", async () => {
     const vaultGateway = new FakeManualSyncVaultGateway({
       "notes/example.md": [
         "#### Concepts #anki-list",
@@ -68,17 +67,16 @@ describe("ManualSyncService", () => {
 
     expect(result.created).toBe(1);
     expect(result.rewrittenMarkers).toBe(1);
-    expect(ankiGateway.createdModels[0]?.modelName).toBe(QA_GROUP_MODEL_NAME);
-    expect(ankiGateway.addedNotes[0]?.modelName).toBe(QA_GROUP_MODEL_NAME);
+    expect(ankiGateway.createdModels).toEqual([]);
+    expect(ankiGateway.addedNotes[0]?.modelName).toBe(QA_GROUP_USER_NOTE_TYPE);
     expect(ankiGateway.addedNotes[0]?.fields).toMatchObject({
-      Stem: "Concepts",
-      Src: "obsidian://open?vault=Vault&file=notes/example.md#Concepts #anki-list",
-      S01_Q: "Alpha",
-      S01_A: "First answer",
-      S02_Q: "Beta",
-      S02_A: "Second answer",
+      题目: "Concepts",
+      问题01: "Alpha",
+      答案01: expect.stringContaining("First answer"),
+      问题02: "Beta",
+      答案02: expect.stringContaining("Second answer"),
     });
-    expect(vaultGateway.getFileContent("notes/example.md")).toMatch(/<!--GI:n=9001;i=[^;]+;f=3,4,5,6,7,8,9,10,11,12-->/);
+    expect(vaultGateway.getFileContent("notes/example.md")).toMatch(/<!--GI:n=9001;i=[^;]+;f=3-->/);
     expect(Object.values(stateRepository.savedState?.groupBlocks ?? {})).toHaveLength(1);
     expect(stateRepository.savedState?.files["notes/example.md"]?.groupIds).toHaveLength(1);
   });

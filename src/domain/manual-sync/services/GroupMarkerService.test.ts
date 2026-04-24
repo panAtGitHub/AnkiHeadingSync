@@ -79,4 +79,16 @@ describe("GroupMarkerService", () => {
       "Remarks",
     ].join("\n"));
   });
+
+  it("accepts GI markers with slots above 12 when the user template exposes more capacity", () => {
+    const service = new GroupMarkerService();
+    const marker = service.create(42, { item_a: 13 }, [1, 2, 14]);
+
+    expect(marker.raw).toBe("<!--GI:n=42;i=item_a:13;f=1,2,14-->");
+    expect(service.parse(marker.raw, 9)).toMatchObject({
+      noteId: 42,
+      itemToSlot: { item_a: 13 },
+      freeSlots: [1, 2, 14],
+    });
+  });
 });

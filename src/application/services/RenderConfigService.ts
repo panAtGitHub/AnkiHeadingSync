@@ -1,5 +1,6 @@
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import { createNoteFieldMappingKey } from "@/application/config/NoteModelFieldMapping";
+import { PluginUserError } from "@/application/errors/PluginUserError";
 import { isClozeCardType } from "@/domain/card/entities/RenderedFields";
 import type { IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
 import { DeckResolutionService } from "@/domain/manual-sync/services/DeckResolutionService";
@@ -47,8 +48,24 @@ export class RenderConfigService {
 
 function resolveNoteModel(cardType: IndexedCard["cardType"], settings: PluginSettings): string {
   if (isClozeCardType(cardType)) {
+    if (!settings.clozeNoteType.trim()) {
+      throw new PluginUserError("errors.noteFieldMapping.noteTypeNotSelected.cloze");
+    }
+
     return settings.clozeNoteType;
   }
 
-  return cardType === "semantic-qa" ? settings.semanticQaNoteType : settings.qaNoteType;
+  if (cardType === "semantic-qa") {
+    if (!settings.semanticQaNoteType.trim()) {
+      throw new PluginUserError("errors.noteFieldMapping.noteTypeNotSelected.semanticQa");
+    }
+
+    return settings.semanticQaNoteType;
+  }
+
+  if (!settings.qaNoteType.trim()) {
+    throw new PluginUserError("errors.noteFieldMapping.noteTypeNotSelected.basic");
+  }
+
+  return settings.qaNoteType;
 }

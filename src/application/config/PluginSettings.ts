@@ -1,6 +1,7 @@
-import type { NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
-import { QA_GROUP_MODEL_NAME } from "@/application/config/ManagedNoteModels";
+import { createNoteFieldMappingKey, isQaGroupFieldMapping, type NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
 import { PluginUserError } from "@/application/errors/PluginUserError";
+import { QaGroupFieldMappingService } from "@/application/services/QaGroupFieldMappingService";
+import type { TranslationKey } from "@/presentation/i18n";
 
 export type ScopeMode = "all" | "include" | "exclude";
 export type FileDeckInsertLocation = "yaml" | "body";
@@ -30,11 +31,12 @@ export const DEFAULT_OBSIDIAN_BACKLINK_LABEL = "Open in Obsidian";
 
 const DEFAULT_BASIC_HEADING_LEVEL = 4;
 const DEFAULT_CLOZE_HEADING_LEVEL = 5;
-const DEFAULT_BASIC_NOTE_TYPE = "Basic";
-const DEFAULT_CLOZE_NOTE_TYPE = "Cloze";
+const DEFAULT_BASIC_NOTE_TYPE = "";
+const DEFAULT_CLOZE_NOTE_TYPE = "";
 const DEFAULT_SEMANTIC_QA_NOTE_TYPE = "Semantic QA";
 const DEFAULT_QA_GROUP_MARKER = "#anki-list";
 const DEFAULT_SEMANTIC_QA_MARKER = "#anki-list-qa";
+const qaGroupFieldMappingService = new QaGroupFieldMappingService();
 
 export interface PluginSettings {
   qaHeadingLevel: number;
@@ -125,6 +127,7 @@ export function normalizePluginSettings(settings: PluginSettings): PluginSetting
     ...settings,
     ...legacySettings,
     cardTypeConfigs,
+    noteFieldMappings: normalizeNoteFieldMappings(settings.noteFieldMappings),
     ankiNoteTypeCache: normalizeAnkiNoteTypeCache(settings.ankiNoteTypeCache),
     ankiModelFieldCache: normalizeAnkiModelFieldCache(settings.ankiModelFieldCache),
     obsidianBacklinkLabel: normalizeObsidianBacklinkLabel(settings.obsidianBacklinkLabel),
@@ -139,7 +142,7 @@ export function mergePluginSettings(settings?: Partial<PluginSettings> | null): 
     ...DEFAULT_SETTINGS,
     ...partialSettings,
     cardTypeConfigs,
-    noteFieldMappings: partialSettings.noteFieldMappings ?? DEFAULT_SETTINGS.noteFieldMappings,
+    noteFieldMappings: normalizeNoteFieldMappings(partialSettings.noteFieldMappings ?? DEFAULT_SETTINGS.noteFieldMappings),
     ankiModelFieldCache: partialSettings.ankiModelFieldCache ?? DEFAULT_SETTINGS.ankiModelFieldCache,
     includeFolders: partialSettings.includeFolders ?? DEFAULT_SETTINGS.includeFolders,
     excludeFolders: partialSettings.excludeFolders ?? DEFAULT_SETTINGS.excludeFolders,
@@ -284,18 +287,6 @@ export function validateCardTypeConfigs(cardTypeConfigs: CardTypeConfigs): void 
       throw new PluginUserError("errors.settings.cardTypeExtraMarkerString");
     }
 
-    if (configId === "basic" && !config.noteType.trim()) {
-      throw new PluginUserError("errors.settings.qaNoteTypeRequired");
-    }
-
-    if (configId === "qa-group" && !config.noteType.trim()) {
-      throw new PluginUserError("errors.settings.qaNoteTypeRequired");
-    }
-
-    if (configId === "cloze" && !config.noteType.trim()) {
-      throw new PluginUserError("errors.settings.clozeNoteTypeRequired");
-    }
-
     if (configId === "semantic-qa" && !config.noteType.trim()) {
       throw new PluginUserError("errors.settings.semanticQaNoteTypeRequired");
     }
@@ -337,6 +328,33 @@ function validateNoteFieldMappings(noteFieldMappings: Record<string, NoteModelFi
     if (!Number.isFinite(mapping.loadedAt)) {
       throw new PluginUserError("errors.settings.noteFieldMappingsLoadedAt");
     }
+
+    if (isQaGroupFieldMapping(mapping)) {
+      if (!Array.isArray(mapping.slots)) {
+        throw new PluginUserError("errors.settings.noteFieldMappingsQaGroupSlotsArray");
+      }
+
+      for (const slot of mapping.slots) {
+        if (!slot || typeof slot !== "object" || Array.isArray(slot)) {
+          throw new PluginUserError("errors.settings.noteFieldMappingsQaGroupSlotObject");
+        }
+
+        if (!Number.isInteger(slot.index) || slot.index < 1) {
+          throw new PluginUserError("errors.settings.noteFieldMappingsQaGroupSlotIndex");
+        }
+
+        if (typeof slot.questionField !== "string") {
+          throw new PluginUserError("errors.settings.noteFieldMappingsQaGroupSlotQuestionField");
+        }
+
+        if (typeof slot.answerField !== "string") {
+          throw new PluginUserError("errors.settings.noteFieldMappingsQaGroupSlotAnswerField");
+        }
+      }
+
+      validateStringList(mapping.warnings, "errors.settings.noteFieldMappingsQaGroupWarningsArray", "errors.settings.noteFieldMappingsQaGroupWarningsStrings");
+      validateStringList(mapping.acceptedWarnings, "errors.settings.noteFieldMappingsQaGroupAcceptedWarningsArray", "errors.settings.noteFieldMappingsQaGroupAcceptedWarningsStrings", true);
+    }
   }
 }
 
@@ -352,7 +370,7 @@ function createDefaultCardTypeConfigs(): CardTypeConfigs {
       enabled: true,
       headingLevel: DEFAULT_BASIC_HEADING_LEVEL,
       extraMarker: DEFAULT_QA_GROUP_MARKER,
-      noteType: QA_GROUP_MODEL_NAME,
+      noteType: "",
     },
     cloze: {
       enabled: true,
@@ -382,7 +400,7 @@ function createLegacyBackfilledCardTypeConfigs(settings: Partial<PluginSettings>
       ...defaults["qa-group"],
       headingLevel: sanitizeHeadingLevel(settings.qaHeadingLevel, defaults["qa-group"].headingLevel),
       extraMarker: sanitizeMarker(settings.qaGroupMarker, defaults["qa-group"].extraMarker),
-      noteType: sanitizeNoteType(settings.cardTypeConfigs?.["qa-group"]?.noteType ?? QA_GROUP_MODEL_NAME, defaults["qa-group"].noteType),
+      noteType: sanitizeNoteType(settings.cardTypeConfigs?.["qa-group"]?.noteType, defaults["qa-group"].noteType),
     },
     cloze: {
       ...defaults.cloze,
@@ -456,6 +474,115 @@ function sanitizeNoteType(value: string | undefined, fallback: string): string {
   return trimmedValue.length > 0 ? trimmedValue : fallback;
 }
 
+function normalizeNoteFieldMappings(value: unknown): Record<string, NoteModelFieldMapping> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const normalizedMappings: Record<string, NoteModelFieldMapping> = {};
+
+  for (const rawMapping of Object.values(value)) {
+    if (!rawMapping || typeof rawMapping !== "object" || Array.isArray(rawMapping)) {
+      continue;
+    }
+
+    const mapping = rawMapping as Partial<NoteModelFieldMapping> & Record<string, unknown>;
+    if (mapping.cardType !== "basic" && mapping.cardType !== "qa-group" && mapping.cardType !== "cloze" && mapping.cardType !== "semantic-qa") {
+      continue;
+    }
+
+    const modelName = typeof mapping.modelName === "string" ? mapping.modelName.trim() : "";
+    if (modelName.length === 0) {
+      continue;
+    }
+
+    const loadedFieldNames = normalizeModelFieldNames(mapping.loadedFieldNames);
+    const loadedAt = typeof mapping.loadedAt === "number" && Number.isFinite(mapping.loadedAt) ? mapping.loadedAt : 0;
+
+    if (mapping.cardType === "qa-group") {
+      const normalizedQaGroupMapping = normalizeQaGroupFieldMapping(mapping, modelName, loadedFieldNames, loadedAt);
+      normalizedMappings[createNoteFieldMappingKey(normalizedQaGroupMapping.cardType, normalizedQaGroupMapping.modelName)] = normalizedQaGroupMapping;
+      continue;
+    }
+
+    if (mapping.cardType === "cloze") {
+      normalizedMappings[createNoteFieldMappingKey(mapping.cardType, modelName)] = {
+        cardType: mapping.cardType,
+        modelName,
+        loadedFieldNames,
+        mainField: normalizeOptionalFieldName(mapping.mainField),
+        loadedAt,
+      };
+      continue;
+    }
+
+    normalizedMappings[createNoteFieldMappingKey(mapping.cardType, modelName)] = {
+      cardType: mapping.cardType,
+      modelName,
+      loadedFieldNames,
+      titleField: normalizeOptionalFieldName(mapping.titleField),
+      bodyField: normalizeOptionalFieldName(mapping.bodyField),
+      loadedAt,
+    };
+  }
+
+  return normalizedMappings;
+}
+
+function normalizeQaGroupFieldMapping(
+  mapping: Record<string, unknown>,
+  modelName: string,
+  loadedFieldNames: string[],
+  loadedAt: number,
+): NoteModelFieldMapping {
+  const acceptedWarnings = normalizeStringList(mapping.acceptedWarnings);
+  const normalizedSlots = normalizeQaGroupSlots(mapping.slots);
+  const normalizedWarnings = normalizeStringList(mapping.warnings);
+  const normalizedTitleField = normalizeOptionalFieldName(mapping.titleField);
+  const hasExplicitQaGroupShape = normalizedSlots.length > 0 || normalizedWarnings.length > 0 || acceptedWarnings.length > 0;
+
+  if (hasExplicitQaGroupShape) {
+    return {
+      cardType: "qa-group",
+      modelName,
+      loadedFieldNames,
+      titleField: normalizedTitleField,
+      slots: normalizedSlots,
+      warnings: normalizedWarnings,
+      acceptedWarnings: acceptedWarnings.length > 0 ? acceptedWarnings : undefined,
+      loadedAt,
+    };
+  }
+
+  if (loadedFieldNames.length > 0) {
+    try {
+      return qaGroupFieldMappingService.suggest(modelName, loadedFieldNames, loadedAt, acceptedWarnings);
+    } catch {
+      return {
+        cardType: "qa-group",
+        modelName,
+        loadedFieldNames,
+        titleField: normalizedTitleField,
+        slots: [],
+        warnings: [],
+        acceptedWarnings: undefined,
+        loadedAt,
+      };
+    }
+  }
+
+  return {
+    cardType: "qa-group",
+    modelName,
+    loadedFieldNames,
+    titleField: normalizedTitleField,
+    slots: [],
+    warnings: [],
+    acceptedWarnings: undefined,
+    loadedAt,
+  };
+}
+
 function normalizeAnkiNoteTypeCache(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
@@ -522,4 +649,88 @@ function normalizeModelFieldNames(value: unknown): string[] {
   }
 
   return normalizedFieldNames;
+}
+
+function normalizeQaGroupSlots(value: unknown): { index: number; questionField: string; answerField: string }[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const normalizedSlots: { index: number; questionField: string; answerField: string }[] = [];
+  for (const slot of value) {
+    if (!slot || typeof slot !== "object" || Array.isArray(slot)) {
+      continue;
+    }
+
+    const rawSlot = slot as Record<string, unknown>;
+    if (!Number.isInteger(rawSlot.index) || (rawSlot.index as number) < 1) {
+      continue;
+    }
+
+    const questionField = normalizeOptionalFieldName(rawSlot.questionField);
+    const answerField = normalizeOptionalFieldName(rawSlot.answerField);
+    if (!questionField || !answerField) {
+      continue;
+    }
+
+    normalizedSlots.push({
+      index: rawSlot.index as number,
+      questionField,
+      answerField,
+    });
+  }
+
+  return normalizedSlots;
+}
+
+function normalizeOptionalFieldName(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmedValue = value.trim();
+  return trimmedValue.length > 0 ? trimmedValue : undefined;
+}
+
+function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const normalizedValues: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") {
+      continue;
+    }
+
+    const trimmedEntry = entry.trim();
+    if (trimmedEntry.length === 0) {
+      continue;
+    }
+
+    normalizedValues.push(trimmedEntry);
+  }
+
+  return normalizedValues;
+}
+
+function validateStringList(
+  value: unknown,
+  arrayKey: TranslationKey,
+  stringKey: TranslationKey,
+  allowUndefined = false,
+): void {
+  if (typeof value === "undefined" && allowUndefined) {
+    return;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new PluginUserError(arrayKey);
+  }
+
+  for (const entry of value) {
+    if (typeof entry !== "string") {
+      throw new PluginUserError(stringKey);
+    }
+  }
 }

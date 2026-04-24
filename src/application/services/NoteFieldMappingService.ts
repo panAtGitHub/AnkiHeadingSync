@@ -1,4 +1,12 @@
-import { createNoteFieldMappingKey, type NoteModelFieldMapping, type NoteModelFieldMappingCardType } from "@/application/config/NoteModelFieldMapping";
+import {
+  createNoteFieldMappingKey,
+  isBasicLikeNoteModelFieldMapping,
+  isClozeNoteModelFieldMapping,
+  type BasicLikeNoteModelFieldMapping,
+  type ClozeNoteModelFieldMapping,
+  type NoteModelFieldMapping,
+  type NoteModelFieldMappingCardType,
+} from "@/application/config/NoteModelFieldMapping";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
 import { PluginUserError } from "@/application/errors/PluginUserError";
 import { isBasicLikeCardType, type CardType, type RenderedFields } from "@/domain/card/entities/RenderedFields";
@@ -27,13 +35,17 @@ export class NoteFieldMappingService {
     this.validateMapping(mapping, noteModelDetails);
 
     if (isBasicLikeCardType(card.type)) {
-      return this.mapBasic(card, mapping);
+      return this.mapBasic(card, mapping as BasicLikeNoteModelFieldMapping);
     }
 
-    return this.mapCloze(card, noteModelDetails, mapping);
+    return this.mapCloze(card, noteModelDetails, mapping as ClozeNoteModelFieldMapping);
   }
 
   suggest(cardType: NoteModelFieldMappingCardType, modelName: string, fieldNames: string[], loadedAt = Date.now()): NoteModelFieldMapping {
+    if (cardType === "qa-group") {
+      throw new Error("QaGroupFieldMappingService must be used for qa-group mappings.");
+    }
+
     return isBasicLikeMappingCardType(cardType)
       ? {
           cardType,
@@ -55,9 +67,13 @@ export class NoteFieldMappingService {
   }
 
   validateMapping(mapping: NoteModelFieldMapping, noteModelDetails: NoteModelDetails): void {
+    if (!isBasicLikeNoteModelFieldMapping(mapping) && !isClozeNoteModelFieldMapping(mapping)) {
+      throw new Error("QaGroupFieldMappingService validates qa-group mappings.");
+    }
+
     const availableFields = new Set(noteModelDetails.fieldNames);
 
-    if (isBasicLikeMappingCardType(mapping.cardType)) {
+    if (isBasicLikeNoteModelFieldMapping(mapping)) {
       if (!mapping.titleField || !mapping.bodyField) {
         throw new PluginUserError(getIncompleteSavedMappingKey(mapping.cardType), {
           modelName: mapping.modelName,
@@ -101,7 +117,7 @@ export class NoteFieldMappingService {
     }
   }
 
-  private mapBasic(card: RenderedCardInput, mapping: NoteModelFieldMapping): Record<string, string> {
+  private mapBasic(card: RenderedCardInput, mapping: BasicLikeNoteModelFieldMapping): Record<string, string> {
     const titleFieldName = mapping.titleField;
     const bodyFieldName = mapping.bodyField;
 
@@ -117,7 +133,7 @@ export class NoteFieldMappingService {
     };
   }
 
-  private mapCloze(card: RenderedCardInput, noteModelDetails: NoteModelDetails, mapping: NoteModelFieldMapping): Record<string, string> {
+  private mapCloze(card: RenderedCardInput, noteModelDetails: NoteModelDetails, mapping: ClozeNoteModelFieldMapping): Record<string, string> {
     if (!noteModelDetails.isCloze) {
       throw new PluginUserError("errors.noteFieldMapping.clozeIncompatible", {
         modelName: card.noteModel,
@@ -151,8 +167,8 @@ export class NoteFieldMappingService {
   }
 }
 
-function isBasicLikeMappingCardType(cardType: NoteModelFieldMappingCardType): cardType is Extract<NoteModelFieldMappingCardType, "basic" | "qa-group" | "semantic-qa"> {
-  return cardType === "qa-group" || cardType === "basic" || cardType === "semantic-qa";
+function isBasicLikeMappingCardType(cardType: NoteModelFieldMappingCardType): cardType is Extract<NoteModelFieldMappingCardType, "basic" | "semantic-qa"> {
+  return cardType === "basic" || cardType === "semantic-qa";
 }
 
 function getMissingSavedMappingKey(cardType: CardType): "errors.noteFieldMapping.missingSavedMapping.basic" | "errors.noteFieldMapping.missingSavedMapping.cloze" | "errors.noteFieldMapping.missingSavedMapping.semanticQa" {
@@ -175,7 +191,7 @@ function getIncompleteSavedMappingKey(cardType: NoteModelFieldMappingCardType): 
     : "errors.noteFieldMapping.incompleteSavedMapping.basic";
 }
 
-function getTitleBodyMustDifferKey(cardType: Extract<NoteModelFieldMappingCardType, "basic" | "qa-group" | "semantic-qa">): "errors.noteFieldMapping.titleBodyMustDiffer.basic" | "errors.noteFieldMapping.titleBodyMustDiffer.semanticQa" {
+function getTitleBodyMustDifferKey(cardType: Extract<NoteModelFieldMappingCardType, "basic" | "semantic-qa">): "errors.noteFieldMapping.titleBodyMustDiffer.basic" | "errors.noteFieldMapping.titleBodyMustDiffer.semanticQa" {
   return cardType === "semantic-qa"
     ? "errors.noteFieldMapping.titleBodyMustDiffer.semanticQa"
     : "errors.noteFieldMapping.titleBodyMustDiffer.basic";

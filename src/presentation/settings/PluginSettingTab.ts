@@ -11,11 +11,22 @@ import {
   type ScopeMode,
   validatePluginSettings,
 } from "@/application/config/PluginSettings";
-import { createNoteFieldMappingKey, type NoteModelFieldMapping, type NoteModelFieldMappingCardType } from "@/application/config/NoteModelFieldMapping";
+import {
+  createNoteFieldMappingKey,
+  isQaGroupFieldMapping,
+  type NoteModelFieldMapping,
+  type NoteModelFieldMappingCardType,
+  type QaGroupFieldMapping,
+} from "@/application/config/NoteModelFieldMapping";
 import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
 import { renderUserFacingMessage, toUserFacingMessage, type UserFacingMessage } from "@/application/errors/PluginUserError";
 import { NoteFieldMappingService } from "@/application/services/NoteFieldMappingService";
+import {
+  areQaGroupWarningsAccepted,
+  parseQaGroupFieldWarning,
+  QaGroupFieldMappingService,
+} from "@/application/services/QaGroupFieldMappingService";
 import { t } from "@/presentation/i18n";
 import type AnkiHeadingSyncPlugin from "@/presentation/AnkiHeadingSyncPlugin";
 
@@ -37,6 +48,7 @@ interface SettingsCardShell {
 
 export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private readonly noteFieldMappingService = new NoteFieldMappingService();
+  private readonly qaGroupFieldMappingService = new QaGroupFieldMappingService();
   private readonly availableNoteModels: string[] = [];
   private readonly draftMappings: Record<string, NoteModelFieldMapping> = {};
   private readonly loadedModelDetails: Record<string, NoteModelDetails> = {};
@@ -177,9 +189,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     loadButton.type = "button";
     loadButton.dataset.cardTypesRefresh = "true";
     loadButton.disabled = this.ankiConfigLoading;
-    loadButton.addEventListener("click", () => {
-      void this.loadAnkiCardTypeConfig();
-    });
+    loadButton.addEventListener("click", () => this.loadAnkiCardTypeConfig());
     actionRow.createEl("span", {
       text: `${t("settings.cards.cardTypes.statusLabel")}${renderUserFacingMessage(this.cardTypeStatus)}`,
     });
@@ -215,9 +225,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     enabledCheckbox.type = "checkbox";
     enabledCheckbox.checked = config.enabled;
     enabledCheckbox.dataset.cardTypeEnabled = configId;
-    enabledCheckbox.addEventListener("change", () => {
-      void this.saveCardTypeConfig(configId, { enabled: enabledCheckbox.checked });
-    });
+    enabledCheckbox.addEventListener("change", () => this.saveCardTypeConfig(configId, { enabled: enabledCheckbox.checked }));
 
     const titleEl = headerRow.createEl("strong", { text: this.getCardTypeLabel(configId) });
     titleEl.style.fontSize = "var(--font-ui-medium)";
@@ -236,9 +244,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       this.appendOption(headingSelect, String(level), `H${level}`);
     }
     headingSelect.value = String(config.headingLevel);
-    headingSelect.addEventListener("change", () => {
-      void this.saveCardTypeConfig(configId, { headingLevel: Number(headingSelect.value) });
-    });
+    headingSelect.addEventListener("change", () => this.saveCardTypeConfig(configId, { headingLevel: Number(headingSelect.value) }));
 
     const markerGroup = this.createInlineControlGroup(recognitionRow, t("settings.cards.cardTypes.labels.extraMarker"));
     const markerInput = markerGroup.createEl("input") as HTMLInputElement;
@@ -274,44 +280,102 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     }
     noteTypeSelect.value = config.noteType;
     noteTypeSelect.disabled = this.ankiConfigLoading;
-    noteTypeSelect.addEventListener("change", () => {
-      void this.saveCardTypeConfig(configId, { noteType: noteTypeSelect.value });
-    });
+    noteTypeSelect.addEventListener("change", () => this.saveCardTypeConfig(configId, { noteType: noteTypeSelect.value }));
 
     this.renderCardTypeFieldControls(ankiRow, configId);
   }
 
   private renderCardTypeFieldControls(containerEl: HTMLElement, configId: CardTypeConfigId): void {
+    if (configId === "qa-group") {
+      this.renderQaGroupFieldControls(containerEl, configId);
+      return;
+    }
+
     const mapping = this.getCurrentMappingForConfig(configId);
     if (configId === "cloze") {
       const mainFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.mainField"));
       const mainFieldSelect = this.createFieldSelect(mainFieldGroup, `card-type-question-field:${configId}`);
+      const clozeMapping = mapping && "mainField" in mapping ? mapping : undefined;
       mainFieldSelect.dataset.cardTypeQuestionField = configId;
       this.applyFluidEllipsis(mainFieldSelect);
-      this.populateFieldSelect(mainFieldSelect, mapping?.loadedFieldNames ?? [], mapping?.mainField);
-      mainFieldSelect.addEventListener("change", () => {
-        void this.saveFieldMapping(configId, { mainField: mainFieldSelect.value || undefined });
-      });
+      this.populateFieldSelect(mainFieldSelect, clozeMapping?.loadedFieldNames ?? [], clozeMapping?.mainField);
+      mainFieldSelect.addEventListener("change", () => this.saveFieldMapping(configId, { mainField: mainFieldSelect.value || undefined }));
       return;
     }
 
     const titleFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.questionField"));
     const titleFieldSelect = this.createFieldSelect(titleFieldGroup, `card-type-question-field:${configId}`);
+    const basicLikeMapping = mapping && "bodyField" in mapping ? mapping : undefined;
     titleFieldSelect.dataset.cardTypeQuestionField = configId;
     this.applyFluidEllipsis(titleFieldSelect);
-    this.populateFieldSelect(titleFieldSelect, mapping?.loadedFieldNames ?? [], mapping?.titleField);
-    titleFieldSelect.addEventListener("change", () => {
-      void this.saveFieldMapping(configId, { titleField: titleFieldSelect.value || undefined });
-    });
+    this.populateFieldSelect(titleFieldSelect, basicLikeMapping?.loadedFieldNames ?? [], basicLikeMapping?.titleField);
+    titleFieldSelect.addEventListener("change", () => this.saveFieldMapping(configId, { titleField: titleFieldSelect.value || undefined }));
 
     const bodyFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.answerField"));
     const bodyFieldSelect = this.createFieldSelect(bodyFieldGroup, `card-type-answer-field:${configId}`);
     bodyFieldSelect.dataset.cardTypeAnswerField = configId;
     this.applyFluidEllipsis(bodyFieldSelect);
-    this.populateFieldSelect(bodyFieldSelect, mapping?.loadedFieldNames ?? [], mapping?.bodyField);
-    bodyFieldSelect.addEventListener("change", () => {
-      void this.saveFieldMapping(configId, { bodyField: bodyFieldSelect.value || undefined });
-    });
+    this.populateFieldSelect(bodyFieldSelect, basicLikeMapping?.loadedFieldNames ?? [], basicLikeMapping?.bodyField);
+    bodyFieldSelect.addEventListener("change", () => this.saveFieldMapping(configId, { bodyField: bodyFieldSelect.value || undefined }));
+  }
+
+  private renderQaGroupFieldControls(containerEl: HTMLElement, configId: Extract<CardTypeConfigId, "qa-group">): void {
+    const selectedModelName = this.plugin.settings.cardTypeConfigs[configId].noteType.trim();
+    const qaGroupState = this.getQaGroupFieldState(configId);
+
+    const titleFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.qaGroupTitleField"));
+    titleFieldGroup.createEl("span", {
+      text: qaGroupState.mapping?.titleField
+        ?? (selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel")),
+    }).dataset.qaGroupTitleField = configId;
+
+    const slotFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.qaGroupSlotFields"));
+    slotFieldGroup.createEl("span", {
+      text: qaGroupState.mapping
+        ? t("settings.cards.cardTypes.qaGroup.detectedSlots", {
+            count: qaGroupState.mapping.slots.length,
+            summary: summarizeQaGroupSlots(qaGroupState.mapping),
+          })
+        : (selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel")),
+    }).dataset.qaGroupSlotSummary = configId;
+
+    if (qaGroupState.error) {
+      const errorEl = containerEl.createDiv({
+        text: renderUserFacingMessage(qaGroupState.error),
+      });
+      errorEl.dataset.qaGroupError = configId;
+      errorEl.style.gridColumn = "1 / -1";
+      return;
+    }
+
+    if (!qaGroupState.mapping || qaGroupState.mapping.warnings.length === 0) {
+      return;
+    }
+
+    const warningsContainer = containerEl.createDiv();
+    warningsContainer.dataset.qaGroupWarnings = configId;
+    warningsContainer.style.gridColumn = "1 / -1";
+    warningsContainer.style.display = "flex";
+    warningsContainer.style.flexDirection = "column";
+    warningsContainer.style.gap = "6px";
+    warningsContainer.createEl("strong", { text: t("settings.cards.cardTypes.labels.qaGroupWarnings") });
+
+    for (const warning of qaGroupState.mapping.warnings) {
+      warningsContainer.createEl("div", {
+        text: this.renderQaGroupWarning(warning),
+      }).dataset.qaGroupWarning = configId;
+    }
+
+    const acceptLabel = warningsContainer.createEl("label");
+    acceptLabel.style.display = "inline-flex";
+    acceptLabel.style.alignItems = "center";
+    acceptLabel.style.gap = "8px";
+    const acceptCheckbox = acceptLabel.createEl("input") as HTMLInputElement;
+    acceptCheckbox.type = "checkbox";
+    acceptCheckbox.checked = areQaGroupWarningsAccepted(qaGroupState.mapping.warnings, qaGroupState.mapping.acceptedWarnings);
+    acceptCheckbox.dataset.qaGroupWarningAccept = configId;
+    acceptCheckbox.addEventListener("change", () => this.saveQaGroupWarningAcceptance(configId, acceptCheckbox.checked));
+    acceptLabel.createEl("span", { text: t("settings.cards.cardTypes.qaGroup.acceptWarnings") });
   }
 
   private renderSyncContentCard(containerEl: HTMLElement): void {
@@ -599,6 +663,29 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     this.cardTypeStatus = NOTE_TYPE_STATUS_IDLE;
     await this.plugin.updateSettings({ cardTypeConfigs: nextCardTypeConfigs });
+
+    if (configId === "qa-group" && typeof partialConfig.noteType === "string") {
+      await this.syncQaGroupMappingFromCache(nextCardTypeConfigs[configId].noteType);
+
+      const mappingKey = createNoteFieldMappingKey("qa-group", nextCardTypeConfigs[configId].noteType);
+      if (!this.plugin.settings.noteFieldMappings[mappingKey]) {
+        const cacheEntry = this.plugin.settings.ankiModelFieldCache[nextCardTypeConfigs[configId].noteType];
+        if (cacheEntry) {
+          const fallbackMapping = this.qaGroupFieldMappingService.suggest(
+            nextCardTypeConfigs[configId].noteType,
+            cacheEntry.fieldNames,
+            cacheEntry.loadedAt,
+          );
+          await this.plugin.updateSettings({
+            noteFieldMappings: {
+              ...this.plugin.settings.noteFieldMappings,
+              [mappingKey]: fallbackMapping,
+            },
+          });
+        }
+      }
+    }
+
     this.renderCard("card-types");
     return true;
   }
@@ -611,7 +698,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const nextMapping = {
       ...(mapping ?? this.createFallbackMapping(runtimeCardType, modelName)),
       ...partialMapping,
-    };
+    } as NoteModelFieldMapping;
 
     this.draftMappings[mappingKey] = nextMapping;
     await this.plugin.updateSettings({
@@ -620,7 +707,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         [mappingKey]: {
           ...nextMapping,
           loadedFieldNames: [...nextMapping.loadedFieldNames],
-        },
+        } as NoteModelFieldMapping,
       },
     });
     this.renderCard("card-types");
@@ -652,6 +739,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       });
 
       this.hydrateVisibleCardTypeCaches(ankiModelFieldCache);
+      await this.syncQaGroupMappingFromCache(this.plugin.settings.cardTypeConfigs["qa-group"].noteType, ankiModelFieldCache);
       const configuredCount = this.countConfiguredCardTypes(ankiModelFieldCache);
 
       this.cardTypeStatus = {
@@ -713,6 +801,20 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const mappingKey = createNoteFieldMappingKey(runtimeCardType, modelName);
     const currentMapping = this.plugin.settings.noteFieldMappings[mappingKey] ?? this.draftMappings[mappingKey];
 
+    if (runtimeCardType === "qa-group") {
+      try {
+        this.draftMappings[mappingKey] = this.qaGroupFieldMappingService.suggest(
+          modelName,
+          modelDetails.fieldNames,
+          loadedAt,
+          isQaGroupFieldMapping(currentMapping) ? currentMapping.acceptedWarnings : undefined,
+        );
+      } catch {
+        delete this.draftMappings[mappingKey];
+      }
+      return;
+    }
+
     if (currentMapping) {
       this.draftMappings[mappingKey] = {
         ...currentMapping,
@@ -758,6 +860,22 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       return undefined;
     }
 
+    if (runtimeCardType === "qa-group") {
+      try {
+        const suggestedMapping = this.qaGroupFieldMappingService.suggest(modelName, modelDetails.fieldNames);
+        this.draftMappings[mappingKey] = suggestedMapping;
+        return {
+          ...suggestedMapping,
+          loadedFieldNames: [...suggestedMapping.loadedFieldNames],
+          slots: suggestedMapping.slots.map((slot) => ({ ...slot })),
+          warnings: [...suggestedMapping.warnings],
+          acceptedWarnings: suggestedMapping.acceptedWarnings ? [...suggestedMapping.acceptedWarnings] : undefined,
+        };
+      } catch {
+        return undefined;
+      }
+    }
+
     const suggestedMapping = this.noteFieldMappingService.suggest(runtimeCardType, modelName, modelDetails.fieldNames);
     this.draftMappings[mappingKey] = suggestedMapping;
     return {
@@ -771,7 +889,24 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const modelDetails = this.loadedModelDetails[mappingKey];
 
     if (modelDetails) {
+      if (runtimeCardType === "qa-group") {
+        return this.qaGroupFieldMappingService.suggest(modelName, modelDetails.fieldNames);
+      }
+
       return this.noteFieldMappingService.suggest(runtimeCardType, modelName, modelDetails.fieldNames);
+    }
+
+    if (runtimeCardType === "qa-group") {
+      return {
+        cardType: runtimeCardType,
+        modelName,
+        titleField: undefined,
+        slots: [],
+        warnings: [],
+        acceptedWarnings: undefined,
+        loadedFieldNames: [],
+        loadedAt: Date.now(),
+      };
     }
 
     return {
@@ -780,6 +915,130 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       loadedFieldNames: [],
       loadedAt: Date.now(),
     };
+  }
+
+  private async saveQaGroupWarningAcceptance(configId: Extract<CardTypeConfigId, "qa-group">, accepted: boolean): Promise<void> {
+    const mapping = this.getCurrentMappingForConfig(configId);
+    if (!mapping || !isQaGroupFieldMapping(mapping)) {
+      return;
+    }
+
+    const runtimeCardType = this.getRuntimeCardType(configId);
+    const mappingKey = createNoteFieldMappingKey(runtimeCardType, mapping.modelName);
+    const nextMapping: QaGroupFieldMapping = {
+      ...mapping,
+      slots: mapping.slots.map((slot) => ({ ...slot })),
+      warnings: [...mapping.warnings],
+      acceptedWarnings: accepted ? [...mapping.warnings] : undefined,
+      loadedFieldNames: [...mapping.loadedFieldNames],
+    };
+
+    this.draftMappings[mappingKey] = nextMapping;
+    await this.plugin.updateSettings({
+      noteFieldMappings: {
+        ...this.plugin.settings.noteFieldMappings,
+        [mappingKey]: nextMapping,
+      },
+    });
+    this.renderCard("card-types");
+  }
+
+  private async syncQaGroupMappingFromCache(
+    modelName: string,
+    ankiModelFieldCache: AnkiHeadingSyncPlugin["settings"]["ankiModelFieldCache"] = this.plugin.settings.ankiModelFieldCache,
+  ): Promise<void> {
+    const trimmedModelName = modelName.trim();
+    if (trimmedModelName.length === 0) {
+      return;
+    }
+
+    const cacheEntry = ankiModelFieldCache[trimmedModelName];
+    if (!cacheEntry) {
+      return;
+    }
+
+    const mappingKey = createNoteFieldMappingKey("qa-group", trimmedModelName);
+    const currentMapping = this.plugin.settings.noteFieldMappings[mappingKey] ?? this.draftMappings[mappingKey];
+
+    try {
+      const nextMapping = this.qaGroupFieldMappingService.suggest(
+        trimmedModelName,
+        cacheEntry.fieldNames,
+        cacheEntry.loadedAt,
+        isQaGroupFieldMapping(currentMapping) ? currentMapping.acceptedWarnings : undefined,
+      );
+
+      this.draftMappings[mappingKey] = nextMapping;
+      if (!areMappingsEqual(this.plugin.settings.noteFieldMappings[mappingKey], nextMapping)) {
+        await this.plugin.updateSettings({
+          noteFieldMappings: {
+            ...this.plugin.settings.noteFieldMappings,
+            [mappingKey]: nextMapping,
+          },
+        });
+      }
+    } catch {
+      delete this.draftMappings[mappingKey];
+      if (this.plugin.settings.noteFieldMappings[mappingKey]) {
+        const nextMappings = { ...this.plugin.settings.noteFieldMappings };
+        delete nextMappings[mappingKey];
+        await this.plugin.updateSettings({ noteFieldMappings: nextMappings });
+      }
+    }
+  }
+
+  private getQaGroupFieldState(configId: Extract<CardTypeConfigId, "qa-group">): { mapping?: QaGroupFieldMapping; error?: UserFacingMessage } {
+    const modelName = this.plugin.settings.cardTypeConfigs[configId].noteType;
+    const mappingKey = createNoteFieldMappingKey("qa-group", modelName);
+    const currentMapping = this.draftMappings[mappingKey] ?? this.plugin.settings.noteFieldMappings[mappingKey];
+    if (currentMapping && isQaGroupFieldMapping(currentMapping)) {
+      return {
+        mapping: {
+          ...currentMapping,
+          loadedFieldNames: [...currentMapping.loadedFieldNames],
+          slots: currentMapping.slots.map((slot) => ({ ...slot })),
+          warnings: [...currentMapping.warnings],
+          acceptedWarnings: currentMapping.acceptedWarnings ? [...currentMapping.acceptedWarnings] : undefined,
+        },
+      };
+    }
+
+    const modelDetails = this.loadedModelDetails[mappingKey];
+    if (!modelDetails) {
+      return {};
+    }
+
+    try {
+      return {
+        mapping: this.qaGroupFieldMappingService.suggest(modelName, modelDetails.fieldNames),
+      };
+    } catch (error) {
+      return {
+        error: toUserFacingMessage(error, "settings.cards.cardTypes.failedSave"),
+      };
+    }
+  }
+
+  private renderQaGroupWarning(warning: string): string {
+    const parsedWarning = parseQaGroupFieldWarning(warning);
+    if (!parsedWarning) {
+      return warning;
+    }
+
+    const index = String(parsedWarning.index).padStart(2, "0");
+    if (parsedWarning.kind === "missing-answer") {
+      return t("settings.cards.cardTypes.qaGroup.warning.missingAnswer", {
+        index,
+        questionField: parsedWarning.questionField,
+        answerField: parsedWarning.answerField,
+      });
+    }
+
+    return t("settings.cards.cardTypes.qaGroup.warning.missingQuestion", {
+      index,
+      questionField: parsedWarning.questionField,
+      answerField: parsedWarning.answerField,
+    });
   }
 
   private getRuntimeCardType(configId: CardTypeConfigId): NoteModelFieldMapping["cardType"] {
@@ -1051,6 +1310,19 @@ function getScopeModeSummary(scopeMode: ScopeMode): string {
   }
 
   return t("settings.scope.summary.all");
+}
+
+function summarizeQaGroupSlots(mapping: QaGroupFieldMapping): string {
+  const slotPairs = mapping.slots.map((slot) => `${slot.questionField}/${slot.answerField}`);
+  if (slotPairs.length <= 3) {
+    return slotPairs.join(", ");
+  }
+
+  return `${slotPairs.slice(0, 3).join(", ")}...`;
+}
+
+function areMappingsEqual(left: NoteModelFieldMapping | undefined, right: NoteModelFieldMapping): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function getScopeModeTreeDescription(scopeMode: ScopeMode): string {

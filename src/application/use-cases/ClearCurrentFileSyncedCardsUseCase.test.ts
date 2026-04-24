@@ -285,7 +285,7 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
     expect(syncResult.created).toBe(1);
     expect(syncResult.rewrittenMarkers).toBe(1);
     expect(ankiGateway.addedNotes).toHaveLength(1);
-    expect(vaultGateway.getFileContent(filePath)).toMatch(/<!--GI:n=9001;i=[^;]+;f=3,4,5,6,7,8,9,10,11,12-->/);
+    expect(vaultGateway.getFileContent(filePath)).toMatch(/<!--GI:n=9001;i=[^;]+;f=3-->/);
     expect(vaultGateway.getFileContent(filePath)).not.toContain("<!--GI:n=42;");
   });
 

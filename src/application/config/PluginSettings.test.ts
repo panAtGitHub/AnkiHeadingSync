@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { QA_GROUP_MODEL_NAME } from "@/application/config/ManagedNoteModels";
 import { PluginUserError } from "@/application/errors/PluginUserError";
 
 import {
@@ -87,19 +86,19 @@ describe("PluginSettings", () => {
         enabled: true,
         headingLevel: 4,
         extraMarker: "",
-        noteType: "Basic",
+        noteType: "",
       },
       "qa-group": {
         enabled: true,
         headingLevel: 4,
         extraMarker: "#anki-list",
-        noteType: QA_GROUP_MODEL_NAME,
+        noteType: "",
       },
       cloze: {
         enabled: true,
         headingLevel: 5,
         extraMarker: "",
-        noteType: "Cloze",
+        noteType: "",
       },
       "semantic-qa": {
         enabled: true,
@@ -264,7 +263,7 @@ describe("PluginSettings", () => {
         enabled: true,
         headingLevel: 4,
         extraMarker: "#anki-list",
-        noteType: QA_GROUP_MODEL_NAME,
+        noteType: "",
       },
       cloze: {
         enabled: true,
@@ -344,6 +343,75 @@ describe("PluginSettings", () => {
     });
 
     expect(settings.cardTypeConfigs["qa-group"].noteType).toBe("Custom QA Group");
+  });
+
+  it("allows empty basic qa-group and cloze note types in saved settings", () => {
+    expect(() => validatePluginSettings({
+      ...DEFAULT_SETTINGS,
+      cardTypeConfigs: {
+        ...DEFAULT_SETTINGS.cardTypeConfigs,
+        basic: {
+          ...DEFAULT_SETTINGS.cardTypeConfigs.basic,
+          noteType: "",
+        },
+        "qa-group": {
+          ...DEFAULT_SETTINGS.cardTypeConfigs["qa-group"],
+          noteType: "",
+        },
+        cloze: {
+          ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+          noteType: "",
+        },
+      },
+    })).not.toThrow();
+  });
+
+  it("normalizes legacy qa-group mappings into the new slot structure", () => {
+    const settings = mergePluginSettings({
+      noteFieldMappings: {
+        "qa-group:Custom QA Group": {
+          cardType: "qa-group",
+          modelName: "Custom QA Group",
+          loadedFieldNames: ["题目", "问题01", "答案01", "问题02", "答案02"],
+          titleField: "题目",
+          bodyField: "答案01",
+          loadedAt: 1,
+        } as never,
+      },
+    });
+
+    expect(settings.noteFieldMappings["qa-group:Custom QA Group"]).toEqual({
+      cardType: "qa-group",
+      modelName: "Custom QA Group",
+      loadedFieldNames: ["题目", "问题01", "答案01", "问题02", "答案02"],
+      titleField: "题目",
+      slots: [
+        { index: 1, questionField: "问题01", answerField: "答案01" },
+        { index: 2, questionField: "问题02", answerField: "答案02" },
+      ],
+      warnings: [],
+      acceptedWarnings: undefined,
+      loadedAt: 1,
+    });
+  });
+
+  it("rejects invalid qa-group slot metadata in note field mappings", () => {
+    expectPluginUserError(() => {
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        noteFieldMappings: {
+          "qa-group:Custom QA Group": {
+            cardType: "qa-group",
+            modelName: "Custom QA Group",
+            loadedFieldNames: ["题目", "问题01", "答案01"],
+            titleField: "题目",
+            slots: [{ index: 0, questionField: "问题01", answerField: "答案01" }],
+            warnings: [],
+            loadedAt: 1,
+          },
+        },
+      });
+    }, "errors.settings.noteFieldMappingsQaGroupSlotIndex");
   });
 
   it("rejects invalid module 5 enum values", () => {

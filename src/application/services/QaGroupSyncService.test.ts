@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { buildGroupSrc, type IndexedGroupCardBlock } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
+import { buildGroupSrc, type GroupItem, type IndexedGroupCardBlock } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
 import { createEmptyPluginState, type GroupBlockState } from "@/domain/manual-sync/entities/PluginState";
-import { QA_GROUP_MODEL_NAME, buildQaGroupNoteFields } from "@/application/services/QaGroupModelDefinition";
-import { createModule3Settings, FakeManualSyncAnkiGateway, FakeManualSyncVaultGateway } from "@/test-support/manualSyncFakes";
+import { applyObsidianBacklinkPlacement, renderObsidianBacklinkAnchor } from "@/domain/shared/renderObsidianBacklink";
+import { createModule3Settings, FakeManualSyncAnkiGateway, FakeManualSyncVaultGateway, QA_GROUP_USER_NOTE_TYPE } from "@/test-support/manualSyncFakes";
 
 import { QaGroupSyncService } from "./QaGroupSyncService";
 
 describe("QaGroupSyncService", () => {
-  it("creates one QA Group note and assigns fresh item ids and slots", async () => {
+  it("creates one QA Group note from the user-selected template and assigns fresh item ids and slots", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     const vaultGateway = new FakeManualSyncVaultGateway();
     const itemIds = ["item-1", "item-2"];
@@ -26,21 +26,22 @@ describe("QaGroupSyncService", () => {
     const result = await service.sync([createIndexedGroupBlock()], createEmptyPluginState(), createModule3Settings());
 
     expect(result.created).toBe(1);
-    expect(ankiGateway.addedNotes[0]?.modelName).toBe(QA_GROUP_MODEL_NAME);
-    expect(ankiGateway.addedNotes[0]?.fields).toMatchObject({
-      Stem: "Concepts",
-      GroupId: "group-1",
-      Src: "obsidian://open?vault=Vault&file=notes/example.md#Concepts #anki-list",
-      S01_Q: "Alpha",
-      S01_A: "First answer",
-      S02_Q: "Beta",
-      S02_A: "Second answer",
-    });
+    expect(ankiGateway.createdModels).toEqual([]);
+    expect(ankiGateway.addedNotes[0]?.modelName).toBe(QA_GROUP_USER_NOTE_TYPE);
+    expect(ankiGateway.addedNotes[0]?.fields.题目).toBe("Concepts");
+    expect(ankiGateway.addedNotes[0]?.fields.问题01).toBe("Alpha");
+    expect(ankiGateway.addedNotes[0]?.fields.答案01).toContain("First answer");
+    expect(ankiGateway.addedNotes[0]?.fields.答案01).toContain("anki-heading-sync-backlink");
+    expect(ankiGateway.addedNotes[0]?.fields.问题02).toBe("Beta");
+    expect(ankiGateway.addedNotes[0]?.fields.答案02).toContain("Second answer");
+    expect(ankiGateway.addedNotes[0]?.fields).not.toHaveProperty("GroupId");
+    expect(ankiGateway.addedNotes[0]?.fields).not.toHaveProperty("Src");
     expect(result.syncedGroupBlocks[0]?.items).toMatchObject([
       { itemId: "item-1", slot: 1 },
       { itemId: "item-2", slot: 2 },
     ]);
     expect(result.markerWrites[0]?.itemToSlot).toEqual({ "item-1": 1, "item-2": 2 });
+    expect(result.markerWrites[0]?.freeSlots).toEqual([3]);
   });
 
   it("renders QA Group stem, questions, and answers as inline Markdown HTML", async () => {
@@ -72,15 +73,15 @@ describe("QaGroupSyncService", () => {
 
     expect(result.created).toBe(1);
     expect(ankiGateway.addedNotes[0]?.fields).toMatchObject({
-      Stem: "Concepts <em>Stem</em>",
-      S01_Q: "Alpha <strong>bold</strong>",
+      题目: "Concepts <em>Stem</em>",
+      问题01: "Alpha <strong>bold</strong>",
     });
-    expect(ankiGateway.addedNotes[0]?.fields.S01_A).toContain("First <em>answer</em> and <mark>mark</mark>");
-    expect(ankiGateway.addedNotes[0]?.fields.S01_A).toContain('class="ahs-ob-tag"');
-    expect(ankiGateway.addedNotes[0]?.fields.S01_A).toContain('data-tag="3地区"');
+    expect(ankiGateway.addedNotes[0]?.fields.答案01).toContain("First <em>answer</em> and <mark>mark</mark>");
+    expect(ankiGateway.addedNotes[0]?.fields.答案01).toContain('class="ahs-ob-tag"');
+    expect(ankiGateway.addedNotes[0]?.fields.答案01).toContain('data-tag="3地区"');
   });
 
-  it("ensures the QA Group model using the current backlink settings before syncing", async () => {
+  it("writes the backlink directly into user fields instead of a managed Src field", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     const vaultGateway = new FakeManualSyncVaultGateway();
     const service = new QaGroupSyncService(
@@ -97,12 +98,14 @@ describe("QaGroupSyncService", () => {
     await service.sync([
       createIndexedGroupBlock(),
     ], createEmptyPluginState(), createModule3Settings({
-      obsidianBacklinkLabel: 'Open <Vault>',
+      obsidianBacklinkLabel: "Open <Vault>",
       obsidianBacklinkPlacement: "answer-first-line",
     }));
 
-    expect(ankiGateway.createdModels[0]?.templates[0]?.back).toContain('Open &lt;Vault&gt;');
-    expect(ankiGateway.createdModels[0]?.templates[0]?.back).toContain('<hr id="answer">\n\n{{#Src}}<p><a class="anki-heading-sync-backlink" href="{{Src}}">Open &lt;Vault&gt;</a></p>{{/Src}}\n<div class="a">{{S01_A}}</div>');
+    expect(ankiGateway.createdModels).toEqual([]);
+    expect(ankiGateway.addedNotes[0]?.fields.答案01).toContain('Open &lt;Vault&gt;');
+    expect(ankiGateway.addedNotes[0]?.fields.答案01).toMatch(/^<p><a class="anki-heading-sync-backlink"/);
+    expect(ankiGateway.addedNotes[0]?.fields).not.toHaveProperty("Src");
   });
 
   it("preserves slots across reorder and reuses a free slot for a new item", async () => {
@@ -111,10 +114,10 @@ describe("QaGroupSyncService", () => {
     const existingState = createStoredGroupBlockState();
     ankiGateway.noteDetailsById.set(42, {
       noteId: 42,
-      modelName: QA_GROUP_MODEL_NAME,
+      modelName: QA_GROUP_USER_NOTE_TYPE,
       cardIds: [7001, 7002],
       deckNames: ["notes"],
-      fields: buildQaGroupNoteFields(existingState.stem, existingState.groupId, existingState.src, existingState.items),
+      fields: buildQaGroupUserTemplateFields(existingState.stem, existingState.items),
     });
     const service = new QaGroupSyncService(
       ankiGateway,
@@ -193,12 +196,12 @@ describe("QaGroupSyncService", () => {
 
     expect(result.created).toBe(1);
     expect(result.updated).toBe(0);
-    expect(ankiGateway.addedNotes[0]?.modelName).toBe(QA_GROUP_MODEL_NAME);
+    expect(ankiGateway.addedNotes[0]?.modelName).toBe(QA_GROUP_USER_NOTE_TYPE);
     expect(ankiGateway.addedNotes[0]?.fields).toMatchObject({
-      GroupId: "group-1",
-      S01_Q: "Alpha",
-      S02_Q: "Gamma",
-      S03_Q: "Beta",
+      题目: "Concepts",
+      问题01: "Alpha",
+      问题02: "Gamma",
+      问题03: "Beta",
     });
     expect(result.syncedGroupBlocks[0]?.groupId).toBe("group-1");
     expect(result.syncedGroupBlocks[0]?.noteId).toBeDefined();
@@ -238,9 +241,8 @@ describe("QaGroupSyncService", () => {
     expect(result.touchedSyncKeys).toContain("notes/example.md\u0000group\u00001\u0000hash-1");
     expect(ankiGateway.addedNotes).toHaveLength(1);
     expect(ankiGateway.addedNotes[0]?.fields).toMatchObject({
-      GroupId: "group-1",
-      S01_Q: "Alpha",
-      S03_Q: "Beta",
+      问题01: "Alpha",
+      问题03: "Beta",
     });
     expect(result.markerWrites[0]?.noteId).toBe(result.syncedGroupBlocks[0]?.noteId);
     expect(result.syncedGroupBlocks[0]?.noteId).not.toBe(42);
@@ -252,10 +254,10 @@ describe("QaGroupSyncService", () => {
     const existingState = createStoredGroupBlockState();
     ankiGateway.noteDetailsById.set(42, {
       noteId: 42,
-      modelName: QA_GROUP_MODEL_NAME,
+      modelName: QA_GROUP_USER_NOTE_TYPE,
       cardIds: [7001],
       deckNames: ["notes"],
-      fields: buildQaGroupNoteFields(existingState.stem, existingState.groupId, existingState.src, [
+      fields: buildQaGroupUserTemplateFields(existingState.stem, [
         { itemId: "item-a", slot: 1, title: "Alpha", answer: "#项目A #重点/案例\n\n第一段", ordinalInMarkdown: 1 },
         { itemId: "item-b", slot: 3, title: "Beta", answer: "Second answer", ordinalInMarkdown: 2 },
       ]),
@@ -289,9 +291,8 @@ describe("QaGroupSyncService", () => {
     }, createModule3Settings({ keepPureTagLinesInCardBody: false }));
 
     expect(result.updated).toBe(1);
-    expect(ankiGateway.updatedNotes[0]?.fields).toMatchObject({
-      S01_A: "第一段",
-    });
+    expect(ankiGateway.updatedNotes[0]?.fields.答案01).toContain("第一段");
+    expect(ankiGateway.updatedNotes[0]?.fields.答案01).not.toContain("#项目A");
   });
 
   it("renders remaining inline tags in QA Group answers as chips after cleanup", async () => {
@@ -300,10 +301,10 @@ describe("QaGroupSyncService", () => {
     const existingState = createStoredGroupBlockState();
     ankiGateway.noteDetailsById.set(42, {
       noteId: 42,
-      modelName: QA_GROUP_MODEL_NAME,
+      modelName: QA_GROUP_USER_NOTE_TYPE,
       cardIds: [7001],
       deckNames: ["notes"],
-      fields: buildQaGroupNoteFields(existingState.stem, existingState.groupId, existingState.src, [
+      fields: buildQaGroupUserTemplateFields(existingState.stem, [
         { itemId: "item-a", slot: 1, title: "Alpha", answer: "旧答案", ordinalInMarkdown: 1 },
         { itemId: "item-b", slot: 3, title: "Beta", answer: "Second answer", ordinalInMarkdown: 2 },
       ]),
@@ -337,11 +338,11 @@ describe("QaGroupSyncService", () => {
     }, createModule3Settings({ keepPureTagLinesInCardBody: false }));
 
     expect(result.updated).toBe(1);
-    expect(ankiGateway.updatedNotes[0]?.fields.S01_A).toContain('class="ahs-ob-tag"');
-    expect(ankiGateway.updatedNotes[0]?.fields.S01_A).toContain('data-tag="3地区"');
-    expect(ankiGateway.updatedNotes[0]?.fields.S01_A).not.toContain('data-tag="项目A"');
-    expect(ankiGateway.updatedNotes[0]?.fields.S01_A).not.toContain('data-tag="重点::案例"');
-    expect(ankiGateway.updatedNotes[0]?.fields.S01_A).not.toContain('data-tag="代码"');
+    expect(ankiGateway.updatedNotes[0]?.fields.答案01).toContain('class="ahs-ob-tag"');
+    expect(ankiGateway.updatedNotes[0]?.fields.答案01).toContain('data-tag="3地区"');
+    expect(ankiGateway.updatedNotes[0]?.fields.答案01).not.toContain('data-tag="项目A"');
+    expect(ankiGateway.updatedNotes[0]?.fields.答案01).not.toContain('data-tag="重点::案例"');
+    expect(ankiGateway.updatedNotes[0]?.fields.答案01).not.toContain('data-tag="代码"');
   });
 
   it("syncs QA Group note tags from file-level tag hints", async () => {
@@ -350,11 +351,11 @@ describe("QaGroupSyncService", () => {
     const existingState = createStoredGroupBlockState();
     ankiGateway.noteDetailsById.set(42, {
       noteId: 42,
-      modelName: QA_GROUP_MODEL_NAME,
+      modelName: QA_GROUP_USER_NOTE_TYPE,
       cardIds: [7001],
       deckNames: ["notes"],
       tags: ["old", "shared"],
-      fields: buildQaGroupNoteFields(existingState.stem, existingState.groupId, existingState.src, existingState.items),
+      fields: buildQaGroupUserTemplateFields(existingState.stem, existingState.items),
     });
     const service = new QaGroupSyncService(
       ankiGateway,
@@ -390,6 +391,119 @@ describe("QaGroupSyncService", () => {
         removeTags: ["old"],
       },
     ]);
+  });
+
+  it("rejects a QA Group block when the selected template exposes fewer slots than the block needs", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    const service = new QaGroupSyncService(ankiGateway);
+
+    await expect(service.sync([
+      createIndexedGroupBlock({
+        items: [
+          { title: "A", answer: "1", ordinalInMarkdown: 1 },
+          { title: "B", answer: "2", ordinalInMarkdown: 2 },
+          { title: "C", answer: "3", ordinalInMarkdown: 3 },
+          { title: "D", answer: "4", ordinalInMarkdown: 4 },
+        ],
+      }),
+    ], createEmptyPluginState(), createModule3Settings())).rejects.toMatchObject({
+      userMessage: {
+        key: "errors.noteFieldMapping.qaGroupSlotCapacityExceeded",
+      },
+    });
+  });
+
+  it("blocks sync when the selected QA Group template still has unconfirmed field warnings", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    ankiGateway.modelDetailsByName[QA_GROUP_USER_NOTE_TYPE] = {
+      fieldNames: ["题目", "问题01", "答案01", "问题02"],
+      isCloze: false,
+    };
+    const service = new QaGroupSyncService(ankiGateway);
+    const baseSettings = createModule3Settings();
+
+    await expect(service.sync([
+      createIndexedGroupBlock(),
+    ], createEmptyPluginState(), {
+      ...baseSettings,
+      noteFieldMappings: {
+        ...baseSettings.noteFieldMappings,
+        [`qa-group:${QA_GROUP_USER_NOTE_TYPE}`]: {
+          cardType: "qa-group",
+          modelName: QA_GROUP_USER_NOTE_TYPE,
+          loadedFieldNames: ["题目", "问题01", "答案01", "问题02"],
+          titleField: "题目",
+          slots: [{ index: 1, questionField: "问题01", answerField: "答案01" }],
+          warnings: [JSON.stringify({ kind: "missing-answer", index: 2, questionField: "问题02", answerField: "答案02" })],
+          loadedAt: 1,
+        },
+      },
+    })).rejects.toMatchObject({
+      userMessage: {
+        key: "errors.noteFieldMapping.qaGroupWarningsUnaccepted",
+      },
+    });
+  });
+
+  it("fails clearly when QA Group sync starts without a selected Anki note type", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    const service = new QaGroupSyncService(ankiGateway);
+    const baseSettings = createModule3Settings();
+
+    await expect(service.sync([
+      createIndexedGroupBlock(),
+    ], createEmptyPluginState(), {
+      ...baseSettings,
+      cardTypeConfigs: {
+        ...baseSettings.cardTypeConfigs,
+        "qa-group": {
+          ...baseSettings.cardTypeConfigs["qa-group"],
+          noteType: "",
+        },
+      },
+    })).rejects.toMatchObject({
+      userMessage: {
+        key: "errors.noteFieldMapping.noteTypeNotSelected.qaGroup",
+      },
+    });
+  });
+
+  it("recovers note content by noteId and uses temporary item ids when local state is missing", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    const vaultGateway = new FakeManualSyncVaultGateway();
+    ankiGateway.noteDetailsById.set(42, {
+      noteId: 42,
+      modelName: QA_GROUP_USER_NOTE_TYPE,
+      cardIds: [7001],
+      deckNames: ["notes"],
+      fields: buildQaGroupUserTemplateFields("Concepts", [
+        { itemId: "ignored", slot: 1, title: "Alpha", answer: "First answer", ordinalInMarkdown: 1 },
+      ], buildBacklinkAnchor(vaultGateway, "notes/example.md", "Concepts #anki-list")),
+    });
+    const service = new QaGroupSyncService(
+      ankiGateway,
+      undefined,
+      undefined,
+      undefined,
+      () => 1234,
+      () => "group-x",
+      () => "item-new",
+      vaultGateway.createBacklink.bind(vaultGateway),
+    );
+
+    const result = await service.sync([
+      createIndexedGroupBlock({
+        noteId: 42,
+        groupId: undefined,
+        items: [{ title: "Alpha", answer: "First answer", ordinalInMarkdown: 1 }],
+      }),
+    ], createEmptyPluginState(), createModule3Settings());
+
+    expect(result.updated).toBe(0);
+    expect(result.syncedGroupBlocks[0]?.items[0]).toMatchObject({
+      itemId: "recovered-slot-01",
+      slot: 1,
+    });
   });
 });
 
@@ -460,8 +574,47 @@ function createStoredGroupBlockState(): GroupBlockState {
       { itemId: "item-a", title: "Alpha", answer: "First answer", slot: 1, ordinalInMarkdown: 1 },
       { itemId: "item-b", title: "Beta", answer: "Second answer", slot: 3, ordinalInMarkdown: 2 },
     ],
-    freeSlots: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    freeSlots: [2],
     lastSyncedAt: 100,
     orphan: false,
   };
+}
+
+function buildQaGroupUserTemplateFields(
+  stem: string,
+  items: GroupItem[],
+  backlinkAnchor = buildBacklinkAnchor(new FakeManualSyncVaultGateway(), "notes/example.md", "Concepts #anki-list"),
+  placement: "question-last-line" | "answer-first-line" | "answer-last-line" = "answer-last-line",
+): Record<string, string> {
+  const fields: Record<string, string> = {
+    题目: placement === "question-last-line"
+      ? applyObsidianBacklinkPlacement({ title: stem, body: "" }, backlinkAnchor, placement).title
+      : stem,
+    问题01: "",
+    答案01: "",
+    问题02: "",
+    答案02: "",
+    问题03: "",
+    答案03: "",
+  };
+
+  for (const item of items) {
+    if (!item.slot) {
+      continue;
+    }
+
+    fields[`问题${String(item.slot).padStart(2, "0")}`] = item.title;
+    fields[`答案${String(item.slot).padStart(2, "0")}`] = placement === "question-last-line"
+      ? item.answer
+      : applyObsidianBacklinkPlacement({ title: item.title, body: item.answer }, backlinkAnchor, placement).body;
+  }
+
+  return fields;
+}
+
+function buildBacklinkAnchor(vaultGateway: FakeManualSyncVaultGateway, filePath: string, headingText: string): string {
+  return renderObsidianBacklinkAnchor({
+    href: vaultGateway.createBacklink({ filePath, headingText }),
+    label: "Open in Obsidian",
+  });
 }

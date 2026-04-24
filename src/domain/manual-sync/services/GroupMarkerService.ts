@@ -235,16 +235,16 @@ function parseFreeSlots(rawValue: string): number[] {
 function validateSlotRanges(itemToSlot: Record<string, number>, freeSlots: number[]): void {
   const usedSlots = new Set<number>();
   for (const slot of Object.values(itemToSlot)) {
-    if (!Number.isInteger(slot) || slot < 1 || slot > 12) {
-      throw new GroupMarkerError(`GI item slot must be an integer between 1 and 12. Received: ${slot}`);
+    if (!Number.isInteger(slot) || slot < 1) {
+      throw new GroupMarkerError(`GI item slot must be a positive integer. Received: ${slot}`);
     }
 
     usedSlots.add(slot);
   }
 
   for (const slot of freeSlots) {
-    if (!Number.isInteger(slot) || slot < 1 || slot > 12) {
-      throw new GroupMarkerError(`GI free slot must be an integer between 1 and 12. Received: ${slot}`);
+    if (!Number.isInteger(slot) || slot < 1) {
+      throw new GroupMarkerError(`GI free slot must be a positive integer. Received: ${slot}`);
     }
 
     if (usedSlots.has(slot)) {

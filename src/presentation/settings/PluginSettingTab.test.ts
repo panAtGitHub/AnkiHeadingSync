@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { QA_GROUP_MODEL_NAME } from "@/application/config/ManagedNoteModels";
 import { createNoteFieldMappingKey } from "@/application/config/NoteModelFieldMapping";
 import { DEFAULT_SETTINGS, normalizePluginSettings } from "@/application/config/PluginSettings";
+
+const QA_GROUP_USER_MODEL_NAME = "问答题（多级列表）";
 
 const {
   FakeElement,
@@ -282,6 +283,7 @@ type QueryRoot = FakeContainer | FakeElementInstance | HTMLElement;
 class FakePlugin {
   public readonly app = {};
   public readonly updateCalls: Array<Record<string, unknown>> = [];
+  public readonly fieldNamesByModelName: Record<string, string[]> = {};
   public listNoteModelsCalls = 0;
   public getModelFieldNamesByModelNamesCalls = 0;
   public getNoteModelDetailsCalls = 0;
@@ -335,7 +337,7 @@ class FakePlugin {
 
   async listNoteModels(): Promise<string[]> {
     this.listNoteModelsCalls += 1;
-    return ["Basic", "Custom Basic", "Cloze", "Custom Cloze", "Semantic QA", QA_GROUP_MODEL_NAME];
+    return ["Basic", "Custom Basic", "Cloze", "Custom Cloze", "Semantic QA", QA_GROUP_USER_MODEL_NAME];
   }
 
   async getModelFieldNamesByModelNames(modelNames: string[]): Promise<Record<string, string[]>> {
@@ -365,6 +367,10 @@ class FakePlugin {
   }
 
   private getFieldNamesForModel(modelName: string): string[] {
+    if (this.fieldNamesByModelName[modelName]) {
+      return this.fieldNamesByModelName[modelName];
+    }
+
     if (modelName.includes("Cloze")) {
       return ["Text", "Extra", "Hint"];
     }
@@ -375,6 +381,10 @@ class FakePlugin {
 
     if (modelName === "Basic") {
       return ["Front", "Back", "Extra"];
+    }
+
+    if (modelName === QA_GROUP_USER_MODEL_NAME) {
+      return ["题目", "问题01", "答案01", "问题02", "答案02"];
     }
 
     return ["Title", "Body", "Hint"];
@@ -540,9 +550,9 @@ describe("PluginSettingTab", () => {
     expect(plugin.settings.cardTypeConfigs.basic.noteType).toBe("Basic");
 
     const qaGroupNoteType = queryByDataset(tab.containerEl, "cardTypeNoteType", "qa-group");
-    qaGroupNoteType.value = "Custom Basic";
+    qaGroupNoteType.value = QA_GROUP_USER_MODEL_NAME;
     await qaGroupNoteType.trigger("change");
-    expect(plugin.settings.cardTypeConfigs["qa-group"].noteType).toBe("Custom Basic");
+    expect(plugin.settings.cardTypeConfigs["qa-group"].noteType).toBe(QA_GROUP_USER_MODEL_NAME);
 
     await flushPromises();
     const basicQuestionField = queryByDataset(tab.containerEl, "cardTypeQuestionField", "basic");
@@ -557,16 +567,15 @@ describe("PluginSettingTab", () => {
       bodyField: "Body",
     }));
 
-    const qaGroupQuestionField = queryByDataset(tab.containerEl, "cardTypeQuestionField", "qa-group");
-    qaGroupQuestionField.value = "Title";
-    await qaGroupQuestionField.trigger("change");
-    const qaGroupAnswerField = queryByDataset(tab.containerEl, "cardTypeAnswerField", "qa-group");
-    qaGroupAnswerField.value = "Body";
-    await qaGroupAnswerField.trigger("change");
-
+    expect(queryByDataset(tab.containerEl, "qaGroupTitleField", "qa-group").textContent).toBe("题目");
+    expect(queryByDataset(tab.containerEl, "qaGroupSlotSummary", "qa-group").textContent).toContain("已识别 2 组");
     expect(plugin.settings.noteFieldMappings[createNoteFieldMappingKey("qa-group", plugin.settings.cardTypeConfigs["qa-group"].noteType)]).toEqual(expect.objectContaining({
-      titleField: "Title",
-      bodyField: "Body",
+      titleField: "题目",
+      slots: [
+        { index: 1, questionField: "问题01", answerField: "答案01" },
+        { index: 2, questionField: "问题02", answerField: "答案02" },
+      ],
+      warnings: [],
     }));
   });
 
@@ -637,7 +646,7 @@ describe("PluginSettingTab", () => {
     expect(plugin.getModelFieldNamesByModelNamesCalls).toBe(1);
     expect(plugin.getNoteModelDetailsCalls).toBe(0);
     expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
-    expect(collectTexts(tab.containerEl).some((text) => text.includes("已获取 6 个笔记模板，已选择并配置 3 个卡片模式。"))).toBe(true);
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("已获取 6 个笔记模板，已选择并配置 2 个卡片模式。"))).toBe(true);
   });
 
   it("persists loaded Anki note types and uses the cache before the next manual refresh", async () => {
@@ -653,9 +662,9 @@ describe("PluginSettingTab", () => {
       "Cloze",
       "Custom Basic",
       "Custom Cloze",
-      QA_GROUP_MODEL_NAME,
       "Semantic QA",
-    ]);
+      QA_GROUP_USER_MODEL_NAME,
+    ].sort((left, right) => left.localeCompare(right)));
     expect(plugin.updateCalls.some((call) => Array.isArray(call.ankiNoteTypeCache))).toBe(true);
     expect(plugin.settings.ankiModelFieldCache).toEqual(expect.objectContaining({
       Basic: {
@@ -741,6 +750,51 @@ describe("PluginSettingTab", () => {
     expect(collectOptionValues(basicQuestionFieldSelect)).toEqual(["", "Front", "Back", "Extra"]);
     expect(collectOptionValues(basicAnswerFieldSelect)).toEqual(["", "Front", "Back", "Extra"]);
     expect(plugin.getNoteModelDetailsCalls).toBe(0);
+  });
+
+  it("shows qa-group warnings, saves acceptance, and resets acceptance after field refresh changes warnings", async () => {
+    const plugin = new FakePlugin();
+    plugin.fieldNamesByModelName[QA_GROUP_USER_MODEL_NAME] = ["题目", "问题01", "答案01", "问题02"];
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      ankiNoteTypeCache: [QA_GROUP_USER_MODEL_NAME],
+      ankiModelFieldCache: {
+        [QA_GROUP_USER_MODEL_NAME]: {
+          fieldNames: ["题目", "问题01", "答案01", "问题02"],
+          loadedAt: 100,
+        },
+      },
+      cardTypeConfigs: {
+        ...plugin.settings.cardTypeConfigs,
+        "qa-group": {
+          ...plugin.settings.cardTypeConfigs["qa-group"],
+          noteType: QA_GROUP_USER_MODEL_NAME,
+        },
+      },
+    });
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+
+    expect(queryByDataset(tab.containerEl, "qaGroupWarning", "qa-group").textContent).toContain("第 02 组缺少答案字段");
+    const acceptWarning = queryByDataset(tab.containerEl, "qaGroupWarningAccept", "qa-group");
+    acceptWarning.checked = true;
+    await acceptWarning.trigger("change");
+
+    const mappingKey = createNoteFieldMappingKey("qa-group", QA_GROUP_USER_MODEL_NAME);
+    expect(plugin.settings.noteFieldMappings[mappingKey]).toEqual(expect.objectContaining({
+      acceptedWarnings: expect.any(Array),
+    }));
+
+    plugin.fieldNamesByModelName[QA_GROUP_USER_MODEL_NAME] = ["题目", "问题01", "答案01", "问题02", "答案02", "问题03"];
+    await queryByDataset(tab.containerEl, "cardTypesRefresh", "true").trigger("click");
+    await flushPromises();
+
+    expect(plugin.settings.noteFieldMappings[mappingKey]).toEqual(expect.objectContaining({
+      warnings: expect.any(Array),
+      acceptedWarnings: undefined,
+    }));
+    expect(queryByDataset(tab.containerEl, "qaGroupWarning", "qa-group").textContent).toContain("第 03 组缺少答案字段");
   });
 
   it("folder tree expand and check refresh only the scope card", async () => {
