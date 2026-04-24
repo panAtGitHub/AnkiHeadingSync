@@ -13,6 +13,17 @@ describe("QaGroupModelService", () => {
     expect(definition.templates[0]?.back).toContain('<div class="a">{{S01_A}}</div>');
   });
 
+  it("aligns the managed QA Group CSS with the configured QA note styling", () => {
+    const definition = buildQaGroupModelDefinition();
+
+    expect(definition.css).toContain("font-family: arial;");
+    expect(definition.css).toContain("font-size: 16px;");
+    expect(definition.css).toContain("em {\n  color: #111;\n  background-color: #69E147;");
+    expect(definition.css).toContain("strong {\n  color: #111;\n  background-color: #FFB347;");
+    expect(definition.css).not.toContain("font-size: 22px;");
+    expect(definition.css).not.toContain("font-weight: 700;");
+  });
+
   it("escapes a custom QA Group backlink label", () => {
     const definition = buildQaGroupModelDefinition({
       obsidianBacklinkLabel: 'Open <Obsidian> & "Now"',

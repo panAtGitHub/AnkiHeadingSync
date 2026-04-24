@@ -1,3 +1,5 @@
+import MarkdownIt from "markdown-it";
+
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import type { AnkiGroupGateway, AnkiNoteDetails } from "@/application/ports/AnkiGateway";
 import type { SourceLocation } from "@/domain/card/value-objects/SourceLocation";
@@ -8,11 +10,20 @@ import { DeckResolutionService } from "@/domain/manual-sync/services/DeckResolut
 import { getDeckResolutionWarningKey, type DeckResolutionWarning } from "@/domain/manual-sync/value-objects/DeckResolution";
 import { hashString } from "@/domain/shared/hash";
 import { preprocessCardBodyMarkdown } from "@/domain/manual-sync/services/preprocessCardBodyMarkdown";
-import { renderObsidianTagChipsInText } from "@/domain/manual-sync/services/renderObsidianTagChips";
+import { renderObsidianTagChipsInHtml } from "@/domain/manual-sync/services/renderObsidianTagChips";
 import { diffTagSets } from "@/domain/manual-sync/services/tagSetUtils";
 
 import { buildQaGroupNoteFields, formatQaGroupSlot, QA_GROUP_MODEL_NAME, QA_GROUP_SLOT_COUNT } from "./QaGroupModelDefinition";
 import { QaGroupModelService } from "./QaGroupModelService";
+
+const markdown = new MarkdownIt({
+  breaks: true,
+  html: true,
+  linkify: true,
+});
+
+const INLINE_CODE_PATTERN = /`[^`\n]+`/g;
+const HIGHLIGHT_PATTERN = /==(.+?)==/g;
 
 export interface QaGroupSyncExecutionResult {
   created: number;
@@ -118,9 +129,18 @@ export class QaGroupSyncService {
 
       const renderedItems = resolvedItems.map((item) => ({
         ...item,
-        answer: renderObsidianTagChipsInText(preprocessCardBodyMarkdown(item.answer, settings.keepPureTagLinesInCardBody)),
+        title: renderQaGroupInlineMarkdown(item.title, false),
+        answer: renderQaGroupInlineMarkdown(
+          preprocessCardBodyMarkdown(item.answer, settings.keepPureTagLinesInCardBody),
+          true,
+        ),
       }));
-      const fields = buildQaGroupNoteFields(block.stem, groupId, this.buildGroupBacklink(block, settings), renderedItems);
+      const fields = buildQaGroupNoteFields(
+        renderQaGroupInlineMarkdown(block.stem, false),
+        groupId,
+        this.buildGroupBacklink(block, settings),
+        renderedItems,
+      );
       let noteId = recovered.noteId ?? block.noteId;
       let existingNote = recovered.noteDetails;
 
@@ -562,6 +582,30 @@ function hasLegacyInnerIdMarkers(block: IndexedGroupCardBlock): boolean {
   }
 
   return false;
+}
+
+function renderQaGroupInlineMarkdown(markdownText: string, renderTagChips: boolean): string {
+  const protectedInline = protectInlineCode(markdownText);
+  const transformed = protectedInline.text.replace(HIGHLIGHT_PATTERN, "<mark>$1</mark>");
+  const restored = protectedInline.restore(transformed);
+  const html = markdown.renderInline(restored).trim();
+
+  return renderTagChips ? renderObsidianTagChipsInHtml(html) : html;
+}
+
+function protectInlineCode(text: string): { text: string; restore: (value: string) => string } {
+  const matches: string[] = [];
+  const nextText = text.replace(INLINE_CODE_PATTERN, (segment) => {
+    const token = `@@QA_GROUP_INLINE_CODE_${matches.length}@@`;
+    matches.push(segment);
+    return token;
+  });
+
+  return {
+    text: nextText,
+    restore: (value: string) =>
+      matches.reduce((current, segment, index) => current.split(`@@QA_GROUP_INLINE_CODE_${index}@@`).join(segment), value),
+  };
 }
 
 function quoteAnkiValue(value: string): string {

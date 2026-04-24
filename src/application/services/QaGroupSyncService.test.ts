@@ -43,6 +43,43 @@ describe("QaGroupSyncService", () => {
     expect(result.markerWrites[0]?.itemToSlot).toEqual({ "item-1": 1, "item-2": 2 });
   });
 
+  it("renders QA Group stem, questions, and answers as inline Markdown HTML", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    const vaultGateway = new FakeManualSyncVaultGateway();
+    const service = new QaGroupSyncService(
+      ankiGateway,
+      undefined,
+      undefined,
+      undefined,
+      () => 1234,
+      () => "group-1",
+      () => "item-1",
+      vaultGateway.createBacklink.bind(vaultGateway),
+    );
+
+    const result = await service.sync([
+      createIndexedGroupBlock({
+        stem: "Concepts *Stem*",
+        items: [
+          {
+            title: "Alpha **bold**",
+            answer: "First *answer* and ==mark== #3地区",
+            ordinalInMarkdown: 1,
+          },
+        ],
+      }),
+    ], createEmptyPluginState(), createModule3Settings());
+
+    expect(result.created).toBe(1);
+    expect(ankiGateway.addedNotes[0]?.fields).toMatchObject({
+      Stem: "Concepts <em>Stem</em>",
+      S01_Q: "Alpha <strong>bold</strong>",
+    });
+    expect(ankiGateway.addedNotes[0]?.fields.S01_A).toContain("First <em>answer</em> and <mark>mark</mark>");
+    expect(ankiGateway.addedNotes[0]?.fields.S01_A).toContain('class="ahs-ob-tag"');
+    expect(ankiGateway.addedNotes[0]?.fields.S01_A).toContain('data-tag="3地区"');
+  });
+
   it("ensures the QA Group model using the current backlink settings before syncing", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     const vaultGateway = new FakeManualSyncVaultGateway();
