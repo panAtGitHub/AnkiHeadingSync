@@ -53,11 +53,8 @@ export class FileIndexerService {
     const fileStamp = reference ? createFileStamp(reference.mtime, reference.size) : `${Date.now()}:${sourceFile.content.length}`;
     const stateIndex = this.buildStateIndex(state);
     const indexedFile = this.cardIndexingService.index(sourceFile, {
-      qaHeadingLevel: settings.qaHeadingLevel,
-      clozeHeadingLevel: settings.clozeHeadingLevel,
+      cardTypeConfigs: settings.cardTypeConfigs,
       cardAnswerCutoffMode: settings.cardAnswerCutoffMode,
-      qaGroupMarker: settings.qaGroupMarker,
-      semanticQaMarker: settings.semanticQaMarker,
       syncObsidianTagsToAnki: settings.syncObsidianTagsToAnki,
       fileStamp,
       knownCards: stateIndex.cardsByFilePath.get(filePath) ?? [],
@@ -137,11 +134,8 @@ export class FileIndexerService {
       }
 
       const indexedFile = this.cardIndexingService.index(sourceFile, {
-        qaHeadingLevel: settings.qaHeadingLevel,
-        clozeHeadingLevel: settings.clozeHeadingLevel,
+        cardTypeConfigs: settings.cardTypeConfigs,
         cardAnswerCutoffMode: settings.cardAnswerCutoffMode,
-        qaGroupMarker: settings.qaGroupMarker,
-        semanticQaMarker: settings.semanticQaMarker,
         syncObsidianTagsToAnki: settings.syncObsidianTagsToAnki,
         fileStamp,
         knownCards,
@@ -279,11 +273,8 @@ const DECK_RULES_FINGERPRINT_VERSION = "deck-rules-v4";
 export function createDeckRulesFingerprint(settings: PluginSettings): string {
   return hashString(JSON.stringify({
     version: DECK_RULES_FINGERPRINT_VERSION,
-    qaHeadingLevel: settings.qaHeadingLevel,
-    clozeHeadingLevel: settings.clozeHeadingLevel,
+    cardTypeConfigs: settings.cardTypeConfigs,
     cardAnswerCutoffMode: settings.cardAnswerCutoffMode,
-    qaGroupMarker: settings.qaGroupMarker,
-    semanticQaMarker: settings.semanticQaMarker,
     defaultDeck: settings.defaultDeck,
     fileDeckEnabled: settings.fileDeckEnabled,
     fileDeckMarker: settings.fileDeckMarker,

@@ -212,6 +212,64 @@ export const en = {
       expandFolder: "Expand {{name}}",
       collapseFolder: "Collapse {{name}}",
     },
+    cards: {
+      cardTypes: {
+        title: "Card types and basics",
+        desc: "Edit the recognition table directly. Changes save automatically and the table drives runtime recognition.",
+        advancedHint: "Advanced: keep AnkiConnect URL here without promoting it to a separate status card.",
+        markerPlaceholder: "/",
+        fieldsUnavailable: "-- Read fields first --",
+        autoManagedField: "Managed automatically",
+        autoComposedAnswer: "Auto composed",
+        qaGroupManagedNoteType: "{{modelName}} (managed automatically)",
+        loadedFieldsStatus: "Refreshed fields for {{count}} selected note types.",
+        failedLoad: "Failed to load note types or fields from Anki.",
+        failedSave: "Failed to save card type settings.",
+        loadAnki: {
+          button: "Read Anki note types and fields manually",
+          loading: "Loading Anki note types and fields...",
+        },
+        columns: {
+          enabled: "Enabled",
+          type: "Card type",
+          headingLevel: "Heading marker",
+          extraMarker: "Extra marker",
+          noteType: "Anki note type",
+          questionField: "Question field",
+          answerField: "Answer field",
+        },
+        rows: {
+          basic: "Q&A (regular paragraph)",
+          qaGroup: "Q&A (nested list)",
+          cloze: "Cloze",
+          semanticQa: "Semantic Q&A",
+        },
+      },
+      syncContent: {
+        title: "Sync content",
+        desc: "These options affect rendered content only. Updating them refreshes this card only.",
+      },
+      scope: {
+        title: "Card sync scope",
+        desc: "Keep the existing scope modes and folder tree. The tree is loaded lazily and can be refreshed locally.",
+        refreshFolders: "Refresh folder list",
+      },
+      deck: {
+        title: "Deck and deck rules",
+        desc: "Keep the current deck behavior, but refresh only this card when file-level deck mode changes.",
+      },
+      commands: {
+        title: "Command guide",
+        desc: "These are the current commands exposed in the command palette.",
+        items: {
+          syncCurrentFile: "Sync only the active Markdown file to Anki.",
+          syncVault: "Sync all in-scope Markdown files in the vault to Anki.",
+          rebuildIndex: "Rebuild the local card index without creating or updating notes.",
+          clearCurrentFile: "Clear synced card markers and tracked sync state for the active file.",
+          cleanupDecks: "Delete selected empty decks from Anki.",
+        },
+      },
+    },
   },
   modal: {
     emptyDeck: {
@@ -268,6 +326,10 @@ export const en = {
     settings: {
       headingLevelsRange: "Heading levels must be integers between 1 and 6.",
       headingLevelsDifferent: "QA and Cloze heading levels must be different.",
+      cardTypeConfigsObject: "Card type configs must be an object.",
+      cardTypeEnabledBoolean: "Each card type enabled flag must be a boolean.",
+      cardTypeExtraMarkerString: "Each card type extra marker must be a string.",
+      cardTypeDefaultConflict: "Only one enabled default card type is allowed at heading H{{headingLevel}}.",
       cardAnswerCutoffModeInvalid: "Card answer cutoff mode must be heading-block or double-blank-lines.",
       qaNoteTypeRequired: "QA note type is required.",
       qaGroupMarkerRequired: "QA Group marker is required.",

@@ -112,6 +112,14 @@ describe("DataJsonPluginConfigRepository", () => {
       cardAnswerCutoffMode: "double-blank-lines",
       semanticQaMarker: "#semantic-qa",
       semanticQaNoteType: "Semantic QA",
+      cardTypeConfigs: {
+        ...DEFAULT_SETTINGS.cardTypeConfigs,
+        "semantic-qa": {
+          ...DEFAULT_SETTINGS.cardTypeConfigs["semantic-qa"],
+          extraMarker: "#semantic-qa",
+          noteType: "Semantic QA",
+        },
+      },
       noteFieldMappings: {
         "semantic-qa:Semantic QA": {
           cardType: "semantic-qa",

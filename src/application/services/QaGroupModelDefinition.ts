@@ -4,16 +4,18 @@ import {
   type ObsidianBacklinkPlacement,
   normalizeObsidianBacklinkLabel,
 } from "@/application/config/PluginSettings";
+import { QA_GROUP_MODEL_NAME } from "@/application/config/ManagedNoteModels";
 import type { GroupItem } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
 import { renderObsidianBacklinkAnchor } from "@/domain/shared/renderObsidianBacklink";
 
-export const QA_GROUP_MODEL_NAME = "ObsiAnki QA Group 12";
 export const QA_GROUP_SLOT_COUNT = 12;
 
 interface QaGroupModelDefinitionOptions {
   obsidianBacklinkLabel?: string;
   obsidianBacklinkPlacement?: ObsidianBacklinkPlacement;
 }
+
+export { QA_GROUP_MODEL_NAME } from "@/application/config/ManagedNoteModels";
 
 export function buildQaGroupModelDefinition(options: QaGroupModelDefinitionOptions = {}): CreateAnkiModelInput {
   const backlinkLabel = normalizeObsidianBacklinkLabel(options.obsidianBacklinkLabel ?? DEFAULT_OBSIDIAN_BACKLINK_LABEL);

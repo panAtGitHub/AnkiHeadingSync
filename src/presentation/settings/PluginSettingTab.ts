@@ -1,23 +1,24 @@
 import { PluginSettingTab, Setting } from "obsidian";
 
+import { QA_GROUP_MODEL_NAME } from "@/application/config/ManagedNoteModels";
 import {
+  CARD_TYPE_CONFIG_IDS,
   DEFAULT_OBSIDIAN_BACKLINK_LABEL,
-  isValidHashtagMarker,
-  isValidSemanticQaMarker,
+  normalizePluginSettings,
   type CardAnswerCutoffMode,
+  type CardTypeConfigId,
   type FileDeckInsertLocation,
   type FolderDeckMode,
   type ObsidianBacklinkPlacement,
   type ScopeMode,
+  validatePluginSettings,
 } from "@/application/config/PluginSettings";
 import { createNoteFieldMappingKey, type NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
 import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
-import { type UserFacingMessage, renderUserFacingMessage, toUserFacingMessage } from "@/application/errors/PluginUserError";
+import { renderUserFacingMessage, toUserFacingMessage, type UserFacingMessage } from "@/application/errors/PluginUserError";
 import { NoteFieldMappingService } from "@/application/services/NoteFieldMappingService";
-import { buildQaGroupModelDefinition } from "@/application/services/QaGroupModelDefinition";
 import type { CardType } from "@/domain/card/entities/RenderedFields";
-import { SemanticQaListParser } from "@/domain/manual-sync/services/SemanticQaListParser";
 import { t } from "@/presentation/i18n";
 import type AnkiHeadingSyncPlugin from "@/presentation/AnkiHeadingSyncPlugin";
 
@@ -25,30 +26,35 @@ import { buildFolderTreeSelection, toggleFolderTreeSelection, type FolderTreeSel
 
 const NOTE_TYPE_STATUS_IDLE: UserFacingMessage = { key: "settings.mapping.status.idle" };
 const FOLDER_TREE_STATUS_LOADING: UserFacingMessage = { key: "settings.scope.loading" };
+const TEXT_SAVE_DEBOUNCE_MS = 500;
+const SETTINGS_CARD_ORDER = ["card-types", "sync-content", "scope", "deck", "commands"] as const;
 
-interface MappingSectionConfig {
-  cardType: CardType;
+type SettingsCardId = (typeof SETTINGS_CARD_ORDER)[number];
+
+interface SettingsCardShell {
+  cardEl: HTMLElement;
+  headerEl: HTMLButtonElement;
+  bodyEl: HTMLElement;
 }
-
-type SimpleDropdown = {
-  addOption(value: string, label: string): unknown;
-  setValue(value: string): unknown;
-  onChange(callback: (value: string) => void): unknown;
-};
 
 export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private readonly noteFieldMappingService = new NoteFieldMappingService();
-  private readonly semanticQaListParser = new SemanticQaListParser();
-  private availableNoteModels: string[] = [];
-  private noteTypeStatus: UserFacingMessage = NOTE_TYPE_STATUS_IDLE;
+  private readonly availableNoteModels: string[] = [];
   private readonly draftMappings: Record<string, NoteModelFieldMapping> = {};
   private readonly loadedModelDetails: Record<string, NoteModelDetails> = {};
-  private readonly sectionStatuses: Partial<Record<CardType, UserFacingMessage>> = {};
+  private readonly debouncedTextSaves = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly textDraftValues = new Map<string, string>();
+  private readonly cardShells = new Map<SettingsCardId, SettingsCardShell>();
+  private readonly expandedCardIds = new Set<SettingsCardId>(["card-types", "commands"]);
+  private readonly expandedFolderPaths = new Set<string>();
+
   private folderTree: FolderTreeNode[] = [];
   private folderTreeStatus: UserFacingMessage = FOLDER_TREE_STATUS_LOADING;
   private folderTreeLoadPromise: Promise<void> | null = null;
   private hasLoadedFolderTree = false;
-  private readonly expandedFolderPaths = new Set<string>();
+  private displayInitialized = false;
+  private cardTypeStatus: UserFacingMessage = NOTE_TYPE_STATUS_IDLE;
+  private ankiConfigLoading = false;
 
   constructor(plugin: AnkiHeadingSyncPlugin) {
     super(plugin.app, plugin);
@@ -59,53 +65,260 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
   hide(): void {
     super.hide();
-    this.hasLoadedFolderTree = false;
-    this.expandedFolderPaths.clear();
+    this.displayInitialized = false;
+    this.cardShells.clear();
+    this.clearDebouncedTextSaves();
   }
 
   display(): void {
     const { containerEl } = this;
-    const settings = this.plugin.settings;
+    const previousScrollTop = containerEl.scrollTop;
 
-    containerEl.empty();
-    containerEl.createEl("h2", { text: t("settings.pluginTitle") });
+    if (!this.displayInitialized) {
+      containerEl.empty();
+      containerEl.createEl("h2", { text: t("settings.pluginTitle") });
+      this.initializeCards(containerEl);
+      this.displayInitialized = true;
+    }
 
+    for (const cardId of SETTINGS_CARD_ORDER) {
+      this.renderCard(cardId);
+    }
+
+    containerEl.scrollTop = previousScrollTop;
+  }
+
+  private initializeCards(containerEl: HTMLElement): void {
+    this.cardShells.clear();
+
+    for (const cardId of SETTINGS_CARD_ORDER) {
+      const cardEl = containerEl.createDiv();
+      cardEl.dataset.settingsCard = cardId;
+
+      const headerEl = cardEl.createEl("button") as HTMLButtonElement;
+      headerEl.type = "button";
+      headerEl.dataset.settingsCardToggle = cardId;
+      headerEl.addEventListener("click", () => {
+        this.toggleCard(cardId);
+      });
+
+      const bodyEl = cardEl.createDiv();
+      bodyEl.dataset.settingsCardBody = cardId;
+
+      this.cardShells.set(cardId, {
+        cardEl,
+        headerEl,
+        bodyEl,
+      });
+    }
+  }
+
+  private toggleCard(cardId: SettingsCardId): void {
+    if (this.expandedCardIds.has(cardId)) {
+      this.expandedCardIds.delete(cardId);
+    } else {
+      this.expandedCardIds.add(cardId);
+    }
+
+    this.renderCard(cardId);
+  }
+
+  private renderCard(cardId: SettingsCardId): void {
+    const shell = this.cardShells.get(cardId);
+    if (!shell) {
+      return;
+    }
+
+    const expanded = this.expandedCardIds.has(cardId);
+    shell.headerEl.textContent = `${expanded ? "▾" : "▸"} ${this.getCardTitle(cardId)}`;
+    shell.headerEl.setAttr("aria-expanded", String(expanded));
+    shell.bodyEl.style.display = expanded ? "block" : "none";
+    shell.bodyEl.empty();
+
+    if (!expanded) {
+      return;
+    }
+
+    if (cardId === "card-types") {
+      this.renderCardTypesCard(shell.bodyEl);
+      return;
+    }
+
+    if (cardId === "sync-content") {
+      this.renderSyncContentCard(shell.bodyEl);
+      return;
+    }
+
+    if (cardId === "scope") {
+      this.renderScopeCard(shell.bodyEl);
+      return;
+    }
+
+    if (cardId === "deck") {
+      this.renderDeckCard(shell.bodyEl);
+      return;
+    }
+
+    this.renderCommandsCard(shell.bodyEl);
+  }
+
+  private renderCardTypesCard(containerEl: HTMLElement): void {
+    containerEl.createEl("p", { text: t("settings.cards.cardTypes.desc") });
+
+    const actionRow = containerEl.createDiv();
+    const loadButton = actionRow.createEl("button", {
+      text: this.ankiConfigLoading
+        ? t("settings.cards.cardTypes.loadAnki.loading")
+        : t("settings.cards.cardTypes.loadAnki.button"),
+    }) as HTMLButtonElement;
+    loadButton.type = "button";
+    loadButton.dataset.cardTypesRefresh = "true";
+    loadButton.disabled = this.ankiConfigLoading;
+    loadButton.addEventListener("click", () => {
+      void this.loadAnkiCardTypeConfig();
+    });
+    actionRow.createEl("span", { text: renderUserFacingMessage(this.cardTypeStatus) });
+
+    const table = containerEl.createEl("table");
+    table.dataset.cardTypeTable = "true";
+    const headerRow = table.createEl("tr");
+    for (const columnLabel of [
+      t("settings.cards.cardTypes.columns.enabled"),
+      t("settings.cards.cardTypes.columns.type"),
+      t("settings.cards.cardTypes.columns.headingLevel"),
+      t("settings.cards.cardTypes.columns.extraMarker"),
+      t("settings.cards.cardTypes.columns.noteType"),
+      t("settings.cards.cardTypes.columns.questionField"),
+      t("settings.cards.cardTypes.columns.answerField"),
+    ]) {
+      headerRow.createEl("th", { text: columnLabel });
+    }
+
+    for (const configId of CARD_TYPE_CONFIG_IDS) {
+      this.renderCardTypeRow(table, configId);
+    }
+
+    containerEl.createEl("p", { text: t("settings.cards.cardTypes.advancedHint") });
     new Setting(containerEl)
       .setName(t("settings.ankiConnectUrl.name"))
       .setDesc(t("settings.ankiConnectUrl.desc"))
       .addText((text) => {
-        text.setPlaceholder(t("settings.ankiConnectUrl.placeholder")).setValue(settings.ankiConnectUrl).onChange((value) => {
-          void this.plugin.updateSettings({ ankiConnectUrl: value.trim() || settings.ankiConnectUrl });
-        });
+        text
+          .setPlaceholder(t("settings.ankiConnectUrl.placeholder"))
+          .setValue(this.getDraftValue("anki-connect-url", this.plugin.settings.ankiConnectUrl))
+          .onChange((value) => {
+            this.scheduleDebouncedTextSave("anki-connect-url", value, async (draftValue) => {
+              const nextValue = draftValue.trim() || this.plugin.settings.ankiConnectUrl;
+              await this.plugin.updateSettings({ ankiConnectUrl: nextValue });
+              this.textDraftValues.delete("anki-connect-url");
+            });
+          });
       });
+  }
 
-    this.renderDeckSection(containerEl, settings);
+  private renderCardTypeRow(tableEl: HTMLElement, configId: CardTypeConfigId): void {
+    const config = this.plugin.settings.cardTypeConfigs[configId];
+    const row = tableEl.createEl("tr");
+    row.dataset.cardTypeConfig = configId;
 
-    new Setting(containerEl)
-      .setName(t("settings.qaHeadingLevel.name"))
-      .setDesc(t("settings.qaHeadingLevel.desc"))
-      .addDropdown((dropdown) => {
-        for (let level = 1; level <= 6; level += 1) {
-          dropdown.addOption(String(level), `H${level}`);
+    const enabledCell = row.createEl("td");
+    const enabledCheckbox = enabledCell.createEl("input") as HTMLInputElement;
+    enabledCheckbox.type = "checkbox";
+    enabledCheckbox.checked = config.enabled;
+    enabledCheckbox.dataset.cardTypeEnabled = configId;
+    enabledCheckbox.addEventListener("change", () => {
+      void this.saveCardTypeConfig(configId, { enabled: enabledCheckbox.checked });
+    });
+
+    row.createEl("td", { text: this.getCardTypeLabel(configId) });
+
+    const headingCell = row.createEl("td");
+    const headingSelect = this.createSelect(headingCell, `card-type-heading:${configId}`);
+    headingSelect.dataset.cardTypeHeading = configId;
+    for (let level = 1; level <= 6; level += 1) {
+      this.appendOption(headingSelect, String(level), `H${level}`);
+    }
+    headingSelect.value = String(config.headingLevel);
+    headingSelect.addEventListener("change", () => {
+      void this.saveCardTypeConfig(configId, { headingLevel: Number(headingSelect.value) });
+    });
+
+    const markerCell = row.createEl("td");
+    const markerInput = markerCell.createEl("input") as HTMLInputElement;
+    markerInput.type = "text";
+    markerInput.dataset.cardTypeMarker = configId;
+    markerInput.placeholder = t("settings.cards.cardTypes.markerPlaceholder");
+    markerInput.value = this.getDraftValue(`card-type-marker:${configId}`, config.extraMarker);
+    markerInput.addEventListener("input", () => {
+      this.scheduleDebouncedTextSave(`card-type-marker:${configId}`, markerInput.value, async (draftValue) => {
+        const persisted = await this.saveCardTypeConfig(configId, { extraMarker: draftValue });
+        if (persisted) {
+          this.textDraftValues.delete(`card-type-marker:${configId}`);
         }
-
-        dropdown.setValue(String(settings.qaHeadingLevel)).onChange((value) => {
-          void this.plugin.updateSettings({ qaHeadingLevel: Number(value) });
-        });
       });
+    });
 
-    new Setting(containerEl)
-      .setName(t("settings.clozeHeadingLevel.name"))
-      .setDesc(t("settings.clozeHeadingLevel.desc"))
-      .addDropdown((dropdown) => {
-        for (let level = 1; level <= 6; level += 1) {
-          dropdown.addOption(String(level), `H${level}`);
-        }
-
-        dropdown.setValue(String(settings.clozeHeadingLevel)).onChange((value) => {
-          void this.plugin.updateSettings({ clozeHeadingLevel: Number(value) });
-        });
+    const noteTypeCell = row.createEl("td");
+    if (configId === "qa-group") {
+      const noteTypeText = noteTypeCell.createEl("span", {
+        text: t("settings.cards.cardTypes.qaGroupManagedNoteType", { modelName: QA_GROUP_MODEL_NAME }),
       });
+      noteTypeText.dataset.cardTypeNoteType = configId;
+    } else {
+      const noteTypeSelect = this.createSelect(noteTypeCell, `card-type-note-type:${configId}`);
+      noteTypeSelect.dataset.cardTypeNoteType = configId;
+      for (const noteModel of this.getSelectableNoteModels(config.noteType)) {
+        this.appendOption(noteTypeSelect, noteModel, noteModel);
+      }
+      noteTypeSelect.value = config.noteType;
+      noteTypeSelect.disabled = this.ankiConfigLoading;
+      noteTypeSelect.addEventListener("change", () => {
+        void this.saveCardTypeConfig(configId, { noteType: noteTypeSelect.value });
+      });
+    }
+
+    this.renderCardTypeFieldCells(row, configId);
+  }
+
+  private renderCardTypeFieldCells(rowEl: HTMLElement, configId: CardTypeConfigId): void {
+    const questionCell = rowEl.createEl("td");
+    const answerCell = rowEl.createEl("td");
+
+    if (configId === "qa-group") {
+      questionCell.createEl("span", { text: t("settings.cards.cardTypes.autoManagedField") });
+      answerCell.createEl("span", { text: t("settings.cards.cardTypes.autoManagedField") });
+      return;
+    }
+
+    const mapping = this.getCurrentMappingForConfig(configId);
+    if (configId === "cloze") {
+      const mainFieldSelect = this.createFieldSelect(questionCell, `card-type-question-field:${configId}`);
+      mainFieldSelect.dataset.cardTypeQuestionField = configId;
+      this.populateFieldSelect(mainFieldSelect, mapping?.loadedFieldNames ?? [], mapping?.mainField);
+      mainFieldSelect.addEventListener("change", () => {
+        void this.saveFieldMapping(configId, { mainField: mainFieldSelect.value || undefined });
+      });
+      answerCell.createEl("span", { text: t("settings.cards.cardTypes.autoComposedAnswer") });
+      return;
+    }
+
+    const titleFieldSelect = this.createFieldSelect(questionCell, `card-type-question-field:${configId}`);
+    titleFieldSelect.dataset.cardTypeQuestionField = configId;
+    this.populateFieldSelect(titleFieldSelect, mapping?.loadedFieldNames ?? [], mapping?.titleField);
+    titleFieldSelect.addEventListener("change", () => {
+      void this.saveFieldMapping(configId, { titleField: titleFieldSelect.value || undefined });
+    });
+
+    const bodyFieldSelect = this.createFieldSelect(answerCell, `card-type-answer-field:${configId}`);
+    bodyFieldSelect.dataset.cardTypeAnswerField = configId;
+    this.populateFieldSelect(bodyFieldSelect, mapping?.loadedFieldNames ?? [], mapping?.bodyField);
+    bodyFieldSelect.addEventListener("change", () => {
+      void this.saveFieldMapping(configId, { bodyField: bodyFieldSelect.value || undefined });
+    });
+  }
+
+  private renderSyncContentCard(containerEl: HTMLElement): void {
+    containerEl.createEl("p", { text: t("settings.cards.syncContent.desc") });
 
     new Setting(containerEl)
       .setName(t("settings.cardAnswerCutoffMode.name"))
@@ -113,55 +326,16 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .addDropdown((dropdown) => {
         dropdown.addOption("heading-block", t("settings.cardAnswerCutoffMode.options.headingBlock"));
         dropdown.addOption("double-blank-lines", t("settings.cardAnswerCutoffMode.options.doubleBlankLines"));
-        dropdown.setValue(settings.cardAnswerCutoffMode).onChange((value) => {
+        dropdown.setValue(this.plugin.settings.cardAnswerCutoffMode).onChange((value) => {
           void this.plugin.updateSettings({ cardAnswerCutoffMode: value as CardAnswerCutoffMode });
         });
       });
-
-    containerEl.createEl("h3", { text: t("settings.qaGroup.title") });
-
-    new Setting(containerEl)
-      .setName(t("settings.qaGroup.marker.name"))
-      .setDesc(t("settings.qaGroup.marker.desc"))
-      .addText((text) => {
-        text.setPlaceholder(t("settings.qaGroup.marker.placeholder")).setValue(settings.qaGroupMarker).onChange(async (value) => {
-          const nextValue = value.trim();
-          if (!nextValue || !isValidHashtagMarker(nextValue) || nextValue === settings.semanticQaMarker) {
-            return;
-          }
-
-          await this.plugin.updateSettings({ qaGroupMarker: nextValue });
-        });
-      });
-
-    this.renderQaGroupModelStatus(containerEl);
-
-    containerEl.createEl("h3", { text: t("settings.semanticQa.title") });
-
-    new Setting(containerEl)
-      .setName(t("settings.semanticQa.marker.name"))
-      .setDesc(t("settings.semanticQa.marker.desc"))
-      .addText((text) => {
-        text.setPlaceholder(t("settings.semanticQa.marker.placeholder")).setValue(settings.semanticQaMarker).onChange(async (value) => {
-          const nextValue = value.trim();
-          if (!nextValue || !isValidSemanticQaMarker(nextValue)) {
-            return;
-          }
-
-          await this.plugin.updateSettings({ semanticQaMarker: nextValue });
-          this.display();
-        });
-      });
-
-    this.renderSemanticQaPreview(containerEl, settings.semanticQaMarker, settings.cardAnswerCutoffMode);
-
-    this.renderScopeSection(containerEl, settings);
 
     new Setting(containerEl)
       .setName(t("settings.syncOptions.addObsidianBacklink.name"))
       .setDesc(t("settings.syncOptions.addObsidianBacklink.desc"))
       .addToggle((toggle) => {
-        toggle.setValue(settings.addObsidianBacklink).onChange((value) => {
+        toggle.setValue(this.plugin.settings.addObsidianBacklink).onChange((value) => {
           void this.plugin.updateSettings({ addObsidianBacklink: value });
         });
       });
@@ -172,11 +346,14 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .addText((text) => {
         text
           .setPlaceholder(t("settings.syncOptions.obsidianBacklinkLabel.placeholder"))
-          .setValue(settings.obsidianBacklinkLabel)
+          .setValue(this.getDraftValue("obsidian-backlink-label", this.plugin.settings.obsidianBacklinkLabel))
           .onChange((value) => {
-            const nextValue = value.trim();
-            void this.plugin.updateSettings({
-              obsidianBacklinkLabel: nextValue || DEFAULT_OBSIDIAN_BACKLINK_LABEL,
+            this.scheduleDebouncedTextSave("obsidian-backlink-label", value, async (draftValue) => {
+              const nextValue = draftValue.trim();
+              await this.plugin.updateSettings({
+                obsidianBacklinkLabel: nextValue || DEFAULT_OBSIDIAN_BACKLINK_LABEL,
+              });
+              this.textDraftValues.delete("obsidian-backlink-label");
             });
           });
       });
@@ -188,7 +365,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         dropdown.addOption("question-last-line", t("settings.syncOptions.obsidianBacklinkPlacement.options.questionLastLine"));
         dropdown.addOption("answer-first-line", t("settings.syncOptions.obsidianBacklinkPlacement.options.answerFirstLine"));
         dropdown.addOption("answer-last-line", t("settings.syncOptions.obsidianBacklinkPlacement.options.answerLastLine"));
-        dropdown.setValue(settings.obsidianBacklinkPlacement).onChange((value) => {
+        dropdown.setValue(this.plugin.settings.obsidianBacklinkPlacement).onChange((value) => {
           void this.plugin.updateSettings({ obsidianBacklinkPlacement: value as ObsidianBacklinkPlacement });
         });
       });
@@ -197,7 +374,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.syncOptions.highlightsToCloze.name"))
       .setDesc(t("settings.syncOptions.highlightsToCloze.desc"))
       .addToggle((toggle) => {
-        toggle.setValue(settings.convertHighlightsToCloze).onChange((value) => {
+        toggle.setValue(this.plugin.settings.convertHighlightsToCloze).onChange((value) => {
           void this.plugin.updateSettings({ convertHighlightsToCloze: value });
         });
       });
@@ -206,7 +383,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.syncOptions.syncObsidianTagsToAnki.name"))
       .setDesc(t("settings.syncOptions.syncObsidianTagsToAnki.desc"))
       .addToggle((toggle) => {
-        toggle.setValue(settings.syncObsidianTagsToAnki).onChange((value) => {
+        toggle.setValue(this.plugin.settings.syncObsidianTagsToAnki).onChange((value) => {
           void this.plugin.updateSettings({ syncObsidianTagsToAnki: value });
         });
       });
@@ -215,374 +392,115 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.syncOptions.keepPureTagLinesInCardBody.name"))
       .setDesc(t("settings.syncOptions.keepPureTagLinesInCardBody.desc"))
       .addToggle((toggle) => {
-        toggle.setValue(settings.keepPureTagLinesInCardBody).onChange((value) => {
+        toggle.setValue(this.plugin.settings.keepPureTagLinesInCardBody).onChange((value) => {
           void this.plugin.updateSettings({ keepPureTagLinesInCardBody: value });
         });
       });
-
-    containerEl.createEl("h3", { text: t("settings.mapping.title") });
-
-    new Setting(containerEl)
-      .setName(t("settings.mapping.refresh.name"))
-      .setDesc(renderUserFacingMessage(this.noteTypeStatus))
-      .addButton((button) => {
-        button.setButtonText(t("settings.mapping.refresh.button")).onClick(() => {
-          void this.refreshNoteTypes();
-        });
-      });
-
-    this.renderMappingSection(containerEl, { cardType: "basic" });
-    this.renderMappingSection(containerEl, { cardType: "cloze" });
-    this.renderMappingSection(containerEl, { cardType: "semantic-qa" });
   }
 
-  private renderMappingSection(containerEl: HTMLElement, config: MappingSectionConfig): void {
-    const sectionText = getMappingSectionText(config.cardType);
-    const sectionTitle = sectionText.title;
-    const selectedModelName = this.getSelectedMappingNoteType(config.cardType);
-    const mappingKey = createNoteFieldMappingKey(config.cardType, selectedModelName);
-    const currentMapping = this.getCurrentMapping(mappingKey);
-
-    containerEl.createEl("h4", { text: sectionTitle });
-    containerEl.createEl("p", { text: sectionText.description });
+  private renderScopeCard(containerEl: HTMLElement): void {
+    containerEl.createEl("p", { text: t("settings.cards.scope.desc") });
 
     new Setting(containerEl)
-      .setName(t("settings.mapping.noteTypeLabel", { title: sectionTitle }))
-      .setDesc(t("settings.mapping.noteTypeDesc"))
+      .setName(t("settings.scope.name"))
+      .setDesc(getScopeModeSummary(this.plugin.settings.scopeMode))
       .addDropdown((dropdown) => {
-        for (const noteModel of this.getSelectableNoteModels(config.cardType, selectedModelName)) {
-          dropdown.addOption(noteModel, noteModel);
-        }
+        dropdown
+          .addOption("all", t("settings.scope.option.all"))
+          .addOption("include", t("settings.scope.option.include"))
+          .addOption("exclude", t("settings.scope.option.exclude"))
+          .setValue(this.plugin.settings.scopeMode)
+          .onChange((value) => {
+            if (value !== "all" && value !== "include" && value !== "exclude") {
+              return;
+            }
 
-        dropdown.setValue(selectedModelName).onChange((value) => {
-          void this.updateSelectedNoteType(config.cardType, value);
-        });
+            void this.updateScopeMode(value);
+          });
       });
 
-    new Setting(containerEl)
-      .setName(t("settings.mapping.fieldsLabel", { title: sectionTitle }))
-      .setDesc(t("settings.mapping.fieldsDesc"))
-      .addButton((button) => {
-        button.setButtonText(t("settings.mapping.readFieldsButton")).onClick(() => {
-          void this.loadFieldsFromAnki(config.cardType);
-        });
-      });
-
-    containerEl.createEl("p", {
-      text:
-        currentMapping?.loadedFieldNames.length
-          ? t("settings.mapping.loadedFields", { fields: currentMapping.loadedFieldNames })
-          : t("settings.mapping.loadedFieldsNone"),
-    });
-
-    if (config.cardType === "cloze") {
-      this.renderClozeFieldSelector(containerEl, selectedModelName, currentMapping);
-    } else {
-      this.renderBasicFieldSelectors(containerEl, selectedModelName, currentMapping, config.cardType, sectionTitle);
-    }
-
-    new Setting(containerEl)
-      .setName(t("settings.mapping.mappingLabel", { title: sectionTitle }))
-      .setDesc(t("settings.mapping.mappingDesc"))
-      .addButton((button) => {
-        button.setButtonText(t("settings.mapping.saveMappingButton")).onClick(() => {
-          void this.saveMapping(config.cardType);
-        });
-      });
-
-    containerEl.createEl("p", {
-      text:
-        (this.sectionStatuses[config.cardType] ? renderUserFacingMessage(this.sectionStatuses[config.cardType] as UserFacingMessage) : undefined) ??
-        (this.plugin.settings.noteFieldMappings[mappingKey]
-          ? t("settings.mapping.status.savedMappingReady", { title: sectionTitle })
-          : t("settings.mapping.status.noSavedMapping", { title: sectionTitle })),
-    });
-  }
-
-  private renderBasicFieldSelectors(
-    containerEl: HTMLElement,
-    selectedModelName: string,
-    mapping: NoteModelFieldMapping | undefined,
-    cardType: Extract<CardType, "basic" | "semantic-qa">,
-    sectionTitle: string,
-  ): void {
-    const fieldNames = mapping?.loadedFieldNames ?? [];
-
-    new Setting(containerEl)
-      .setName(t("settings.mapping.titleFieldLabel", { title: sectionTitle }))
-      .setDesc(t("settings.mapping.titleFieldDesc"))
-      .addDropdown((dropdown) => {
-        this.populateFieldDropdown(dropdown, fieldNames, mapping?.titleField);
-        dropdown.onChange((value) => {
-          this.updateDraftMapping(mapping?.cardType ?? cardType, selectedModelName, { titleField: value || undefined });
-        });
-      });
-
-    new Setting(containerEl)
-      .setName(t("settings.mapping.bodyFieldLabel", { title: sectionTitle }))
-      .setDesc(t("settings.mapping.bodyFieldDesc"))
-      .addDropdown((dropdown) => {
-        this.populateFieldDropdown(dropdown, fieldNames, mapping?.bodyField);
-        dropdown.onChange((value) => {
-          this.updateDraftMapping(mapping?.cardType ?? cardType, selectedModelName, { bodyField: value || undefined });
-        });
-      });
-  }
-
-  private renderClozeFieldSelector(
-    containerEl: HTMLElement,
-    selectedModelName: string,
-    mapping: NoteModelFieldMapping | undefined,
-  ): void {
-    const fieldNames = mapping?.loadedFieldNames ?? [];
-
-    new Setting(containerEl)
-      .setName(t("settings.mapping.mainField.name"))
-      .setDesc(t("settings.mapping.mainField.desc"))
-      .addDropdown((dropdown) => {
-        this.populateFieldDropdown(dropdown, fieldNames, mapping?.mainField);
-        dropdown.onChange((value) => {
-          this.updateDraftMapping("cloze", selectedModelName, { mainField: value || undefined });
-        });
-      });
-  }
-
-  private populateFieldDropdown(dropdown: SimpleDropdown, fieldNames: string[], selectedValue: string | undefined): void {
-    dropdown.addOption("", t("settings.mapping.selectFieldPlaceholder"));
-
-    for (const fieldName of fieldNames) {
-      dropdown.addOption(fieldName, fieldName);
-    }
-
-    dropdown.setValue(selectedValue ?? "");
-  }
-
-  private async refreshNoteTypes(): Promise<void> {
-    try {
-      const noteModels = await this.plugin.listNoteModels();
-      this.availableNoteModels = [...noteModels].sort((left, right) => left.localeCompare(right));
-      this.noteTypeStatus =
-        this.availableNoteModels.length > 0
-          ? { key: "settings.mapping.status.loadedCount", params: { count: this.availableNoteModels.length } }
-          : { key: "settings.mapping.status.empty" };
-    } catch (error) {
-      this.noteTypeStatus = toUserFacingMessage(error, "settings.mapping.status.failedLoadNoteTypes");
-    }
-
-    this.display();
-  }
-
-  private async updateSelectedNoteType(cardType: CardType, modelName: string): Promise<void> {
-    if (cardType === "basic") {
-      await this.plugin.updateSettings({ qaNoteType: modelName });
-    } else if (cardType === "cloze") {
-      await this.plugin.updateSettings({ clozeNoteType: modelName });
-    } else {
-      await this.plugin.updateSettings({ semanticQaNoteType: modelName });
-    }
-
-    const mappingKey = createNoteFieldMappingKey(cardType, modelName);
-    this.sectionStatuses[cardType] = this.plugin.settings.noteFieldMappings[mappingKey]
-      ? { key: "settings.mapping.status.loadedSavedMapping", params: { modelName } }
-      : { key: "settings.mapping.status.selectedModel", params: { modelName } };
-    this.display();
-  }
-
-  private async loadFieldsFromAnki(cardType: CardType): Promise<void> {
-    const modelName = this.getSelectedMappingNoteType(cardType);
-
-    try {
-      const modelDetails = await this.plugin.getNoteModelDetails(modelName);
-      const mapping = this.noteFieldMappingService.suggest(cardType, modelName, modelDetails.fieldNames);
-      const mappingKey = createNoteFieldMappingKey(cardType, modelName);
-
-      this.draftMappings[mappingKey] = mapping;
-      this.loadedModelDetails[mappingKey] = modelDetails;
-      this.sectionStatuses[cardType] = { key: "settings.mapping.status.loadedFieldsForModel", params: { modelName } };
-    } catch (error) {
-      this.sectionStatuses[cardType] = toUserFacingMessage(error, "settings.mapping.status.failedLoadFields", { modelName });
-    }
-
-    this.display();
-  }
-
-  private async saveMapping(cardType: CardType): Promise<void> {
-    const modelName = this.getSelectedMappingNoteType(cardType);
-    const mappingKey = createNoteFieldMappingKey(cardType, modelName);
-    const mapping = this.getCurrentMapping(mappingKey);
-
-    if (!mapping) {
-      this.sectionStatuses[cardType] = { key: "settings.mapping.status.noLoadedFields", params: { modelName } };
-      this.display();
+    if (this.plugin.settings.scopeMode === "all") {
       return;
     }
 
-    try {
-      this.noteFieldMappingService.validateMapping(mapping, this.loadedModelDetails[mappingKey] ?? {
-        fieldNames: mapping.loadedFieldNames,
-        isCloze: cardType === "cloze",
-      });
+    const refreshRow = containerEl.createDiv();
+    const refreshButton = refreshRow.createEl("button", { text: t("settings.cards.scope.refreshFolders") }) as HTMLButtonElement;
+    refreshButton.type = "button";
+    refreshButton.dataset.scopeRefreshFolders = "true";
+    refreshButton.disabled = Boolean(this.folderTreeLoadPromise);
+    refreshButton.addEventListener("click", () => {
+      void this.refreshFolderTree();
+    });
 
-      await this.plugin.updateSettings({
-        noteFieldMappings: {
-          ...this.plugin.settings.noteFieldMappings,
-          [mappingKey]: {
-            ...mapping,
-            loadedFieldNames: [...mapping.loadedFieldNames],
-          },
-        },
-      });
+    this.ensureFolderTreeLoaded();
+    containerEl.createEl("p", { text: getScopeModeTreeDescription(this.plugin.settings.scopeMode) });
 
-      this.sectionStatuses[cardType] = { key: "settings.mapping.status.savedMapping", params: { modelName } };
-    } catch (error) {
-      this.sectionStatuses[cardType] = toUserFacingMessage(error, "settings.mapping.status.failedSaveMapping", { modelName });
-    }
-
-    this.display();
-  }
-
-  private getSelectableNoteModels(cardType: CardType, selectedModelName: string): string[] {
-    void cardType;
-    const noteModels = this.getSelectableMappingNoteModels();
-
-    if (!noteModels.includes(selectedModelName)) {
-      noteModels.unshift(selectedModelName);
-    }
-
-    return noteModels;
-  }
-
-  private getSelectableMappingNoteModels(): string[] {
-    return this.availableNoteModels.length > 0 ? [...this.availableNoteModels] : [];
-  }
-
-  private updateDraftMapping(
-    cardType: CardType,
-    modelName: string,
-    partialMapping: Partial<NoteModelFieldMapping>,
-  ): void {
-    const mappingKey = createNoteFieldMappingKey(cardType, modelName);
-    const currentMapping = this.getCurrentMapping(mappingKey);
-
-    if (!currentMapping) {
+    if (this.folderTreeLoadPromise || this.folderTree.length === 0) {
+      containerEl.createEl("p", { text: renderUserFacingMessage(this.folderTreeStatus) });
       return;
     }
 
-    this.draftMappings[mappingKey] = {
-      ...currentMapping,
-      ...partialMapping,
-    };
-  }
+    const selectedFolders = this.plugin.settings.scopeMode === "include"
+      ? this.plugin.settings.includeFolders
+      : this.plugin.settings.excludeFolders;
+    const selectionTree = buildFolderTreeSelection(this.folderTree, selectedFolders);
+    const treeContainer = containerEl.createDiv();
+    treeContainer.dataset.scopeTree = "true";
 
-  private getCurrentMapping(mappingKey: string): NoteModelFieldMapping | undefined {
-    const mapping = this.draftMappings[mappingKey] ?? this.plugin.settings.noteFieldMappings[mappingKey];
-
-    if (!mapping) {
-      return undefined;
+    for (const node of selectionTree) {
+      this.renderFolderNode(treeContainer, node, this.plugin.settings.scopeMode, 0);
     }
-
-    return {
-      ...mapping,
-      loadedFieldNames: [...mapping.loadedFieldNames],
-    };
   }
 
-  private getSelectedNoteType(cardType: CardType): string {
-    if (cardType === "basic") {
-      return this.plugin.settings.qaNoteType;
-    }
-
-    if (cardType === "cloze") {
-      return this.plugin.settings.clozeNoteType;
-    }
-
-    return this.plugin.settings.semanticQaNoteType;
-  }
-
-  private getSelectedMappingNoteType(cardType: CardType): string {
-    return this.getSelectedNoteType(cardType);
-  }
-
-  private renderQaGroupModelStatus(containerEl: HTMLElement): void {
-    const definition = buildQaGroupModelDefinition();
-    containerEl.createEl("p", {
-      text: t("settings.qaGroup.managedNoteType", {
-        modelName: definition.modelName,
-      }),
-    });
-    containerEl.createEl("p", {
-      text: t("settings.qaGroup.managedModelContract", {
-        fieldCount: definition.fieldNames.length,
-        templateCount: definition.templates.length,
-      }),
-    });
-  }
-
-  private renderSemanticQaPreview(containerEl: HTMLElement, marker: string, cardAnswerCutoffMode: CardAnswerCutoffMode): void {
-    const sampleHeading = `城市更新 ${marker}`;
-
-    containerEl.createEl("h4", { text: t("settings.semanticQa.previewTitle") });
-    containerEl.createEl("p", { text: t("settings.semanticQa.triggerHeadingExample", { heading: sampleHeading }) });
-
-    const previewCards = this.semanticQaListParser.parse({
-      parentHeadingText: sampleHeading,
-      marker,
-      bodyLines: [
-        "- 核心产品",
-        "  百人会、城市更新研习社、城市更新创投营。",
-        "- 目标客户",
-        "  对城市更新有系统学习需求的从业者。",
-      ],
-      bodyStartLine: 2,
-      cardAnswerCutoffMode,
-    });
-
-    if (previewCards.length === 0) {
-      containerEl.createEl("p", { text: t("settings.semanticQa.previewUnavailable") });
-      return;
-    }
-
-    const firstPreview = previewCards[0];
-    containerEl.createEl("p", { text: t("settings.semanticQa.questionPreview", { question: firstPreview.heading }) });
-    containerEl.createEl("p", { text: t("settings.semanticQa.answerPreview", { answer: firstPreview.bodyMarkdown }) });
-  }
-
-  private renderDeckSection(containerEl: HTMLElement, settings: AnkiHeadingSyncPlugin["settings"]): void {
-    containerEl.createEl("h3", { text: t("settings.deck.defaultSectionTitle") });
+  private renderDeckCard(containerEl: HTMLElement): void {
+    containerEl.createEl("p", { text: t("settings.cards.deck.desc") });
 
     new Setting(containerEl)
       .setName(t("settings.deck.defaultDeck.name"))
       .setDesc(t("settings.deck.defaultDeck.desc"))
       .addText((text) => {
-        text.setValue(settings.defaultDeck).onChange((value) => {
-          void this.plugin.updateSettings({ defaultDeck: value });
+        text.setValue(this.getDraftValue("default-deck", this.plugin.settings.defaultDeck)).onChange((value) => {
+          this.scheduleDebouncedTextSave("default-deck", value, async (draftValue) => {
+            const nextValue = draftValue.trim();
+            if (!nextValue) {
+              this.textDraftValues.delete("default-deck");
+              this.renderCard("deck");
+              return;
+            }
+
+            await this.plugin.updateSettings({ defaultDeck: nextValue });
+            this.textDraftValues.delete("default-deck");
+          });
         });
       });
-
-    containerEl.createEl("h3", { text: t("settings.deck.fileDeckSectionTitle") });
 
     new Setting(containerEl)
       .setName(t("settings.deck.fileDeckEnabled.name"))
       .setDesc(t("settings.deck.fileDeckEnabled.desc"))
       .addToggle((toggle) => {
-        toggle.setValue(settings.fileDeckEnabled).onChange(async (value) => {
+        toggle.setValue(this.plugin.settings.fileDeckEnabled).onChange(async (value) => {
           await this.plugin.updateSettings({ fileDeckEnabled: value });
-          this.display();
+          this.renderCard("deck");
         });
       });
 
-    if (settings.fileDeckEnabled) {
+    if (this.plugin.settings.fileDeckEnabled) {
       new Setting(containerEl)
         .setName(t("settings.deck.marker.name"))
         .setDesc(t("settings.deck.marker.desc"))
         .addText((text) => {
-          text.setValue(settings.fileDeckMarker).onChange((value) => {
-            const nextValue = value.trim();
-            if (!nextValue) {
-              return;
-            }
+          text.setValue(this.getDraftValue("file-deck-marker", this.plugin.settings.fileDeckMarker)).onChange((value) => {
+            this.scheduleDebouncedTextSave("file-deck-marker", value, async (draftValue) => {
+              const nextValue = draftValue.trim();
+              if (!nextValue) {
+                this.textDraftValues.delete("file-deck-marker");
+                this.renderCard("deck");
+                return;
+              }
 
-            void this.plugin.updateSettings({ fileDeckMarker: nextValue });
+              await this.plugin.updateSettings({ fileDeckMarker: nextValue });
+              this.textDraftValues.delete("file-deck-marker");
+            });
           });
         });
 
@@ -590,13 +508,18 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         .setName(t("settings.deck.template.name"))
         .setDesc(t("settings.deck.template.desc"))
         .addText((text) => {
-          text.setValue(settings.fileDeckTemplate).onChange((value) => {
-            const nextValue = value.trim();
-            if (!nextValue) {
-              return;
-            }
+          text.setValue(this.getDraftValue("file-deck-template", this.plugin.settings.fileDeckTemplate)).onChange((value) => {
+            this.scheduleDebouncedTextSave("file-deck-template", value, async (draftValue) => {
+              const nextValue = draftValue.trim();
+              if (!nextValue) {
+                this.textDraftValues.delete("file-deck-template");
+                this.renderCard("deck");
+                return;
+              }
 
-            void this.plugin.updateSettings({ fileDeckTemplate: nextValue });
+              await this.plugin.updateSettings({ fileDeckTemplate: nextValue });
+              this.textDraftValues.delete("file-deck-template");
+            });
           });
         });
 
@@ -604,13 +527,13 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         .setName(t("settings.deck.insertLocation.name"))
         .setDesc(t("settings.deck.insertLocation.desc"))
         .addDropdown((dropdown) => {
-          this.populateFileDeckInsertLocationDropdown(dropdown, settings.fileDeckInsertLocation);
+          this.populateFileDeckInsertLocationDropdown(dropdown, this.plugin.settings.fileDeckInsertLocation);
           dropdown.onChange((value) => {
             if (value !== "yaml" && value !== "body") {
               return;
             }
 
-            void this.plugin.updateSettings({ fileDeckInsertLocation: value });
+            void this.plugin.updateSettings({ fileDeckInsertLocation: value as FileDeckInsertLocation });
           });
         });
 
@@ -624,159 +547,196 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
     }
 
-    containerEl.createEl("h3", { text: t("settings.deck.folderMappingSectionTitle") });
-
     new Setting(containerEl)
       .setName(t("settings.deck.folderDeckMode.name"))
       .setDesc(t("settings.deck.folderDeckMode.desc"))
       .addDropdown((dropdown) => {
-        this.populateFolderDeckModeDropdown(dropdown, settings.folderDeckMode);
+        this.populateFolderDeckModeDropdown(dropdown, this.plugin.settings.folderDeckMode);
         dropdown.onChange((value) => {
           if (value !== "off" && value !== "folder" && value !== "folder-and-file") {
             return;
           }
 
-          void this.plugin.updateSettings({ folderDeckMode: value });
+          void this.plugin.updateSettings({ folderDeckMode: value as FolderDeckMode });
         });
       });
 
     containerEl.createEl("p", { text: t("settings.deck.folderExample") });
     containerEl.createEl("p", { text: t("settings.deck.folderAndFileExample") });
+    containerEl.createEl("p", { text: t("settings.deck.priorityDesc") });
+  }
 
-    containerEl.createEl("h3", { text: t("settings.deck.priorityTitle") });
-    containerEl.createEl("p", {
-      text: t("settings.deck.priorityDesc"),
+  private renderCommandsCard(containerEl: HTMLElement): void {
+    containerEl.createEl("p", { text: t("settings.cards.commands.desc") });
+    const commandList = containerEl.createEl("ul");
+    for (const [name, description] of [
+      [t("commands.syncCurrentFileToAnki"), t("settings.cards.commands.items.syncCurrentFile")],
+      [t("commands.syncVaultToAnki"), t("settings.cards.commands.items.syncVault")],
+      [t("commands.rebuildCardIndex"), t("settings.cards.commands.items.rebuildIndex")],
+      [t("commands.clearCurrentFileSyncedCards"), t("settings.cards.commands.items.clearCurrentFile")],
+      [t("commands.cleanupEmptyDecks"), t("settings.cards.commands.items.cleanupDecks")],
+    ]) {
+      commandList.createEl("li", { text: `${name}: ${description}` });
+    }
+  }
+
+  private async saveCardTypeConfig(configId: CardTypeConfigId, partialConfig: Partial<AnkiHeadingSyncPlugin["settings"]["cardTypeConfigs"][CardTypeConfigId]>): Promise<boolean> {
+    const nextCardTypeConfigs = {
+      ...this.plugin.settings.cardTypeConfigs,
+      [configId]: {
+        ...this.plugin.settings.cardTypeConfigs[configId],
+        ...partialConfig,
+      },
+    };
+
+    try {
+      validatePluginSettings(normalizePluginSettings({
+        ...this.plugin.settings,
+        cardTypeConfigs: nextCardTypeConfigs,
+      }));
+    } catch (error) {
+      this.cardTypeStatus = toUserFacingMessage(error, "settings.cards.cardTypes.failedSave");
+      this.renderCard("card-types");
+      return false;
+    }
+
+    this.cardTypeStatus = NOTE_TYPE_STATUS_IDLE;
+    await this.plugin.updateSettings({ cardTypeConfigs: nextCardTypeConfigs });
+    this.renderCard("card-types");
+    return true;
+  }
+
+  private async saveFieldMapping(configId: Exclude<CardTypeConfigId, "qa-group">, partialMapping: Partial<NoteModelFieldMapping>): Promise<void> {
+    const mapping = this.getCurrentMappingForConfig(configId);
+    const runtimeCardType = this.getRuntimeCardType(configId);
+    const modelName = this.plugin.settings.cardTypeConfigs[configId].noteType;
+    const mappingKey = createNoteFieldMappingKey(runtimeCardType, modelName);
+    const nextMapping = {
+      ...(mapping ?? this.createFallbackMapping(runtimeCardType, modelName)),
+      ...partialMapping,
+    };
+
+    this.draftMappings[mappingKey] = nextMapping;
+    await this.plugin.updateSettings({
+      noteFieldMappings: {
+        ...this.plugin.settings.noteFieldMappings,
+        [mappingKey]: {
+          ...nextMapping,
+          loadedFieldNames: [...nextMapping.loadedFieldNames],
+        },
+      },
     });
+    this.renderCard("card-types");
   }
 
-  private populateFileDeckInsertLocationDropdown(dropdown: SimpleDropdown, selectedValue: FileDeckInsertLocation): void {
-    dropdown.addOption("body", t("settings.deck.insertLocation.options.body"));
-    dropdown.addOption("yaml", t("settings.deck.insertLocation.options.yaml"));
-    dropdown.setValue(selectedValue);
+  private async loadAnkiCardTypeConfig(): Promise<void> {
+    this.ankiConfigLoading = true;
+    this.cardTypeStatus = { key: "settings.cards.cardTypes.loadAnki.loading" };
+    this.renderCard("card-types");
+
+    try {
+      const noteModels = await this.plugin.listNoteModels();
+      this.availableNoteModels.splice(0, this.availableNoteModels.length, ...[...noteModels].sort((left, right) => left.localeCompare(right)));
+      const selectedConfigs = CARD_TYPE_CONFIG_IDS.filter((configId) => configId !== "qa-group") as Array<Exclude<CardTypeConfigId, "qa-group">>;
+
+      for (const configId of selectedConfigs) {
+        const runtimeCardType = this.getRuntimeCardType(configId);
+        const modelName = this.plugin.settings.cardTypeConfigs[configId].noteType;
+        const mappingKey = createNoteFieldMappingKey(runtimeCardType, modelName);
+        const modelDetails = await this.plugin.getNoteModelDetails(modelName);
+
+        this.loadedModelDetails[mappingKey] = modelDetails;
+        this.seedDraftMapping(runtimeCardType, modelName, modelDetails);
+      }
+
+      this.cardTypeStatus = {
+        rawMessage: `${t("settings.mapping.status.loadedCount", { count: this.availableNoteModels.length })} ${t("settings.cards.cardTypes.loadedFieldsStatus", { count: selectedConfigs.length })}`,
+      };
+    } catch (error) {
+      this.cardTypeStatus = toUserFacingMessage(error, "settings.cards.cardTypes.failedLoad");
+    } finally {
+      this.ankiConfigLoading = false;
+      this.renderCard("card-types");
+    }
   }
 
-  private populateFolderDeckModeDropdown(dropdown: SimpleDropdown, selectedValue: FolderDeckMode): void {
-    dropdown.addOption("off", t("settings.deck.folderDeckMode.options.off"));
-    dropdown.addOption("folder", t("settings.deck.folderDeckMode.options.folder"));
-    dropdown.addOption("folder-and-file", t("settings.deck.folderDeckMode.options.folderAndFile"));
-    dropdown.setValue(selectedValue);
-  }
+  private seedDraftMapping(runtimeCardType: CardType, modelName: string, modelDetails: NoteModelDetails): void {
+    const mappingKey = createNoteFieldMappingKey(runtimeCardType, modelName);
+    const currentMapping = this.plugin.settings.noteFieldMappings[mappingKey] ?? this.draftMappings[mappingKey];
 
-  private renderScopeSection(containerEl: HTMLElement, settings: AnkiHeadingSyncPlugin["settings"]): void {
-    new Setting(containerEl)
-      .setName(t("settings.scope.name"))
-      .setDesc(getScopeModeSummary(settings.scopeMode))
-      .addDropdown((dropdown) => {
-        dropdown
-          .addOption("all", t("settings.scope.option.all"))
-          .addOption("include", t("settings.scope.option.include"))
-          .addOption("exclude", t("settings.scope.option.exclude"))
-          .setValue(settings.scopeMode)
-          .onChange((value) => {
-            if (value !== "all" && value !== "include" && value !== "exclude") {
-              return;
-            }
-
-            void this.updateScopeMode(value);
-          });
-      });
-
-    if (settings.scopeMode === "all") {
+    if (currentMapping) {
+      this.draftMappings[mappingKey] = {
+        ...currentMapping,
+        loadedFieldNames: [...modelDetails.fieldNames],
+        loadedAt: Date.now(),
+      };
       return;
     }
 
-    this.ensureFolderTreeLoaded();
-
-    const scopeContainer = containerEl.createDiv();
-    scopeContainer.createEl("p", { text: getScopeModeTreeDescription(settings.scopeMode) });
-
-    if (this.folderTreeLoadPromise) {
-      scopeContainer.createEl("p", { text: renderUserFacingMessage(this.folderTreeStatus) });
-      return;
-    }
-
-    if (this.folderTree.length === 0) {
-      scopeContainer.createEl("p", { text: renderUserFacingMessage(this.folderTreeStatus) });
-      return;
-    }
-
-    const selectedFolders = settings.scopeMode === "include" ? settings.includeFolders : settings.excludeFolders;
-    const selectionTree = buildFolderTreeSelection(this.folderTree, selectedFolders);
-    const treeContainer = scopeContainer.createDiv();
-    treeContainer.style.marginTop = "8px";
-    treeContainer.style.display = "flex";
-    treeContainer.style.flexDirection = "column";
-    treeContainer.style.gap = "2px";
-
-    for (const node of selectionTree) {
-      this.renderFolderNode(treeContainer, node, settings.scopeMode, 0);
-    }
+    this.draftMappings[mappingKey] = this.noteFieldMappingService.suggest(runtimeCardType, modelName, modelDetails.fieldNames);
   }
 
-  private renderFolderNode(containerEl: HTMLElement, node: FolderTreeSelectionNode, scopeMode: ScopeMode, depth: number): void {
-    const row = containerEl.createDiv();
-    row.dataset.folderRow = node.path;
-    row.dataset.folderDepth = String(depth);
-    row.style.display = "flex";
-    row.style.alignItems = "center";
-    row.style.gap = "6px";
-    row.style.minHeight = "24px";
-    row.style.paddingLeft = `${depth * 18}px`;
-
-    const hasChildren = node.children.length > 0;
-    const expanded = hasChildren && this.expandedFolderPaths.has(node.path);
-    const toggleControl = row.createEl(hasChildren ? "button" : "span");
-    toggleControl.dataset.folderToggle = node.path;
-    toggleControl.textContent = hasChildren ? (expanded ? "▾" : "▸") : "";
-    toggleControl.style.width = "18px";
-    toggleControl.style.display = "inline-flex";
-    toggleControl.style.alignItems = "center";
-    toggleControl.style.justifyContent = "center";
-    toggleControl.style.flexShrink = "0";
-    toggleControl.style.padding = "0";
-    toggleControl.style.border = "0";
-    toggleControl.style.background = "transparent";
-    toggleControl.style.color = "var(--text-muted)";
-    toggleControl.style.cursor = hasChildren ? "pointer" : "default";
-
-    if (hasChildren) {
-      toggleControl.setAttr("aria-label", expanded ? t("settings.scope.collapseFolder", { name: node.name }) : t("settings.scope.expandFolder", { name: node.name }));
-      toggleControl.setAttr("aria-expanded", String(expanded));
-      toggleControl.addEventListener("click", () => {
-        this.toggleFolderExpanded(node.path);
-      });
+  private getSelectableNoteModels(selectedModelName: string): string[] {
+    const noteModels = this.availableNoteModels.length > 0 ? [...this.availableNoteModels] : [];
+    if (!noteModels.includes(selectedModelName)) {
+      noteModels.unshift(selectedModelName);
     }
 
-    const checkbox = row.createEl("input") as HTMLInputElement;
-    checkbox.type = "checkbox";
-    checkbox.checked = node.checked;
-    checkbox.indeterminate = node.indeterminate;
-    checkbox.setAttr("aria-checked", node.indeterminate ? "mixed" : String(node.checked));
-    checkbox.dataset.folderPath = node.path;
-    checkbox.style.margin = "0";
-    checkbox.addEventListener("change", () => {
-      void this.updateFolderSelection(scopeMode, node.path, checkbox.checked);
-    });
-
-    const label = row.createEl("span", { text: node.name });
-    label.dataset.folderPathLabel = node.path;
-    label.style.userSelect = "none";
-
-    if (!hasChildren || !expanded) {
-      return;
-    }
-
-    const childrenContainer = containerEl.createDiv();
-    childrenContainer.dataset.folderChildren = node.path;
-    childrenContainer.style.display = "flex";
-    childrenContainer.style.flexDirection = "column";
-    childrenContainer.style.gap = "2px";
-    for (const child of node.children) {
-      this.renderFolderNode(childrenContainer, child, scopeMode, depth + 1);
-    }
+    return noteModels;
   }
 
-  private ensureFolderTreeLoaded(): void {
+  private getCurrentMappingForConfig(configId: Exclude<CardTypeConfigId, "qa-group">): NoteModelFieldMapping | undefined {
+    const runtimeCardType = this.getRuntimeCardType(configId);
+    const modelName = this.plugin.settings.cardTypeConfigs[configId].noteType;
+    const mappingKey = createNoteFieldMappingKey(runtimeCardType, modelName);
+    const mapping = this.draftMappings[mappingKey] ?? this.plugin.settings.noteFieldMappings[mappingKey];
+
+    if (mapping) {
+      return {
+        ...mapping,
+        loadedFieldNames: [...mapping.loadedFieldNames],
+      };
+    }
+
+    const modelDetails = this.loadedModelDetails[mappingKey];
+    if (!modelDetails) {
+      return undefined;
+    }
+
+    const suggestedMapping = this.noteFieldMappingService.suggest(runtimeCardType, modelName, modelDetails.fieldNames);
+    this.draftMappings[mappingKey] = suggestedMapping;
+    return {
+      ...suggestedMapping,
+      loadedFieldNames: [...suggestedMapping.loadedFieldNames],
+    };
+  }
+
+  private createFallbackMapping(runtimeCardType: CardType, modelName: string): NoteModelFieldMapping {
+    const mappingKey = createNoteFieldMappingKey(runtimeCardType, modelName);
+    const modelDetails = this.loadedModelDetails[mappingKey];
+
+    if (modelDetails) {
+      return this.noteFieldMappingService.suggest(runtimeCardType, modelName, modelDetails.fieldNames);
+    }
+
+    return {
+      cardType: runtimeCardType,
+      modelName,
+      loadedFieldNames: [],
+      loadedAt: Date.now(),
+    };
+  }
+
+  private getRuntimeCardType(configId: Exclude<CardTypeConfigId, "qa-group">): CardType {
+    return configId === "cloze" ? "cloze" : configId === "semantic-qa" ? "semantic-qa" : "basic";
+  }
+
+  private ensureFolderTreeLoaded(forceReload = false): void {
+    if (forceReload) {
+      this.hasLoadedFolderTree = false;
+      this.folderTree = [];
+    }
+
     if (this.hasLoadedFolderTree || this.folderTreeLoadPromise) {
       return;
     }
@@ -795,13 +755,22 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .finally(() => {
         this.hasLoadedFolderTree = true;
         this.folderTreeLoadPromise = null;
-        this.display();
+        this.renderCard("scope");
       });
+  }
+
+  private async refreshFolderTree(): Promise<void> {
+    this.expandedFolderPaths.clear();
+    this.ensureFolderTreeLoaded(true);
+    this.renderCard("scope");
   }
 
   private async updateScopeMode(scopeMode: ScopeMode): Promise<void> {
     await this.plugin.updateSettings({ scopeMode });
-    this.display();
+    if (scopeMode !== "all") {
+      this.ensureFolderTreeLoaded();
+    }
+    this.renderCard("scope");
   }
 
   private async updateFolderSelection(scopeMode: ScopeMode, folderPath: string, checked: boolean): Promise<void> {
@@ -809,39 +778,166 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const nextSelection = toggleFolderTreeSelection(this.folderTree, currentSelection, folderPath, checked);
 
     await this.plugin.updateSettings(scopeMode === "include" ? { includeFolders: nextSelection } : { excludeFolders: nextSelection });
-    this.display();
+    this.renderCard("scope");
   }
 
-  private toggleFolderExpanded(folderPath: string): void {
-    if (this.expandedFolderPaths.has(folderPath)) {
-      this.expandedFolderPaths.delete(folderPath);
-    } else {
-      this.expandedFolderPaths.add(folderPath);
+  private renderFolderNode(containerEl: HTMLElement, node: FolderTreeSelectionNode, scopeMode: ScopeMode, depth: number): void {
+    const row = containerEl.createDiv();
+    row.dataset.folderRow = node.path;
+    row.style.paddingLeft = `${depth * 18}px`;
+
+    const hasChildren = node.children.length > 0;
+    const expanded = hasChildren && this.expandedFolderPaths.has(node.path);
+    const toggleControl = row.createEl(hasChildren ? "button" : "span");
+    toggleControl.dataset.folderToggle = node.path;
+    toggleControl.textContent = hasChildren ? (expanded ? "▾" : "▸") : "";
+    if (hasChildren) {
+      toggleControl.addEventListener("click", () => {
+        if (this.expandedFolderPaths.has(node.path)) {
+          this.expandedFolderPaths.delete(node.path);
+        } else {
+          this.expandedFolderPaths.add(node.path);
+        }
+
+        this.renderCard("scope");
+      });
     }
 
-    this.display();
-  }
-}
+    const checkbox = row.createEl("input") as HTMLInputElement;
+    checkbox.type = "checkbox";
+    checkbox.checked = node.checked;
+    checkbox.indeterminate = node.indeterminate;
+    checkbox.dataset.folderPath = node.path;
+    checkbox.addEventListener("change", () => {
+      void this.updateFolderSelection(scopeMode, node.path, checkbox.checked);
+    });
 
-function getMappingSectionText(cardType: CardType): { title: string; description: string } {
-  if (cardType === "cloze") {
-    return {
-      title: t("settings.mapping.section.cloze.title"),
-      description: t("settings.mapping.section.cloze.description"),
-    };
+    row.createEl("span", { text: node.name }).dataset.folderPathLabel = node.path;
+
+    if (!hasChildren || !expanded) {
+      return;
+    }
+
+    const childrenContainer = containerEl.createDiv();
+    childrenContainer.dataset.folderChildren = node.path;
+    for (const child of node.children) {
+      this.renderFolderNode(childrenContainer, child, scopeMode, depth + 1);
+    }
   }
 
-  if (cardType === "semantic-qa") {
-    return {
-      title: t("settings.mapping.section.semanticQa.title"),
-      description: t("settings.mapping.section.semanticQa.description"),
-    };
+  private scheduleDebouncedTextSave(key: string, value: string, saveAction: (draftValue: string) => Promise<void>): void {
+    this.textDraftValues.set(key, value);
+
+    const pendingTimer = this.debouncedTextSaves.get(key);
+    if (pendingTimer) {
+      globalThis.clearTimeout(pendingTimer);
+    }
+
+    const timer = globalThis.setTimeout(() => {
+      void saveAction(this.textDraftValues.get(key) ?? value).finally(() => {
+        this.debouncedTextSaves.delete(key);
+      });
+    }, TEXT_SAVE_DEBOUNCE_MS);
+
+    this.debouncedTextSaves.set(key, timer);
   }
 
-  return {
-    title: t("settings.mapping.section.basic.title"),
-    description: t("settings.mapping.section.basic.description"),
-  };
+  private clearDebouncedTextSaves(): void {
+    for (const timer of this.debouncedTextSaves.values()) {
+      globalThis.clearTimeout(timer);
+    }
+
+    this.debouncedTextSaves.clear();
+  }
+
+  private getDraftValue(key: string, persistedValue: string): string {
+    return this.textDraftValues.get(key) ?? persistedValue;
+  }
+
+  private createSelect(containerEl: HTMLElement, datasetKey: string): HTMLSelectElement {
+    const selectEl = containerEl.createEl("select") as HTMLSelectElement;
+    selectEl.dataset.selectKey = datasetKey;
+    return selectEl;
+  }
+
+  private createFieldSelect(containerEl: HTMLElement, datasetKey: string): HTMLSelectElement {
+    return this.createSelect(containerEl, datasetKey);
+  }
+
+  private appendOption(selectEl: HTMLSelectElement, value: string, label: string): void {
+    const optionEl = selectEl.createEl("option", { text: label }) as HTMLOptionElement;
+    optionEl.value = value;
+  }
+
+  private populateFieldSelect(selectEl: HTMLSelectElement, fieldNames: string[], selectedValue: string | undefined): void {
+    selectEl.empty();
+    this.appendOption(selectEl, "", fieldNames.length > 0 ? t("settings.mapping.selectFieldPlaceholder") : t("settings.cards.cardTypes.fieldsUnavailable"));
+    for (const fieldName of fieldNames) {
+      this.appendOption(selectEl, fieldName, fieldName);
+    }
+    selectEl.value = selectedValue ?? "";
+  }
+
+  private populateFileDeckInsertLocationDropdown(
+    dropdown: {
+      addOption(value: string, label: string): unknown;
+      setValue(value: string): unknown;
+    },
+    selectedValue: FileDeckInsertLocation,
+  ): void {
+    dropdown.addOption("body", t("settings.deck.insertLocation.options.body"));
+    dropdown.addOption("yaml", t("settings.deck.insertLocation.options.yaml"));
+    dropdown.setValue(selectedValue);
+  }
+
+  private populateFolderDeckModeDropdown(
+    dropdown: {
+      addOption(value: string, label: string): unknown;
+      setValue(value: string): unknown;
+    },
+    selectedValue: FolderDeckMode,
+  ): void {
+    dropdown.addOption("off", t("settings.deck.folderDeckMode.options.off"));
+    dropdown.addOption("folder", t("settings.deck.folderDeckMode.options.folder"));
+    dropdown.addOption("folder-and-file", t("settings.deck.folderDeckMode.options.folderAndFile"));
+    dropdown.setValue(selectedValue);
+  }
+
+  private getCardTitle(cardId: SettingsCardId): string {
+    if (cardId === "card-types") {
+      return t("settings.cards.cardTypes.title");
+    }
+
+    if (cardId === "sync-content") {
+      return t("settings.cards.syncContent.title");
+    }
+
+    if (cardId === "scope") {
+      return t("settings.cards.scope.title");
+    }
+
+    if (cardId === "deck") {
+      return t("settings.cards.deck.title");
+    }
+
+    return t("settings.cards.commands.title");
+  }
+
+  private getCardTypeLabel(configId: CardTypeConfigId): string {
+    if (configId === "basic") {
+      return t("settings.cards.cardTypes.rows.basic");
+    }
+
+    if (configId === "qa-group") {
+      return t("settings.cards.cardTypes.rows.qaGroup");
+    }
+
+    if (configId === "cloze") {
+      return t("settings.cards.cardTypes.rows.cloze");
+    }
+
+    return t("settings.cards.cardTypes.rows.semanticQa");
+  }
 }
 
 function getScopeModeSummary(scopeMode: ScopeMode): string {

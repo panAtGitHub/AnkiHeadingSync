@@ -210,6 +210,64 @@ export const zh = {
       expandFolder: "展开 {{name}}",
       collapseFolder: "收起 {{name}}",
     },
+    cards: {
+      cardTypes: {
+        title: "卡片类型及基础设置",
+        desc: "直接编辑识别表格。修改后自动保存，运行时识别也以这张表为准。",
+        advancedHint: "高级项：将 AnkiConnect URL 保留在这里，不单独做连接状态卡片。",
+        markerPlaceholder: "/",
+        fieldsUnavailable: "-- 请先读取字段 --",
+        autoManagedField: "自动维护",
+        autoComposedAnswer: "自动拼接",
+        qaGroupManagedNoteType: "{{modelName}}（自动维护）",
+        loadedFieldsStatus: "已刷新 {{count}} 个当前所选模板的字段。",
+        failedLoad: "从 Anki 读取模板或字段失败。",
+        failedSave: "保存卡片类型设置失败。",
+        loadAnki: {
+          button: "手动读取 Anki 里的模板配置",
+          loading: "正在读取 Anki 模板和字段...",
+        },
+        columns: {
+          enabled: "启用",
+          type: "卡片类型",
+          headingLevel: "卡片标记",
+          extraMarker: "额外标记",
+          noteType: "Anki 笔记模板",
+          questionField: "问题字段",
+          answerField: "答案字段",
+        },
+        rows: {
+          basic: "问答题（常规段落形式）",
+          qaGroup: "问答题（多级列表形式）",
+          cloze: "填空题",
+          semanticQa: "语义问答题",
+        },
+      },
+      syncContent: {
+        title: "同步内容",
+        desc: "这些选项只影响卡片渲染内容，修改后仅刷新这一张卡片。",
+      },
+      scope: {
+        title: "卡片同步范围",
+        desc: "保留现有作用范围和文件夹树逻辑；文件夹树按需加载，并支持局部刷新。",
+        refreshFolders: "刷新文件夹列表",
+      },
+      deck: {
+        title: "Deck 与牌组规则",
+        desc: "保留现有 deck 行为；切换文件级 deck 开关时只刷新这一张卡片。",
+      },
+      commands: {
+        title: "命令说明",
+        desc: "下面展示当前命令面板中可用的插件命令。",
+        items: {
+          syncCurrentFile: "只把当前活动 Markdown 文件同步到 Anki。",
+          syncVault: "把全库中所有处于作用范围内的 Markdown 文件同步到 Anki。",
+          rebuildIndex: "只重建本地卡片索引，不创建或更新远端笔记。",
+          clearCurrentFile: "清空当前文件的已同步标记和本地跟踪状态。",
+          cleanupDecks: "从 Anki 删除所选空牌组。",
+        },
+      },
+    },
   },
   modal: {
     emptyDeck: {
@@ -266,6 +324,10 @@ export const zh = {
     settings: {
       headingLevelsRange: "标题层级必须是 1 到 6 之间的整数。",
       headingLevelsDifferent: "QA 和 Cloze 的标题层级必须不同。",
+      cardTypeConfigsObject: "卡片类型配置必须是对象。",
+      cardTypeEnabledBoolean: "每种卡片类型的启用状态必须是布尔值。",
+      cardTypeExtraMarkerString: "每种卡片类型的额外标记必须是字符串。",
+      cardTypeDefaultConflict: "同一个 H{{headingLevel}} 只能有一个启用的默认卡片类型。",
       cardAnswerCutoffModeInvalid: "卡片正文截止模式只能是 heading-block 或 double-blank-lines。",
       qaNoteTypeRequired: "QA 笔记类型不能为空。",
       qaGroupMarkerRequired: "QA Group 标记不能为空。",

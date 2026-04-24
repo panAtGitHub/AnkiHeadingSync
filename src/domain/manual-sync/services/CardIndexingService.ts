@@ -1,4 +1,10 @@
-import type { CardAnswerCutoffMode } from "@/application/config/PluginSettings";
+import {
+  DEFAULT_SETTINGS,
+  type CardAnswerCutoffMode,
+  type CardTypeConfig,
+  type CardTypeConfigId,
+  type CardTypeConfigs,
+} from "@/application/config/PluginSettings";
 import type { SourceFile } from "@/domain/card/entities/SourceFile";
 import { createIndexedCardSyncKey, type IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
 import { buildGroupSrc, createIndexedGroupSyncKey, type IndexedGroupCardBlock } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
@@ -6,11 +12,11 @@ import type { IndexedFile } from "@/domain/manual-sync/entities/IndexedFile";
 import { createPendingWriteBackKey, type CardState, type GroupBlockState, type PendingWriteBackState } from "@/domain/manual-sync/entities/PluginState";
 import { hashString } from "@/domain/shared/hash";
 
+import { resolveAnswerBoundary } from "./AnswerBoundaryParser";
 import { CardMarkerService } from "./CardMarkerService";
 import { DeckExtractionService } from "./DeckExtractionService";
 import { QaGroupBlockParser } from "./QaGroupBlockParser";
 import { SemanticQaListParser } from "./SemanticQaListParser";
-import { resolveAnswerBoundary } from "./AnswerBoundaryParser";
 
 interface HeadingMatch {
   level: number;
@@ -18,9 +24,15 @@ interface HeadingMatch {
   lineIndex: number;
 }
 
+interface ResolvedHeadingConfigMatch {
+  configId: CardTypeConfigId;
+  config: CardTypeConfig;
+}
+
 export interface CardIndexingContext {
-  qaHeadingLevel: number;
-  clozeHeadingLevel: number;
+  cardTypeConfigs?: CardTypeConfigs;
+  qaHeadingLevel?: number;
+  clozeHeadingLevel?: number;
   cardAnswerCutoffMode?: CardAnswerCutoffMode;
   qaGroupMarker?: string;
   semanticQaMarker?: string;
@@ -34,6 +46,8 @@ export interface CardIndexingContext {
 }
 
 const HEADING_REGEXP = /^(#{1,6})\s+(.*?)\s*$/;
+const CARD_TYPE_MATCH_ORDER: CardTypeConfigId[] = ["qa-group", "semantic-qa", "cloze", "basic"];
+
 export class CardIndexingService {
   constructor(
     private readonly markerService = new CardMarkerService(),
@@ -43,7 +57,8 @@ export class CardIndexingService {
   ) {}
 
   index(sourceFile: SourceFile, context: CardIndexingContext): IndexedFile {
-    validateHeadingPolicy(context.qaHeadingLevel, context.clozeHeadingLevel);
+    const cardTypeConfigs = resolveCardTypeConfigs(context);
+    validateResolvedCardTypeConfigs(cardTypeConfigs);
 
     const lines = sourceFile.content.split(/\r?\n/);
     const lineStartOffsets = computeLineStartOffsets(sourceFile.content);
@@ -62,16 +77,16 @@ export class CardIndexingService {
 
     for (let headingIndex = 0; headingIndex < headings.length; headingIndex += 1) {
       const heading = headings[headingIndex];
-      const cardType = resolveCardType(heading.level, context.qaHeadingLevel, context.clozeHeadingLevel);
-      if (!cardType) {
+      const matchedConfig = resolveHeadingConfig(heading.text, heading.level, cardTypeConfigs);
+      if (!matchedConfig) {
         continue;
       }
 
       const blockEndLineIndex = findBlockEndLineIndex(headings, headingIndex, lines.length);
       const bodyLines = lines.slice(heading.lineIndex + 1, blockEndLineIndex);
       const cutoffMode = context.cardAnswerCutoffMode ?? "heading-block";
-      const qaGroupMarker = context.qaGroupMarker ?? "#anki-list";
-      if (cardType === "basic" && this.qaGroupBlockParser.isQaGroupHeading(heading.text, qaGroupMarker)) {
+      if (matchedConfig.configId === "qa-group") {
+        const qaGroupMarker = matchedConfig.config.extraMarker;
         const parsedGroupBlock = this.qaGroupBlockParser.parse({
           parentHeadingText: heading.text,
           marker: qaGroupMarker,
@@ -132,8 +147,8 @@ export class CardIndexingService {
         continue;
       }
 
-      const semanticQaMarker = context.semanticQaMarker ?? "#anki-list-qa";
-      if (cardType === "basic" && this.semanticQaListParser.isSemanticQaHeading(heading.text, semanticQaMarker)) {
+      if (matchedConfig.configId === "semantic-qa") {
+        const semanticQaMarker = matchedConfig.config.extraMarker;
         for (const semanticCard of this.semanticQaListParser.parse({
           parentHeadingText: heading.text,
           marker: semanticQaMarker,
@@ -188,6 +203,8 @@ export class CardIndexingService {
 
         continue;
       }
+
+      const cardType = matchedConfig.configId === "cloze" ? "cloze" : "basic";
 
       const boundary = resolveAnswerBoundary({
         lines: bodyLines,
@@ -354,6 +371,76 @@ export class CardIndexingService {
   }
 }
 
+function resolveCardTypeConfigs(context: CardIndexingContext): CardTypeConfigs {
+  if (context.cardTypeConfigs) {
+    return context.cardTypeConfigs;
+  }
+
+  return {
+    basic: {
+      ...DEFAULT_SETTINGS.cardTypeConfigs.basic,
+      headingLevel: context.qaHeadingLevel ?? DEFAULT_SETTINGS.cardTypeConfigs.basic.headingLevel,
+    },
+    "qa-group": {
+      ...DEFAULT_SETTINGS.cardTypeConfigs["qa-group"],
+      headingLevel: context.qaHeadingLevel ?? DEFAULT_SETTINGS.cardTypeConfigs["qa-group"].headingLevel,
+      extraMarker: context.qaGroupMarker ?? DEFAULT_SETTINGS.cardTypeConfigs["qa-group"].extraMarker,
+    },
+    cloze: {
+      ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+      headingLevel: context.clozeHeadingLevel ?? DEFAULT_SETTINGS.cardTypeConfigs.cloze.headingLevel,
+    },
+    "semantic-qa": {
+      ...DEFAULT_SETTINGS.cardTypeConfigs["semantic-qa"],
+      headingLevel: context.qaHeadingLevel ?? DEFAULT_SETTINGS.cardTypeConfigs["semantic-qa"].headingLevel,
+      extraMarker: context.semanticQaMarker ?? DEFAULT_SETTINGS.cardTypeConfigs["semantic-qa"].extraMarker,
+    },
+  };
+}
+
+function validateResolvedCardTypeConfigs(cardTypeConfigs: CardTypeConfigs): void {
+  const enabledDefaultCountByHeading = new Map<number, number>();
+
+  for (const config of Object.values(cardTypeConfigs)) {
+    if (!Number.isInteger(config.headingLevel) || config.headingLevel < 1 || config.headingLevel > 6) {
+      throw new Error("Card heading level must be an integer between 1 and 6.");
+    }
+
+    if (!config.enabled || config.extraMarker.trim().length > 0) {
+      continue;
+    }
+
+    enabledDefaultCountByHeading.set(config.headingLevel, (enabledDefaultCountByHeading.get(config.headingLevel) ?? 0) + 1);
+  }
+
+  if ([...enabledDefaultCountByHeading.values()].some((count) => count > 1)) {
+    throw new Error("Each heading level can only have one enabled default card type.");
+  }
+}
+
+function resolveHeadingConfig(headingText: string, level: number, cardTypeConfigs: CardTypeConfigs): ResolvedHeadingConfigMatch | null {
+  const candidateMatches = CARD_TYPE_MATCH_ORDER
+    .map((configId) => ({ configId, config: cardTypeConfigs[configId] }))
+    .filter(({ config }) => config.enabled && config.headingLevel === level);
+
+  const markerMatches = candidateMatches
+    .filter(({ config }) => config.extraMarker.trim().length > 0 && headingText.trimEnd().endsWith(config.extraMarker.trim()))
+    .sort((left, right) => {
+      const markerLengthDifference = right.config.extraMarker.trim().length - left.config.extraMarker.trim().length;
+      if (markerLengthDifference !== 0) {
+        return markerLengthDifference;
+      }
+
+      return CARD_TYPE_MATCH_ORDER.indexOf(left.configId) - CARD_TYPE_MATCH_ORDER.indexOf(right.configId);
+    });
+
+  if (markerMatches.length > 0) {
+    return markerMatches[0] ?? null;
+  }
+
+  return candidateMatches.find(({ config }) => config.extraMarker.trim().length === 0) ?? null;
+}
+
 function groupKnownCardsByBlockKey(knownCards: CardState[]): Map<string, CardState[]> {
   const grouped = new Map<string, CardState[]>();
 
@@ -404,20 +491,6 @@ function resolveSourceFileTags(sourceFile: SourceFile, syncObsidianTagsToAnki: b
   return Array.isArray(sourceFile.tags) ? [...sourceFile.tags] : [];
 }
 
-function validateHeadingPolicy(qaHeadingLevel: number, clozeHeadingLevel: number): void {
-  if (!Number.isInteger(qaHeadingLevel) || qaHeadingLevel < 1 || qaHeadingLevel > 6) {
-    throw new Error("QA heading level must be an integer between 1 and 6.");
-  }
-
-  if (!Number.isInteger(clozeHeadingLevel) || clozeHeadingLevel < 1 || clozeHeadingLevel > 6) {
-    throw new Error("Cloze heading level must be an integer between 1 and 6.");
-  }
-
-  if (qaHeadingLevel === clozeHeadingLevel) {
-    throw new Error("QA and Cloze heading levels must be different.");
-  }
-}
-
 function collectHeadings(lines: string[]): HeadingMatch[] {
   const headings: HeadingMatch[] = [];
   let fenceMarker: string | null = null;
@@ -448,18 +521,6 @@ function collectHeadings(lines: string[]): HeadingMatch[] {
   }
 
   return headings;
-}
-
-function resolveCardType(level: number, qaHeadingLevel: number, clozeHeadingLevel: number): IndexedCard["cardType"] | null {
-  if (level === qaHeadingLevel) {
-    return "basic";
-  }
-
-  if (level === clozeHeadingLevel) {
-    return "cloze";
-  }
-
-  return null;
 }
 
 function findBlockEndLineIndex(headings: HeadingMatch[], currentHeadingIndex: number, totalLineCount: number): number {

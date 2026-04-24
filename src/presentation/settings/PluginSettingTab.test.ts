@@ -1,42 +1,44 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { QA_GROUP_MODEL_NAME } from "@/application/config/ManagedNoteModels";
 import { createNoteFieldMappingKey } from "@/application/config/NoteModelFieldMapping";
-import { DEFAULT_SETTINGS } from "@/application/config/PluginSettings";
-import { QA_GROUP_MODEL_NAME } from "@/application/services/QaGroupModelDefinition";
+import { DEFAULT_SETTINGS, normalizePluginSettings } from "@/application/config/PluginSettings";
 
 const {
-  FakeButtonComponent,
-  FakeDropdownComponent,
   FakeElement,
-  getLanguageMock,
   FakePluginSettingTab,
   FakeSetting,
+  getLanguageMock,
 } = vi.hoisted(() => {
-  const hoistedGetLanguage = vi.fn(() => "en");
+  const hoistedGetLanguage = vi.fn(() => "zh");
 
   class HoistedFakeElement {
     public readonly children: HoistedFakeElement[] = [];
     public readonly dataset: Record<string, string> = {};
     public readonly style: Record<string, string> = {};
+    public readonly ownedSettings: HoistedFakeSetting[] = [];
     public checked = false;
     public indeterminate = false;
+    public disabled = false;
     public type = "";
     public value = "";
     public text = "";
     public textContent = "";
+    public scrollTop = 0;
 
     private readonly listeners = new Map<string, Array<() => void | Promise<void>>>();
 
     constructor(
       public readonly root: HoistedFakeContainerEl,
       public readonly tag: string,
+      public readonly parent: HoistedFakeElement | null = null,
     ) {}
 
     createEl(tag: string, options?: { text?: string }): HoistedFakeElement {
-      const child = new HoistedFakeElement(this.root, tag);
+      const child = new HoistedFakeElement(this.root, tag, this);
       if (options?.text) {
         child.text = options.text;
-        this.root.textNodes.push(options.text);
+        child.textContent = options.text;
       }
 
       this.children.push(child);
@@ -59,25 +61,43 @@ const {
       }
     }
 
+    empty(): void {
+      this.removeOwnedSettingsRecursively();
+      this.children.length = 0;
+      this.text = "";
+      this.textContent = "";
+    }
+
     setAttr(name: string, value: string | number): this {
       (this as Record<string, unknown>)[name] = value;
       return this;
+    }
+
+    private removeOwnedSettingsRecursively(): void {
+      if (this.ownedSettings.length > 0) {
+        this.root.settings = this.root.settings.filter((setting) => !this.ownedSettings.includes(setting));
+        this.ownedSettings.length = 0;
+      }
+
+      for (const child of this.children) {
+        child.removeOwnedSettingsRecursively();
+      }
     }
   }
 
   class HoistedFakeContainerEl extends HoistedFakeElement {
     public settings: HoistedFakeSetting[] = [];
-    public textNodes: string[] = [];
+    public emptyCallCount = 0;
 
     constructor() {
-      super(undefined as never, "root");
+      super(undefined as never, "root", null);
       (this as { root: HoistedFakeContainerEl }).root = this;
     }
 
-    empty(): void {
+    override empty(): void {
+      this.emptyCallCount += 1;
+      super.empty();
       this.settings = [];
-      this.textNodes = [];
-      this.children.length = 0;
     }
   }
 
@@ -178,8 +198,9 @@ const {
       HoistedFakeButtonComponent | HoistedFakeDropdownComponent | HoistedFakeTextComponent | HoistedFakeToggleComponent
     > = [];
 
-    constructor(containerEl: HoistedFakeContainerEl) {
-      containerEl.settings.push(this);
+    constructor(containerEl: HoistedFakeElement) {
+      containerEl.root.settings.push(this);
+      containerEl.ownedSettings.push(this);
     }
 
     setName(name: string): this {
@@ -213,13 +234,6 @@ const {
       return this;
     }
 
-    addTextArea(callback: (text: HoistedFakeTextComponent) => void): this {
-      const text = new HoistedFakeTextComponent();
-      this.controls.push(text);
-      callback(text);
-      return this;
-    }
-
     addToggle(callback: (toggle: HoistedFakeToggleComponent) => void): this {
       const toggle = new HoistedFakeToggleComponent();
       this.controls.push(toggle);
@@ -245,9 +259,9 @@ const {
     FakeButtonComponent: HoistedFakeButtonComponent,
     FakeDropdownComponent: HoistedFakeDropdownComponent,
     FakeElement: HoistedFakeElement,
-    getLanguageMock: hoistedGetLanguage,
     FakePluginSettingTab: HoistedFakePluginSettingTab,
     FakeSetting: HoistedFakeSetting,
+    getLanguageMock: hoistedGetLanguage,
   };
 });
 
@@ -259,29 +273,34 @@ vi.mock("obsidian", () => ({
 
 import { AnkiHeadingSyncSettingTab } from "./PluginSettingTab";
 
-type FakeContainerElInstance = InstanceType<typeof FakePluginSettingTab>["containerEl"];
+type FakeContainer = InstanceType<typeof FakePluginSettingTab>["containerEl"];
 type FakeSettingInstance = InstanceType<typeof FakeSetting>;
-type FakeButtonComponentInstance = InstanceType<typeof FakeButtonComponent>;
-type FakeDropdownComponentInstance = InstanceType<typeof FakeDropdownComponent>;
-type FakeElementInstance = InstanceType<typeof FakeElement>;
-type FakeTextComponentInstance = {
-  value: string;
-  triggerChange(value: string): Promise<void>;
-};
-type FakeToggleComponentInstance = {
-  value: boolean;
-  triggerChange(value: boolean): Promise<void>;
-};
+type FakeToggleInstance = { triggerChange(value: boolean): Promise<void> };
+type QueryRoot = FakeContainer | HTMLElement;
 
 class FakePlugin {
   public readonly app = {};
+  public readonly updateCalls: Array<Record<string, unknown>> = [];
+  public listNoteModelsCalls = 0;
   public listFolderTreeCalls = 0;
   public insertDeckTemplateCalls = 0;
-  public settings = {
+  public settings = normalizePluginSettings({
     ...DEFAULT_SETTINGS,
     qaNoteType: "Custom Basic",
+    clozeNoteType: "Custom Cloze",
+    cardTypeConfigs: {
+      ...DEFAULT_SETTINGS.cardTypeConfigs,
+      basic: {
+        ...DEFAULT_SETTINGS.cardTypeConfigs.basic,
+        noteType: "Custom Basic",
+      },
+      cloze: {
+        ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+        noteType: "Custom Cloze",
+      },
+    },
     noteFieldMappings: {},
-  };
+  });
   public folderTree = [
     {
       path: "notes",
@@ -299,28 +318,27 @@ class FakePlugin {
         },
       ],
     },
-    {
-      path: "empty",
-      name: "empty",
-      children: [],
-    },
   ];
 
   async updateSettings(partialSettings: Record<string, unknown>): Promise<void> {
-    this.settings = {
+    this.updateCalls.push(partialSettings);
+    this.settings = normalizePluginSettings({
       ...this.settings,
       ...partialSettings,
-    };
+      cardTypeConfigs: (partialSettings.cardTypeConfigs as typeof this.settings.cardTypeConfigs | undefined) ?? this.settings.cardTypeConfigs,
+      noteFieldMappings: (partialSettings.noteFieldMappings as typeof this.settings.noteFieldMappings | undefined) ?? this.settings.noteFieldMappings,
+    });
   }
 
   async listNoteModels(): Promise<string[]> {
-    return ["Basic", "Cloze", "Custom Basic", "Custom Cloze", "Semantic QA", QA_GROUP_MODEL_NAME];
+    this.listNoteModelsCalls += 1;
+    return ["Basic", "Custom Basic", "Cloze", "Custom Cloze", "Semantic QA", QA_GROUP_MODEL_NAME];
   }
 
-  async getNoteModelDetails(modelName: string) {
-    if (modelName === "Custom Cloze") {
+  async getNoteModelDetails(modelName: string): Promise<{ fieldNames: string[]; isCloze: boolean }> {
+    if (modelName.includes("Cloze")) {
       return {
-        fieldNames: ["Text", "Extra", "Context"],
+        fieldNames: ["Text", "Extra", "Hint"],
         isCloze: true,
       };
     }
@@ -338,7 +356,7 @@ class FakePlugin {
     };
   }
 
-  async listFolderTree() {
+  async listFolderTree(): Promise<typeof this.folderTree> {
     this.listFolderTreeCalls += 1;
     return this.folderTree;
   }
@@ -348,739 +366,275 @@ class FakePlugin {
   }
 }
 
-function findSetting(containerEl: FakeContainerElInstance, name: string): FakeSettingInstance {
-  const setting = containerEl.settings.find((candidate: FakeSettingInstance) => candidate.name === name);
-
-  if (!setting) {
-    throw new Error(`Setting not found: ${name}`);
-  }
-
-  return setting;
+function asFakeContainer(container: QueryRoot): FakeContainer {
+  return container as unknown as FakeContainer;
 }
 
-function querySetting(containerEl: FakeContainerElInstance, name: string): FakeSettingInstance | undefined {
-  return containerEl.settings.find((candidate: FakeSettingInstance) => candidate.name === name);
-}
-
-function getButton(setting: FakeSettingInstance): FakeButtonComponentInstance {
-  const button = setting.controls.find((control: unknown) => control instanceof FakeButtonComponent);
-
-  if (!button || !(button instanceof FakeButtonComponent)) {
-    throw new Error(`Button not found for setting: ${setting.name}`);
-  }
-
-  return button;
-}
-
-function getDropdown(setting: FakeSettingInstance): FakeDropdownComponentInstance {
-  const dropdown = setting.controls.find((control: unknown) => control instanceof FakeDropdownComponent);
-
-  if (!dropdown || !(dropdown instanceof FakeDropdownComponent)) {
-    throw new Error(`Dropdown not found for setting: ${setting.name}`);
-  }
-
-  return dropdown;
-}
-
-function getText(setting: FakeSettingInstance): FakeTextComponentInstance {
-  const text = setting.controls.find((control: unknown) => typeof control === "object" && control !== null && "triggerChange" in (control as Record<string, unknown>) && "value" in (control as Record<string, unknown>) && !(control instanceof FakeDropdownComponent) && !(control instanceof FakeButtonComponent));
-
-  if (!text) {
-    throw new Error(`Text control not found for setting: ${setting.name}`);
-  }
-
-  return text as FakeTextComponentInstance;
-}
-
-function getToggle(setting: FakeSettingInstance): FakeToggleComponentInstance {
-  const toggle = setting.controls.find((control: unknown) => typeof control === "object" && control !== null && "triggerChange" in (control as Record<string, unknown>) && "value" in (control as Record<string, unknown>) && !(control instanceof FakeDropdownComponent) && !(control instanceof FakeButtonComponent) && typeof (control as { value?: unknown }).value === "boolean");
-
-  if (!toggle) {
-    throw new Error(`Toggle not found for setting: ${setting.name}`);
-  }
-
-  return toggle as FakeToggleComponentInstance;
-}
-
-function queryCheckboxByPath(containerEl: FakeContainerElInstance, folderPath: string): FakeElementInstance | undefined {
-  return findElement(containerEl, (element) => element.tag === "input" && element.dataset.folderPath === folderPath);
-}
-
-function getCheckboxByPath(containerEl: FakeContainerElInstance, folderPath: string): FakeElementInstance {
-  const checkbox = queryCheckboxByPath(containerEl, folderPath);
-  if (!checkbox) {
-    throw new Error(`Checkbox not found for folder path: ${folderPath}`);
-  }
-
-  return checkbox;
-}
-
-function queryFolderToggle(containerEl: FakeContainerElInstance, folderPath: string): FakeElementInstance | undefined {
-  return findElement(containerEl, (element) => element.dataset.folderToggle === folderPath);
-}
-
-function getFolderToggle(containerEl: FakeContainerElInstance, folderPath: string): FakeElementInstance {
-  const toggle = queryFolderToggle(containerEl, folderPath);
-  if (!toggle) {
-    throw new Error(`Toggle not found for folder path: ${folderPath}`);
-  }
-
-  return toggle;
-}
-
-function getFolderRow(containerEl: FakeContainerElInstance, folderPath: string): FakeElementInstance {
-  const row = findElement(containerEl, (element) => element.dataset.folderRow === folderPath);
-  if (!row) {
-    throw new Error(`Row not found for folder path: ${folderPath}`);
-  }
-
-  return row;
-}
-
-function findElement(
-  root: FakeElementInstance,
-  predicate: (element: FakeElementInstance) => boolean,
-): FakeElementInstance | undefined {
-  if (predicate(root)) {
-    return root;
-  }
-
-  for (const child of root.children) {
-    if (!(child instanceof FakeElement)) {
+function findElement(container: QueryRoot, predicate: (element: InstanceType<typeof FakeElement>) => boolean): InstanceType<typeof FakeElement> | undefined {
+  const stack = [...asFakeContainer(container).children];
+  while (stack.length > 0) {
+    const current = stack.shift();
+    if (!current) {
       continue;
     }
 
-    const match = findElement(child as FakeElementInstance, predicate);
-    if (match) {
-      return match;
+    if (predicate(current)) {
+      return current;
     }
+
+    stack.unshift(...current.children);
   }
 
   return undefined;
 }
 
-async function flushAsync(): Promise<void> {
+function findElements(container: QueryRoot, predicate: (element: InstanceType<typeof FakeElement>) => boolean): InstanceType<typeof FakeElement>[] {
+  const matches: InstanceType<typeof FakeElement>[] = [];
+  const stack = [...asFakeContainer(container).children];
+  while (stack.length > 0) {
+    const current = stack.shift();
+    if (!current) {
+      continue;
+    }
+
+    if (predicate(current)) {
+      matches.push(current);
+    }
+
+    stack.unshift(...current.children);
+  }
+
+  return matches;
+}
+
+function queryByDataset(container: QueryRoot, key: string, value: string): InstanceType<typeof FakeElement> {
+  const element = findElement(container, (candidate) => candidate.dataset[key] === value);
+  if (!element) {
+    throw new Error(`Element not found for data-${key}=${value}`);
+  }
+  return element;
+}
+
+function queryAllByDataset(container: QueryRoot, key: string): InstanceType<typeof FakeElement>[] {
+  return findElements(container, (candidate) => key in candidate.dataset);
+}
+
+function findSetting(container: QueryRoot, name: string): FakeSettingInstance {
+  const setting = asFakeContainer(container).settings.find((candidate) => candidate.name === name);
+  if (!setting) {
+    throw new Error(`Setting not found: ${name}`);
+  }
+  return setting;
+}
+
+function getToggle(setting: FakeSettingInstance): FakeToggleInstance {
+  const toggle = setting.controls.find((control) => typeof control === "object" && control !== null && "triggerChange" in control && "value" in control && typeof (control as { value?: unknown }).value === "boolean");
+  if (!toggle) {
+    throw new Error(`Toggle not found for setting: ${setting.name}`);
+  }
+  return toggle as FakeToggleInstance;
+}
+
+function collectTexts(container: QueryRoot): string[] {
+  return findElements(container, () => true)
+    .map((element) => element.textContent || element.text)
+    .filter((text): text is string => Boolean(text));
+}
+
+function getEmptyCallCount(container: QueryRoot): number {
+  return asFakeContainer(container).emptyCallCount;
+}
+
+async function flushPromises(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
 }
 
-describe("AnkiHeadingSyncSettingTab", () => {
+describe("PluginSettingTab", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    getLanguageMock.mockReset();
-    getLanguageMock.mockReturnValue("en");
-  });
-
-  it("renders key settings labels, descriptions, and aria text in English", async () => {
-    const plugin = new FakePlugin();
-    plugin.settings = {
-      ...plugin.settings,
-      scopeMode: "include",
-    };
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-    expect(container.textNodes).toContain("Anki Heading Sync");
-    expect(findSetting(container, "AnkiConnect URL").desc).toBe("Default is http://127.0.0.1:8765");
-    expect(findSetting(container, "Card answer cutoff mode").desc).toBe("A valid sync marker always wins. Without a valid marker, either keep the whole heading block or stop before the first 2+ consecutive blank lines.");
-    expect(findSetting(container, "Obsidian backlink label").desc).toBe("The text shown for the backlink. Blank input falls back to Open in Obsidian.");
-    expect(findSetting(container, "Obsidian backlink placement").desc).toBe("Choose whether the backlink is appended to the question field or placed at the start or end of the answer body.");
-    expect(findSetting(container, "Sync Obsidian tags to Anki").desc).toBe("Sync Obsidian-recognized tags from the current note into Anki note tags, including nested tags. On each sync, these tags overwrite the managed tags in Anki based on the current Obsidian content.");
-    expect(findSetting(container, "Keep pure tag lines in card body").desc).toBe("When turned off, remove every line in the card body that contains only tags, such as \"#ProjectA #重点/案例\". Inline tags like \"This is a #tag example\" and lines with ordinary text like \"标签：#项目A\" are kept. Extra blank lines created by removal are cleaned up automatically.");
-    expect(findSetting(container, "Run scope").desc).toBe("Only process Markdown files in the checked folders below");
-
-    await flushAsync();
-    tab.display();
-
-    const toggle = getFolderToggle(container, "notes");
-    expect((toggle as unknown as { [key: string]: string })["aria-label"]).toBe("Expand notes");
-
-    await toggle.trigger("click");
-    expect((getFolderToggle(container, "notes") as unknown as { [key: string]: string })["aria-label"]).toBe("Collapse notes");
-  });
-
-  it("renders key settings labels, descriptions, and aria text in Simplified Chinese", async () => {
     getLanguageMock.mockReturnValue("zh");
-    const plugin = new FakePlugin();
-    plugin.settings = {
-      ...plugin.settings,
-      scopeMode: "include",
-    };
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-    expect(findSetting(container, "QA 标题层级").desc).toBe("默认是 H4");
-    expect(findSetting(container, "卡片正文截止模式").desc).toBe("有效同步标记始终优先。没有有效标记时，选择继续到整个标题块末尾，或在首个 2+ 连续空行前截止。");
-    expect(findSetting(container, "Obsidian 回链显示名称").desc).toBe("设置回链显示的文字。留空或只填空格时会回退为 Open in Obsidian。");
-    expect(findSetting(container, "Obsidian 回链放置位置").desc).toBe("选择把回链追加到问题栏最后一行，或放到答案正文的第一行 / 最后一行。");
-    expect(findSetting(container, "同步 Obsidian 标签到 Anki").desc).toBe("将当前笔记中 Obsidian 识别到的标签同步为 Anki 笔记标签，支持嵌套标签。每次同步时，这些标签都会以当前 Obsidian 内容为准覆盖 Anki。");
-    expect(findSetting(container, "在卡片正文中保留纯标签行").desc).toBe("关闭后，会删除正文中所有只包含标签的整行，例如 “#项目A #重点/案例”。像“这是 #标签 的案例”这类行内标签，或“标签：#项目A”这类带普通文字的行，不会被删除。删除后会自动清理多余空行。");
-    expect(findSetting(container, "运行范围").desc).toBe("仅处理下方勾选文件夹中的 Markdown 文件");
-    expect(findSetting(container, "默认牌组").desc).toBe("优先级最低：当文件级 deck 与文件夹映射都未命中时使用。");
-
-    await flushAsync();
-    tab.display();
-
-    const toggle = getFolderToggle(container, "notes");
-    expect((toggle as unknown as { [key: string]: string })["aria-label"]).toBe("展开 notes");
-
-    await toggle.trigger("click");
-    expect((getFolderToggle(container, "notes") as unknown as { [key: string]: string })["aria-label"]).toBe("收起 notes");
+    vi.useRealTimers();
   });
 
-  it("refreshes note type list from Anki into the dropdowns", async () => {
-    const plugin = new FakePlugin();
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-    await getButton(findSetting(container, "Refresh note types from Anki")).click();
-
-    const refreshSetting = findSetting(container, "Refresh note types from Anki");
-    const dropdown = getDropdown(findSetting(container, "QA / Basic note type"));
-    expect(dropdown.options.map((option: { value: string }) => option.value)).toEqual(["Basic", "Cloze", "Custom Basic", "Custom Cloze", QA_GROUP_MODEL_NAME, "Semantic QA"]);
-    expect(refreshSetting.desc).toBe("Loaded 6 note types from Anki.");
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
-  it("uses the same total note type count for status text and dropdown options", async () => {
+  it("renders five cards with the required default expansion state", () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
 
     tab.display();
-    await getButton(findSetting(container, "Refresh note types from Anki")).click();
 
-    const refreshSetting = findSetting(container, "Refresh note types from Anki");
-    const basicDropdown = getDropdown(findSetting(container, "QA / Basic note type"));
-    const clozeDropdown = getDropdown(findSetting(container, "Cloze note type"));
-    const semanticDropdown = getDropdown(findSetting(container, "Semantic QA note type"));
-
-    expect(refreshSetting.desc).toBe(`Loaded ${basicDropdown.options.length} note types from Anki.`);
-    expect(clozeDropdown.options).toHaveLength(basicDropdown.options.length);
-    expect(semanticDropdown.options).toHaveLength(basicDropdown.options.length);
+    const cards = queryAllByDataset(tab.containerEl, "settingsCard");
+    expect(cards).toHaveLength(5);
+    expect(queryByDataset(tab.containerEl, "settingsCardBody", "card-types").style.display).toBe("block");
+    expect(queryByDataset(tab.containerEl, "settingsCardBody", "commands").style.display).toBe("block");
+    expect(queryByDataset(tab.containerEl, "settingsCardBody", "sync-content").style.display).toBe("none");
+    expect(queryByDataset(tab.containerEl, "settingsCardBody", "scope").style.display).toBe("none");
+    expect(queryByDataset(tab.containerEl, "settingsCardBody", "deck").style.display).toBe("none");
   });
 
-  it("shows QA Group model status and includes it in the field mapping dropdowns", async () => {
+  it("renders card 1 table with four rows and the required columns", () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
 
     tab.display();
 
-    expect(container.textNodes).toContain(`Managed note type: ${QA_GROUP_MODEL_NAME}. QA Group sync writes Stem / GroupId / Src / S01..S12 directly. The same note type can also appear in the field mapping panels below if you want to reuse it for other routes.`);
-    expect(container.textNodes).toContain("Managed model contract: 39 fields and 12 templates are checked automatically during sync.");
+    const headerTexts = findElements(tab.containerEl, (element) => element.tag === "th").map((element) => element.textContent);
+    expect(headerTexts).toEqual(["启用", "卡片类型", "卡片标记", "额外标记", "Anki 笔记模板", "问题字段", "答案字段"]);
 
-    await getButton(findSetting(container, "Refresh note types from Anki")).click();
-
-    const semanticDropdown = getDropdown(findSetting(container, "Semantic QA note type"));
-    expect(semanticDropdown.options.map((option: { value: string }) => option.value)).toContain(QA_GROUP_MODEL_NAME);
-  });
-
-  it("allows selecting the QA Group model inside semantic QA mapping controls", async () => {
-    const plugin = new FakePlugin();
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-    await getButton(findSetting(container, "Refresh note types from Anki")).click();
-    await getDropdown(findSetting(container, "Semantic QA note type")).triggerChange(QA_GROUP_MODEL_NAME);
-
-    expect(plugin.settings.semanticQaNoteType).toBe(QA_GROUP_MODEL_NAME);
-    expect(container.textNodes).toContain("Selected ObsiAnki QA Group 12. Read fields from Anki to create or refresh its mapping.");
-  });
-
-  it("loads fields, applies suggestions, and saves a user-adjusted basic mapping", async () => {
-    const plugin = new FakePlugin();
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-    await getButton(findSetting(container, "Refresh note types from Anki")).click();
-    await getButton(findSetting(container, "QA / Basic fields")).click();
-
-    const titleDropdown = getDropdown(findSetting(container, "QA / Basic title field"));
-    const bodyDropdown = getDropdown(findSetting(container, "QA / Basic body field"));
-
-    expect(titleDropdown.value).toBe("Title");
-    expect(bodyDropdown.value).toBe("Body");
-
-    await bodyDropdown.triggerChange("Hint");
-    await getButton(findSetting(container, "QA / Basic mapping")).click();
-
-    expect(plugin.settings.noteFieldMappings).toEqual({
-      [createNoteFieldMappingKey("basic", "Custom Basic")]: {
-        cardType: "basic",
-        modelName: "Custom Basic",
-        loadedFieldNames: ["Title", "Body", "Hint"],
-        titleField: "Title",
-        bodyField: "Hint",
-        loadedAt: expect.any(Number),
-      },
-    });
-    expect(container.textNodes).toContain("Saved mapping for Custom Basic.");
-  });
-
-  it("loads cloze fields and suggests the main field", async () => {
-    const plugin = new FakePlugin();
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-    await getButton(findSetting(container, "Refresh note types from Anki")).click();
-    await getDropdown(findSetting(container, "Cloze note type")).triggerChange("Custom Cloze");
-    await getButton(findSetting(container, "Cloze fields")).click();
-
-    const mainFieldDropdown = getDropdown(findSetting(container, "Cloze main field"));
-    expect(mainFieldDropdown.value).toBe("Text");
-  });
-
-  it("shows semantic QA preview and saves a semantic QA mapping", async () => {
-    const plugin = new FakePlugin();
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-
-    expect(container.textNodes).toContain("Trigger heading example: 城市更新 #anki-list-qa");
-    expect(container.textNodes).toContain("Question preview: 城市更新<br>核心产品");
-    expect(container.textNodes).toContain("Answer preview: 百人会、城市更新研习社、城市更新创投营。");
-
-    await getText(findSetting(container, "Semantic QA marker")).triggerChange("#semantic-qa");
-    await getButton(findSetting(container, "Refresh note types from Anki")).click();
-    await getButton(findSetting(container, "Semantic QA fields")).click();
-
-    const titleDropdown = getDropdown(findSetting(container, "Semantic QA title field"));
-    const bodyDropdown = getDropdown(findSetting(container, "Semantic QA body field"));
-
-    expect(titleDropdown.value).toBe("Title");
-    expect(bodyDropdown.value).toBe("Body");
-
-    await bodyDropdown.triggerChange("Source");
-    await getButton(findSetting(container, "Semantic QA mapping")).click();
-
-    expect(plugin.settings.semanticQaMarker).toBe("#semantic-qa");
-    expect(plugin.settings.noteFieldMappings).toEqual(expect.objectContaining({
-      [createNoteFieldMappingKey("semantic-qa", "Semantic QA")]: {
-        cardType: "semantic-qa",
-        modelName: "Semantic QA",
-        loadedFieldNames: ["Title", "Body", "Source"],
-        titleField: "Title",
-        bodyField: "Source",
-        loadedAt: expect.any(Number),
-      },
-    }));
-    expect(container.textNodes).toContain("Saved mapping for Semantic QA.");
-    expect(container.textNodes).toContain("Trigger heading example: 城市更新 #semantic-qa");
-  });
-
-  it("saves the QA Group marker independently from the semantic QA marker", async () => {
-    const plugin = new FakePlugin();
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-    await getText(findSetting(container, "QA Group marker")).triggerChange("#anki-list-12");
-
-    expect(plugin.settings.qaGroupMarker).toBe("#anki-list-12");
-    expect(plugin.settings.semanticQaMarker).toBe("#anki-list-qa");
-  });
-
-  it("saves and rehydrates the card answer cutoff mode", async () => {
-    const plugin = new FakePlugin();
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-
-    const cutoffDropdown = getDropdown(findSetting(container, "Card answer cutoff mode"));
-    expect(cutoffDropdown.value).toBe("heading-block");
-    expect(cutoffDropdown.options.map((option: { value: string }) => option.value)).toEqual(["heading-block", "double-blank-lines"]);
-
-    await cutoffDropdown.triggerChange("double-blank-lines");
-    expect(plugin.settings.cardAnswerCutoffMode).toBe("double-blank-lines");
-
-    tab.display();
-    expect(getDropdown(findSetting(container, "Card answer cutoff mode")).value).toBe("double-blank-lines");
-  });
-
-  it("saves and rehydrates the new sync option toggles", async () => {
-    const plugin = new FakePlugin();
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-
-    const syncTagsToggle = getToggle(findSetting(container, "Sync Obsidian tags to Anki"));
-    const keepPureTagLinesToggle = getToggle(findSetting(container, "Keep pure tag lines in card body"));
-
-    expect(syncTagsToggle.value).toBe(true);
-    expect(keepPureTagLinesToggle.value).toBe(true);
-
-    await syncTagsToggle.triggerChange(false);
-    await keepPureTagLinesToggle.triggerChange(false);
-
-    expect(plugin.settings.syncObsidianTagsToAnki).toBe(false);
-    expect(plugin.settings.keepPureTagLinesInCardBody).toBe(false);
-
-    tab.display();
-
-    expect(getToggle(findSetting(container, "Sync Obsidian tags to Anki")).value).toBe(false);
-    expect(getToggle(findSetting(container, "Keep pure tag lines in card body")).value).toBe(false);
-  });
-
-  it("trims the backlink label on save and falls back to the default label when blank", async () => {
-    const plugin = new FakePlugin();
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-
-    const labelInput = getText(findSetting(container, "Obsidian backlink label"));
-    expect(labelInput.value).toBe("Open in Obsidian");
-
-    await labelInput.triggerChange("  Open note  ");
-    expect(plugin.settings.obsidianBacklinkLabel).toBe("Open note");
-
-    await labelInput.triggerChange("   ");
-    expect(plugin.settings.obsidianBacklinkLabel).toBe("Open in Obsidian");
-  });
-
-  it("saves and rehydrates the backlink placement dropdown", async () => {
-    const plugin = new FakePlugin();
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-
-    const placementDropdown = getDropdown(findSetting(container, "Obsidian backlink placement"));
-    expect(placementDropdown.value).toBe("answer-last-line");
-    expect(placementDropdown.options.map((option: { value: string }) => option.value)).toEqual([
-      "question-last-line",
-      "answer-first-line",
-      "answer-last-line",
+    const rowLabels = findElements(tab.containerEl, (element) => element.dataset.cardTypeConfig !== undefined).map((row) => row.children[1]?.textContent);
+    expect(rowLabels).toEqual([
+      "问答题（常规段落形式）",
+      "问答题（多级列表形式）",
+      "填空题",
+      "语义问答题",
     ]);
-
-    await placementDropdown.triggerChange("question-last-line");
-    expect(plugin.settings.obsidianBacklinkPlacement).toBe("question-last-line");
-
-    tab.display();
-    expect(getDropdown(findSetting(container, "Obsidian backlink placement")).value).toBe("question-last-line");
   });
 
-  it("removes the old folder textareas and hides the folder tree in all mode", async () => {
+  it("auto saves toggle, heading, note type and field mapping edits", async () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
 
     tab.display();
-    await flushAsync();
+    await queryByDataset(tab.containerEl, "cardTypesRefresh", "true").trigger("click");
+    await flushPromises();
 
-    expect(querySetting(container, "Include folders")).toBeUndefined();
-    expect(querySetting(container, "Exclude folders")).toBeUndefined();
-    expect(findSetting(container, "Run scope")).toBeDefined();
-    expect(queryCheckboxByPath(container, "notes")).toBeUndefined();
+    const basicToggle = queryByDataset(tab.containerEl, "cardTypeEnabled", "basic");
+    basicToggle.checked = false;
+    await basicToggle.trigger("change");
+    expect(plugin.settings.cardTypeConfigs.basic.enabled).toBe(false);
+
+    const clozeHeading = queryByDataset(tab.containerEl, "cardTypeHeading", "cloze");
+    clozeHeading.value = "6";
+    await clozeHeading.trigger("change");
+    expect(plugin.settings.cardTypeConfigs.cloze.headingLevel).toBe(6);
+
+    const basicNoteType = queryByDataset(tab.containerEl, "cardTypeNoteType", "basic");
+    basicNoteType.value = "Basic";
+    await basicNoteType.trigger("change");
+    expect(plugin.settings.cardTypeConfigs.basic.noteType).toBe("Basic");
+
+    await flushPromises();
+    const basicQuestionField = queryByDataset(tab.containerEl, "cardTypeQuestionField", "basic");
+    basicQuestionField.value = "Hint";
+    await basicQuestionField.trigger("change");
+    const basicAnswerField = queryByDataset(tab.containerEl, "cardTypeAnswerField", "basic");
+    basicAnswerField.value = "Body";
+    await basicAnswerField.trigger("change");
+
+    expect(plugin.settings.noteFieldMappings[createNoteFieldMappingKey("basic", plugin.settings.cardTypeConfigs.basic.noteType)]).toEqual(expect.objectContaining({
+      titleField: "Hint",
+      bodyField: "Body",
+    }));
   });
 
-  it("loads the current folder tree when the settings page first opens", async () => {
+  it("debounces text input saves instead of saving every keystroke", async () => {
+    vi.useFakeTimers();
     const plugin = new FakePlugin();
-    plugin.settings = {
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+
+    const markerInput = queryByDataset(tab.containerEl, "cardTypeMarker", "semantic-qa");
+    markerInput.value = "#semantic-a";
+    await markerInput.trigger("input");
+    markerInput.value = "#semantic-ab";
+    await markerInput.trigger("input");
+
+    expect(plugin.updateCalls).toHaveLength(0);
+
+    vi.advanceTimersByTime(499);
+    await flushPromises();
+    expect(plugin.updateCalls).toHaveLength(0);
+
+    vi.advanceTimersByTime(1);
+    await flushPromises();
+    expect(plugin.settings.cardTypeConfigs["semantic-qa"].extraMarker).toBe("#semantic-ab");
+    expect(plugin.updateCalls).toHaveLength(1);
+  });
+
+  it("blocks conflicting default rows and shows the error in card 1", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+
+    const clozeHeading = queryByDataset(tab.containerEl, "cardTypeHeading", "cloze");
+    clozeHeading.value = "4";
+    await clozeHeading.trigger("change");
+
+    expect(plugin.settings.cardTypeConfigs.cloze.headingLevel).toBe(5);
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("同一个 H4 只能有一个启用的默认卡片类型"))).toBe(true);
+  });
+
+  it("expanding and collapsing cards does not rebuild the whole settings page", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    const initialEmptyCount = getEmptyCallCount(tab.containerEl);
+
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
+    expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
+
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
+    expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
+  });
+
+  it("loading Anki config refreshes only card 1 instead of rebuilding the whole page", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    const initialEmptyCount = getEmptyCallCount(tab.containerEl);
+
+    await queryByDataset(tab.containerEl, "cardTypesRefresh", "true").trigger("click");
+    await flushPromises();
+
+    expect(plugin.listNoteModelsCalls).toBe(1);
+    expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
+  });
+
+  it("folder tree expand and check refresh only the scope card", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
       ...plugin.settings,
       scopeMode: "include",
-    };
+    });
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
-    await flushAsync();
-    tab.display();
+    const initialEmptyCount = getEmptyCallCount(tab.containerEl);
 
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
+    await flushPromises();
     expect(plugin.listFolderTreeCalls).toBe(1);
-    expect(getCheckboxByPath(tab.containerEl as unknown as FakeContainerElInstance, "notes")).toBeDefined();
-  });
+    expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
 
-  it("shows the folder tree as a collapsed hierarchy and reveals children after expanding a parent", async () => {
-    const plugin = new FakePlugin();
-    plugin.settings = {
-      ...plugin.settings,
-      scopeMode: "include",
-      includeFolders: ["notes/sub"],
-    };
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
+    await queryByDataset(tab.containerEl, "folderToggle", "notes").trigger("click");
+    expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
 
-    tab.display();
-    await flushAsync();
-    tab.display();
-
-    const parentCheckbox = getCheckboxByPath(container, "notes");
-
-    expect(parentCheckbox.checked).toBe(false);
-    expect(parentCheckbox.indeterminate).toBe(true);
-    expect((parentCheckbox as unknown as { [key: string]: string })["aria-checked"]).toBe("mixed");
-    expect(queryCheckboxByPath(container, "notes/sub")).toBeUndefined();
-
-    await getFolderToggle(container, "notes").trigger("click");
-
-    const childCheckbox = getCheckboxByPath(container, "notes/sub");
-    const parentRow = getFolderRow(container, "notes");
-    const childRow = getFolderRow(container, "notes/sub");
-
-    expect(childCheckbox.checked).toBe(true);
-    expect(parentRow.dataset.folderDepth).toBe("0");
-    expect(childRow.dataset.folderDepth).toBe("1");
-    expect(parentRow.style.paddingLeft).toBe("0px");
-    expect(childRow.style.paddingLeft).toBe("18px");
-    expect(container.textNodes).toContain("empty");
-  });
-
-  it("keeps a single selected child folder from being promoted to its parent", async () => {
-    const plugin = new FakePlugin();
-    plugin.settings = {
-      ...plugin.settings,
-      scopeMode: "include",
-    };
-    plugin.folderTree = [
-      {
-        path: "9Anki背诵",
-        name: "9Anki背诵",
-        children: [
-          {
-            path: "9Anki背诵/随感",
-            name: "随感",
-            children: [],
-          },
-        ],
-      },
-    ];
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-    await flushAsync();
-    tab.display();
-    await getFolderToggle(container, "9Anki背诵").trigger("click");
-
-    const childCheckbox = getCheckboxByPath(container, "9Anki背诵/随感");
+    const childCheckbox = queryByDataset(tab.containerEl, "folderPath", "notes/sub");
     childCheckbox.checked = true;
     await childCheckbox.trigger("change");
-    await flushAsync();
-
-    expect(plugin.settings.includeFolders).toEqual(["9Anki背诵/随感"]);
-    expect(getCheckboxByPath(container, "9Anki背诵/随感").checked).toBe(true);
-    expect(getCheckboxByPath(container, "9Anki背诵").checked).toBe(false);
-    expect(getCheckboxByPath(container, "9Anki背诵").indeterminate).toBe(true);
-    expect((getCheckboxByPath(container, "9Anki背诵") as unknown as { [key: string]: string })["aria-checked"]).toBe("mixed");
-
-    tab.hide();
-    tab.display();
-    await flushAsync();
-    tab.display();
-
-    expect(plugin.settings.includeFolders).toEqual(["9Anki背诵/随感"]);
-    expect(getCheckboxByPath(container, "9Anki背诵").checked).toBe(false);
-    expect(getCheckboxByPath(container, "9Anki背诵").indeterminate).toBe(true);
-
-    await getFolderToggle(container, "9Anki背诵").trigger("click");
-
-    expect(getCheckboxByPath(container, "9Anki背诵/随感").checked).toBe(true);
+    expect(plugin.settings.includeFolders).toContain("notes/sub");
+    expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
   });
 
-  it("reloads folder tree after the settings tab is reopened and shows newly created folders", async () => {
-    const plugin = new FakePlugin();
-    plugin.settings = {
-      ...plugin.settings,
-      scopeMode: "include",
-    };
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-    await flushAsync();
-    tab.display();
-
-    expect(plugin.listFolderTreeCalls).toBe(1);
-    expect(queryCheckboxByPath(container, "notes/new-folder")).toBeUndefined();
-
-    plugin.folderTree = [
-      {
-        path: "notes",
-        name: "notes",
-        children: [
-          {
-            path: "notes/sub",
-            name: "sub",
-            children: [],
-          },
-          {
-            path: "notes/other",
-            name: "other",
-            children: [],
-          },
-          {
-            path: "notes/new-folder",
-            name: "new-folder",
-            children: [],
-          },
-        ],
-      },
-      {
-        path: "empty",
-        name: "empty",
-        children: [],
-      },
-    ];
-
-    tab.hide();
-    tab.display();
-    await flushAsync();
-    tab.display();
-
-    expect(plugin.listFolderTreeCalls).toBe(2);
-
-    await getFolderToggle(container, "notes").trigger("click");
-
-    const newFolderCheckbox = getCheckboxByPath(container, "notes/new-folder");
-    const newFolderRow = getFolderRow(container, "notes/new-folder");
-
-    expect(newFolderCheckbox.checked).toBe(false);
-    expect(newFolderRow.dataset.folderDepth).toBe("1");
-    expect(newFolderRow.style.paddingLeft).toBe("18px");
-  });
-
-  it("keeps existing folder selections after reloading the folder tree on reopen", async () => {
-    const plugin = new FakePlugin();
-    plugin.settings = {
-      ...plugin.settings,
-      scopeMode: "include",
-      includeFolders: ["notes/sub"],
-    };
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-    await flushAsync();
-    tab.display();
-    await getFolderToggle(container, "notes").trigger("click");
-
-    expect(getCheckboxByPath(container, "notes/sub").checked).toBe(true);
-    expect(getCheckboxByPath(container, "notes").indeterminate).toBe(true);
-
-    plugin.folderTree = [
-      {
-        path: "notes",
-        name: "notes",
-        children: [
-          {
-            path: "notes/sub",
-            name: "sub",
-            children: [],
-          },
-          {
-            path: "notes/other",
-            name: "other",
-            children: [],
-          },
-          {
-            path: "notes/new-folder",
-            name: "new-folder",
-            children: [],
-          },
-        ],
-      },
-      {
-        path: "empty",
-        name: "empty",
-        children: [],
-      },
-    ];
-
-    tab.hide();
-    tab.display();
-    await flushAsync();
-    tab.display();
-    await getFolderToggle(container, "notes").trigger("click");
-
-    expect(plugin.settings.includeFolders).toEqual(["notes/sub"]);
-    expect(getCheckboxByPath(container, "notes/sub").checked).toBe(true);
-    expect(getCheckboxByPath(container, "notes").indeterminate).toBe(true);
-    expect(getCheckboxByPath(container, "notes/new-folder").checked).toBe(false);
-  });
-
-  it("switches scope mode and saves compressed folder selections from the tree", async () => {
+  it("toggling file deck mode refreshes only the deck card", async () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
 
     tab.display();
-    await flushAsync();
-    await getDropdown(findSetting(container, "Run scope")).triggerChange("include");
-    await flushAsync();
+    const initialEmptyCount = getEmptyCallCount(tab.containerEl);
 
-    const parentCheckbox = getCheckboxByPath(container, "notes");
-    parentCheckbox.checked = true;
-    await parentCheckbox.trigger("change");
-    await flushAsync();
-
-    expect(plugin.settings.includeFolders).toEqual(["notes"]);
-
-    await getDropdown(findSetting(container, "Run scope")).triggerChange("all");
-    await flushAsync();
-
-    expect(queryCheckboxByPath(container, "notes")).toBeUndefined();
-  });
-
-  it("saves and rehydrates module 5 deck settings", async () => {
-    const plugin = new FakePlugin();
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-
-    expect(container.textNodes).toContain("Default deck");
-    expect(container.textNodes).toContain("File-level custom deck");
-    expect(container.textNodes).toContain("Advanced: folder mapping");
-    expect(container.textNodes).toContain("Final priority");
-
-    await getToggle(findSetting(container, "Enable file-level custom deck")).triggerChange(true);
-    await flushAsync();
-
-    await getText(findSetting(container, "Deck marker name")).triggerChange("MY DECK");
-    await getText(findSetting(container, "Default deck template")).triggerChange("vault::filename");
-    await getDropdown(findSetting(container, "Template insert location")).triggerChange("yaml");
-    await getDropdown(findSetting(container, "Folder mapping mode")).triggerChange("folder-and-file");
-    await getText(findSetting(container, "Default deck")).triggerChange("Deck::Default");
-    await flushAsync();
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "deck").trigger("click");
+    const fileDeckSetting = findSetting(tab.containerEl, "开启文件级自定义牌组");
+    await getToggle(fileDeckSetting).triggerChange(true);
 
     expect(plugin.settings.fileDeckEnabled).toBe(true);
-    expect(plugin.settings.fileDeckMarker).toBe("MY DECK");
-    expect(plugin.settings.fileDeckTemplate).toBe("vault::filename");
-    expect(plugin.settings.fileDeckInsertLocation).toBe("yaml");
-    expect(plugin.settings.folderDeckMode).toBe("folder-and-file");
-    expect(plugin.settings.defaultDeck).toBe("Deck::Default");
-
-    tab.display();
-
-    expect(getToggle(findSetting(container, "Enable file-level custom deck")).value).toBe(true);
-    expect(getText(findSetting(container, "Deck marker name")).value).toBe("MY DECK");
-    expect(getText(findSetting(container, "Default deck template")).value).toBe("vault::filename");
-    expect(getDropdown(findSetting(container, "Template insert location")).value).toBe("yaml");
-    expect(getDropdown(findSetting(container, "Folder mapping mode")).value).toBe("folder-and-file");
-    expect(getText(findSetting(container, "Default deck")).value).toBe("Deck::Default");
-  });
-
-  it("exposes the deck template insertion action when file deck mode is enabled", async () => {
-    const plugin = new FakePlugin();
-    plugin.settings = {
-      ...plugin.settings,
-      fileDeckEnabled: true,
-    };
-    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
-    const container = tab.containerEl as unknown as FakeContainerElInstance;
-
-    tab.display();
-    await getButton(findSetting(container, "Insert deck template into the current file")).click();
-
-    expect(plugin.insertDeckTemplateCalls).toBe(1);
+    expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
   });
 });

@@ -1,4 +1,5 @@
 import type { NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
+import { QA_GROUP_MODEL_NAME } from "@/application/config/ManagedNoteModels";
 import { PluginUserError } from "@/application/errors/PluginUserError";
 
 export type ScopeMode = "all" | "include" | "exclude";
@@ -6,8 +7,27 @@ export type FileDeckInsertLocation = "yaml" | "body";
 export type FolderDeckMode = "off" | "folder" | "folder-and-file";
 export type CardAnswerCutoffMode = "heading-block" | "double-blank-lines";
 export type ObsidianBacklinkPlacement = "question-last-line" | "answer-first-line" | "answer-last-line";
+export const CARD_TYPE_CONFIG_IDS = ["basic", "qa-group", "cloze", "semantic-qa"] as const;
+export type CardTypeConfigId = (typeof CARD_TYPE_CONFIG_IDS)[number];
+
+export interface CardTypeConfig {
+  enabled: boolean;
+  headingLevel: number;
+  extraMarker: string;
+  noteType: string;
+}
+
+export type CardTypeConfigs = Record<CardTypeConfigId, CardTypeConfig>;
 
 export const DEFAULT_OBSIDIAN_BACKLINK_LABEL = "Open in Obsidian";
+
+const DEFAULT_BASIC_HEADING_LEVEL = 4;
+const DEFAULT_CLOZE_HEADING_LEVEL = 5;
+const DEFAULT_BASIC_NOTE_TYPE = "Basic";
+const DEFAULT_CLOZE_NOTE_TYPE = "Cloze";
+const DEFAULT_SEMANTIC_QA_NOTE_TYPE = "Semantic QA";
+const DEFAULT_QA_GROUP_MARKER = "#anki-list";
+const DEFAULT_SEMANTIC_QA_MARKER = "#anki-list-qa";
 
 export interface PluginSettings {
   qaHeadingLevel: number;
@@ -18,6 +38,7 @@ export interface PluginSettings {
   clozeNoteType: string;
   semanticQaMarker: string;
   semanticQaNoteType: string;
+  cardTypeConfigs: CardTypeConfigs;
   noteFieldMappings: Record<string, NoteModelFieldMapping>;
   defaultDeck: string;
   fileDeckEnabled: boolean;
@@ -38,14 +59,15 @@ export interface PluginSettings {
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
-  qaHeadingLevel: 4,
-  clozeHeadingLevel: 5,
+  qaHeadingLevel: DEFAULT_BASIC_HEADING_LEVEL,
+  clozeHeadingLevel: DEFAULT_CLOZE_HEADING_LEVEL,
   cardAnswerCutoffMode: "heading-block",
-  qaGroupMarker: "#anki-list",
-  qaNoteType: "Basic",
-  clozeNoteType: "Cloze",
-  semanticQaMarker: "#anki-list-qa",
-  semanticQaNoteType: "Semantic QA",
+  qaGroupMarker: DEFAULT_QA_GROUP_MARKER,
+  qaNoteType: DEFAULT_BASIC_NOTE_TYPE,
+  clozeNoteType: DEFAULT_CLOZE_NOTE_TYPE,
+  semanticQaMarker: DEFAULT_SEMANTIC_QA_MARKER,
+  semanticQaNoteType: DEFAULT_SEMANTIC_QA_NOTE_TYPE,
+  cardTypeConfigs: createDefaultCardTypeConfigs(),
   noteFieldMappings: {},
   defaultDeck: "Obsidian",
   fileDeckEnabled: false,
@@ -85,18 +107,25 @@ export function normalizeObsidianBacklinkLabel(value: string | null | undefined)
 }
 
 export function normalizePluginSettings(settings: PluginSettings): PluginSettings {
+  const cardTypeConfigs = mergeCardTypeConfigs(settings.cardTypeConfigs, settings);
+  const legacySettings = deriveLegacySettings(cardTypeConfigs);
+
   return {
     ...settings,
+    ...legacySettings,
+    cardTypeConfigs,
     obsidianBacklinkLabel: normalizeObsidianBacklinkLabel(settings.obsidianBacklinkLabel),
   };
 }
 
 export function mergePluginSettings(settings?: Partial<PluginSettings> | null): PluginSettings {
   const partialSettings = settings ?? {};
+  const cardTypeConfigs = mergeCardTypeConfigs(partialSettings.cardTypeConfigs, partialSettings);
 
   return normalizePluginSettings({
     ...DEFAULT_SETTINGS,
     ...partialSettings,
+    cardTypeConfigs,
     noteFieldMappings: partialSettings.noteFieldMappings ?? DEFAULT_SETTINGS.noteFieldMappings,
     includeFolders: partialSettings.includeFolders ?? DEFAULT_SETTINGS.includeFolders,
     excludeFolders: partialSettings.excludeFolders ?? DEFAULT_SETTINGS.excludeFolders,
@@ -104,52 +133,10 @@ export function mergePluginSettings(settings?: Partial<PluginSettings> | null): 
 }
 
 export function validatePluginSettings(settings: PluginSettings): void {
-  const headingLevels = [settings.qaHeadingLevel, settings.clozeHeadingLevel];
-
-  for (const level of headingLevels) {
-    if (!Number.isInteger(level) || level < 1 || level > 6) {
-      throw new PluginUserError("errors.settings.headingLevelsRange");
-    }
-  }
-
-  if (settings.qaHeadingLevel === settings.clozeHeadingLevel) {
-    throw new PluginUserError("errors.settings.headingLevelsDifferent");
-  }
+  validateCardTypeConfigs(settings.cardTypeConfigs);
 
   if (settings.cardAnswerCutoffMode !== "heading-block" && settings.cardAnswerCutoffMode !== "double-blank-lines") {
     throw new PluginUserError("errors.settings.cardAnswerCutoffModeInvalid");
-  }
-
-  if (!settings.qaNoteType.trim()) {
-    throw new PluginUserError("errors.settings.qaNoteTypeRequired");
-  }
-
-  if (!settings.qaGroupMarker.trim()) {
-    throw new PluginUserError("errors.settings.qaGroupMarkerRequired");
-  }
-
-  if (!isValidHashtagMarker(settings.qaGroupMarker.trim())) {
-    throw new PluginUserError("errors.settings.qaGroupMarkerInvalid");
-  }
-
-  if (!settings.clozeNoteType.trim()) {
-    throw new PluginUserError("errors.settings.clozeNoteTypeRequired");
-  }
-
-  if (!settings.semanticQaMarker.trim()) {
-    throw new PluginUserError("errors.settings.semanticQaMarkerRequired");
-  }
-
-  if (!isValidSemanticQaMarker(settings.semanticQaMarker.trim())) {
-    throw new PluginUserError("errors.settings.semanticQaMarkerInvalid");
-  }
-
-  if (settings.qaGroupMarker.trim() === settings.semanticQaMarker.trim()) {
-    throw new PluginUserError("errors.settings.qaGroupMarkerConflict");
-  }
-
-  if (!settings.semanticQaNoteType.trim()) {
-    throw new PluginUserError("errors.settings.semanticQaNoteTypeRequired");
   }
 
   validateNoteFieldMappings(settings.noteFieldMappings);
@@ -218,6 +205,59 @@ function validateFolderList(folderList: string[], label: "include" | "exclude"):
   }
 }
 
+export function validateCardTypeConfigs(cardTypeConfigs: CardTypeConfigs): void {
+  if (!cardTypeConfigs || typeof cardTypeConfigs !== "object" || Array.isArray(cardTypeConfigs)) {
+    throw new PluginUserError("errors.settings.cardTypeConfigsObject");
+  }
+
+  const emptyDefaultsByHeading = new Map<number, CardTypeConfigId[]>();
+
+  for (const configId of CARD_TYPE_CONFIG_IDS) {
+    const config = (cardTypeConfigs as Partial<CardTypeConfigs>)[configId];
+    if (!config || typeof config !== "object" || Array.isArray(config)) {
+      throw new PluginUserError("errors.settings.cardTypeConfigsObject");
+    }
+
+    if (typeof config.enabled !== "boolean") {
+      throw new PluginUserError("errors.settings.cardTypeEnabledBoolean");
+    }
+
+    if (!Number.isInteger(config.headingLevel) || config.headingLevel < 1 || config.headingLevel > 6) {
+      throw new PluginUserError("errors.settings.headingLevelsRange");
+    }
+
+    if (typeof config.extraMarker !== "string") {
+      throw new PluginUserError("errors.settings.cardTypeExtraMarkerString");
+    }
+
+    if (configId === "basic" && !config.noteType.trim()) {
+      throw new PluginUserError("errors.settings.qaNoteTypeRequired");
+    }
+
+    if (configId === "cloze" && !config.noteType.trim()) {
+      throw new PluginUserError("errors.settings.clozeNoteTypeRequired");
+    }
+
+    if (configId === "semantic-qa" && !config.noteType.trim()) {
+      throw new PluginUserError("errors.settings.semanticQaNoteTypeRequired");
+    }
+
+    if (!config.enabled || config.extraMarker.trim().length > 0) {
+      continue;
+    }
+
+    const defaults = emptyDefaultsByHeading.get(config.headingLevel) ?? [];
+    defaults.push(configId);
+    emptyDefaultsByHeading.set(config.headingLevel, defaults);
+  }
+
+  for (const [headingLevel, defaults] of emptyDefaultsByHeading.entries()) {
+    if (defaults.length > 1) {
+      throw new PluginUserError("errors.settings.cardTypeDefaultConflict", { headingLevel });
+    }
+  }
+}
+
 function validateNoteFieldMappings(noteFieldMappings: Record<string, NoteModelFieldMapping>): void {
   if (!noteFieldMappings || typeof noteFieldMappings !== "object" || Array.isArray(noteFieldMappings)) {
     throw new PluginUserError("errors.settings.noteFieldMappingsObject");
@@ -240,4 +280,122 @@ function validateNoteFieldMappings(noteFieldMappings: Record<string, NoteModelFi
       throw new PluginUserError("errors.settings.noteFieldMappingsLoadedAt");
     }
   }
+}
+
+function createDefaultCardTypeConfigs(): CardTypeConfigs {
+  return {
+    basic: {
+      enabled: true,
+      headingLevel: DEFAULT_BASIC_HEADING_LEVEL,
+      extraMarker: "",
+      noteType: DEFAULT_BASIC_NOTE_TYPE,
+    },
+    "qa-group": {
+      enabled: true,
+      headingLevel: DEFAULT_BASIC_HEADING_LEVEL,
+      extraMarker: DEFAULT_QA_GROUP_MARKER,
+      noteType: QA_GROUP_MODEL_NAME,
+    },
+    cloze: {
+      enabled: true,
+      headingLevel: DEFAULT_CLOZE_HEADING_LEVEL,
+      extraMarker: "",
+      noteType: DEFAULT_CLOZE_NOTE_TYPE,
+    },
+    "semantic-qa": {
+      enabled: true,
+      headingLevel: DEFAULT_BASIC_HEADING_LEVEL,
+      extraMarker: DEFAULT_SEMANTIC_QA_MARKER,
+      noteType: DEFAULT_SEMANTIC_QA_NOTE_TYPE,
+    },
+  };
+}
+
+function createLegacyBackfilledCardTypeConfigs(settings: Partial<PluginSettings>): CardTypeConfigs {
+  const defaults = createDefaultCardTypeConfigs();
+
+  return {
+    basic: {
+      ...defaults.basic,
+      headingLevel: sanitizeHeadingLevel(settings.qaHeadingLevel, defaults.basic.headingLevel),
+      noteType: sanitizeNoteType(settings.qaNoteType, defaults.basic.noteType),
+    },
+    "qa-group": {
+      ...defaults["qa-group"],
+      headingLevel: sanitizeHeadingLevel(settings.qaHeadingLevel, defaults["qa-group"].headingLevel),
+      extraMarker: sanitizeMarker(settings.qaGroupMarker, defaults["qa-group"].extraMarker),
+      noteType: QA_GROUP_MODEL_NAME,
+    },
+    cloze: {
+      ...defaults.cloze,
+      headingLevel: sanitizeHeadingLevel(settings.clozeHeadingLevel, defaults.cloze.headingLevel),
+      noteType: sanitizeNoteType(settings.clozeNoteType, defaults.cloze.noteType),
+    },
+    "semantic-qa": {
+      ...defaults["semantic-qa"],
+      headingLevel: sanitizeHeadingLevel(settings.qaHeadingLevel, defaults["semantic-qa"].headingLevel),
+      extraMarker: sanitizeMarker(settings.semanticQaMarker, defaults["semantic-qa"].extraMarker),
+      noteType: sanitizeNoteType(settings.semanticQaNoteType, defaults["semantic-qa"].noteType),
+    },
+  };
+}
+
+function mergeCardTypeConfigs(
+  rawCardTypeConfigs: Partial<Record<CardTypeConfigId, Partial<CardTypeConfig>>> | null | undefined,
+  legacySettings: Partial<PluginSettings>,
+): CardTypeConfigs {
+  const legacyBackfilledConfigs = createLegacyBackfilledCardTypeConfigs(legacySettings);
+  const nextConfigs = {} as CardTypeConfigs;
+
+  for (const configId of CARD_TYPE_CONFIG_IDS) {
+    const rawConfig = rawCardTypeConfigs?.[configId];
+    const fallbackConfig = legacyBackfilledConfigs[configId];
+    const mergedConfig = rawConfig && typeof rawConfig === "object" && !Array.isArray(rawConfig)
+      ? { ...fallbackConfig, ...rawConfig }
+      : fallbackConfig;
+
+    nextConfigs[configId] = {
+      enabled: typeof mergedConfig.enabled === "boolean" ? mergedConfig.enabled : fallbackConfig.enabled,
+      headingLevel: sanitizeHeadingLevel(mergedConfig.headingLevel, fallbackConfig.headingLevel),
+      extraMarker: sanitizeMarker(mergedConfig.extraMarker, fallbackConfig.extraMarker),
+      noteType: configId === "qa-group"
+        ? QA_GROUP_MODEL_NAME
+        : sanitizeNoteType(mergedConfig.noteType, fallbackConfig.noteType),
+    };
+  }
+
+  return nextConfigs;
+}
+
+function deriveLegacySettings(cardTypeConfigs: CardTypeConfigs): Pick<PluginSettings, "qaHeadingLevel" | "clozeHeadingLevel" | "qaGroupMarker" | "qaNoteType" | "clozeNoteType" | "semanticQaMarker" | "semanticQaNoteType"> {
+  return {
+    qaHeadingLevel: cardTypeConfigs.basic.headingLevel,
+    clozeHeadingLevel: cardTypeConfigs.cloze.headingLevel,
+    qaGroupMarker: cardTypeConfigs["qa-group"].extraMarker,
+    qaNoteType: cardTypeConfigs.basic.noteType,
+    clozeNoteType: cardTypeConfigs.cloze.noteType,
+    semanticQaMarker: cardTypeConfigs["semantic-qa"].extraMarker,
+    semanticQaNoteType: cardTypeConfigs["semantic-qa"].noteType,
+  };
+}
+
+function sanitizeHeadingLevel(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 6 ? value : fallback;
+}
+
+function sanitizeMarker(value: string | undefined, fallback: string): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  return value.trim();
+}
+
+function sanitizeNoteType(value: string | undefined, fallback: string): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  const trimmedValue = value.trim();
+  return trimmedValue.length > 0 ? trimmedValue : fallback;
 }

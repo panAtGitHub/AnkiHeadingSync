@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { QA_GROUP_MODEL_NAME } from "@/application/config/ManagedNoteModels";
 import { PluginUserError } from "@/application/errors/PluginUserError";
 
 import {
@@ -28,14 +29,34 @@ describe("PluginSettings", () => {
     expect(() => validatePluginSettings(DEFAULT_SETTINGS)).not.toThrow();
   });
 
-  it("rejects equal QA and Cloze heading levels", () => {
+  it("allows equal heading levels when marker and default rows remain unambiguous", () => {
+    expect(() => validatePluginSettings({
+      ...DEFAULT_SETTINGS,
+      cardTypeConfigs: {
+        ...DEFAULT_SETTINGS.cardTypeConfigs,
+        cloze: {
+          ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+          headingLevel: DEFAULT_SETTINGS.cardTypeConfigs.basic.headingLevel,
+          extraMarker: "#cloze",
+        },
+      },
+    })).not.toThrow();
+  });
+
+  it("rejects multiple enabled default rows on the same heading", () => {
     expectPluginUserError(() => {
       validatePluginSettings({
         ...DEFAULT_SETTINGS,
-        qaHeadingLevel: 4,
-        clozeHeadingLevel: 4,
+        cardTypeConfigs: {
+          ...DEFAULT_SETTINGS.cardTypeConfigs,
+          cloze: {
+            ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+            headingLevel: DEFAULT_SETTINGS.cardTypeConfigs.basic.headingLevel,
+            extraMarker: "",
+          },
+        },
       });
-    }, "errors.settings.headingLevelsDifferent");
+    }, "errors.settings.cardTypeDefaultConflict");
   });
 
   it("rejects invalid scope modes", () => {
@@ -59,6 +80,32 @@ describe("PluginSettings", () => {
     expect(DEFAULT_SETTINGS.obsidianBacklinkPlacement).toBe("answer-last-line");
     expect(DEFAULT_SETTINGS.syncObsidianTagsToAnki).toBe(true);
     expect(DEFAULT_SETTINGS.keepPureTagLinesInCardBody).toBe(true);
+    expect(DEFAULT_SETTINGS.cardTypeConfigs).toEqual({
+      basic: {
+        enabled: true,
+        headingLevel: 4,
+        extraMarker: "",
+        noteType: "Basic",
+      },
+      "qa-group": {
+        enabled: true,
+        headingLevel: 4,
+        extraMarker: "#anki-list",
+        noteType: QA_GROUP_MODEL_NAME,
+      },
+      cloze: {
+        enabled: true,
+        headingLevel: 5,
+        extraMarker: "",
+        noteType: "Cloze",
+      },
+      "semantic-qa": {
+        enabled: true,
+        headingLevel: 4,
+        extraMarker: "#anki-list-qa",
+        noteType: "Semantic QA",
+      },
+    });
   });
 
   it("fills new backlink defaults when loading legacy snapshots", () => {
@@ -69,6 +116,32 @@ describe("PluginSettings", () => {
 
     expect(settings.obsidianBacklinkLabel).toBe(DEFAULT_OBSIDIAN_BACKLINK_LABEL);
     expect(settings.obsidianBacklinkPlacement).toBe("answer-last-line");
+    expect(settings.cardTypeConfigs).toEqual({
+      basic: {
+        enabled: true,
+        headingLevel: 4,
+        extraMarker: "",
+        noteType: "Legacy Basic",
+      },
+      "qa-group": {
+        enabled: true,
+        headingLevel: 4,
+        extraMarker: "#anki-list",
+        noteType: QA_GROUP_MODEL_NAME,
+      },
+      cloze: {
+        enabled: true,
+        headingLevel: 5,
+        extraMarker: "",
+        noteType: "Legacy Cloze",
+      },
+      "semantic-qa": {
+        enabled: true,
+        headingLevel: 4,
+        extraMarker: "#anki-list-qa",
+        noteType: "Semantic QA",
+      },
+    });
   });
 
   it("rejects invalid backlink placement values", () => {
@@ -110,19 +183,30 @@ describe("PluginSettings", () => {
   });
 
   it("rejects invalid QA Group markers and semantic marker collisions", () => {
-    expectPluginUserError(() => {
-      validatePluginSettings({
-        ...DEFAULT_SETTINGS,
-        qaGroupMarker: "anki-list",
-      });
-    }, "errors.settings.qaGroupMarkerInvalid");
+    expect(() => validatePluginSettings({
+      ...DEFAULT_SETTINGS,
+      cardTypeConfigs: {
+        ...DEFAULT_SETTINGS.cardTypeConfigs,
+        "qa-group": {
+          ...DEFAULT_SETTINGS.cardTypeConfigs["qa-group"],
+          extraMarker: "anki-list",
+        },
+      },
+    })).not.toThrow();
+  });
 
-    expectPluginUserError(() => {
-      validatePluginSettings({
-        ...DEFAULT_SETTINGS,
-        qaGroupMarker: "#anki-list-qa",
-      });
-    }, "errors.settings.qaGroupMarkerConflict");
+  it("writes managed QA Group model back during normalization", () => {
+    const settings = mergePluginSettings({
+      cardTypeConfigs: {
+        ...DEFAULT_SETTINGS.cardTypeConfigs,
+        "qa-group": {
+          ...DEFAULT_SETTINGS.cardTypeConfigs["qa-group"],
+          noteType: "Custom QA Group",
+        },
+      },
+    });
+
+    expect(settings.cardTypeConfigs["qa-group"].noteType).toBe(QA_GROUP_MODEL_NAME);
   });
 
   it("rejects invalid module 5 enum values", () => {
