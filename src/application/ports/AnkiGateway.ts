@@ -78,6 +78,7 @@ export interface AnkiGateway {
 
 export interface AnkiGroupGateway extends AnkiGateway {
   getModelFieldNames(modelName: string): Promise<string[]>;
+  getModelFieldNamesByModelNames(modelNames: string[]): Promise<Record<string, string[]>>;
   getModelTemplates(modelName: string): Promise<Record<string, AnkiModelTemplate>>;
   getModelStyling(modelName: string): Promise<string>;
   createModel(input: CreateAnkiModelInput): Promise<void>;

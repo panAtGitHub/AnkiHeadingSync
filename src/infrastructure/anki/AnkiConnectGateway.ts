@@ -9,6 +9,11 @@ interface AnkiResponse<T> {
   result: T;
 }
 
+interface AnkiMultiActionResponse<T> {
+  error: string | null;
+  result: T;
+}
+
 interface NoteInfo {
   cards: number[];
   fields?: Record<string, { value?: string }>;
@@ -69,6 +74,32 @@ export class AnkiConnectGateway implements AnkiGroupGateway {
 
   async getModelFieldNames(modelName: string): Promise<string[]> {
     return this.invoke<string[]>("modelFieldNames", { modelName });
+  }
+
+  async getModelFieldNamesByModelNames(modelNames: string[]): Promise<Record<string, string[]>> {
+    const uniqueModelNames = Array.from(new Set(modelNames
+      .map((modelName) => modelName.trim())
+      .filter((modelName) => modelName.length > 0)));
+
+    if (uniqueModelNames.length === 0) {
+      return {};
+    }
+
+    const results = await this.invoke<Array<AnkiMultiActionResponse<string[]> | string[]>>("multi", {
+      actions: uniqueModelNames.map((modelName) => ({
+        action: "modelFieldNames",
+        params: { modelName },
+      })),
+    });
+
+    return uniqueModelNames.reduce<Record<string, string[]>>((fieldNamesByModelName, modelName, index) => {
+      const fieldNames = extractMultiModelFieldNames(results[index]);
+      if (fieldNames) {
+        fieldNamesByModelName[modelName] = fieldNames;
+      }
+
+      return fieldNamesByModelName;
+    }, {});
   }
 
   async getModelTemplates(modelName: string): Promise<Record<string, AnkiModelTemplate>> {
@@ -402,6 +433,27 @@ export class AnkiConnectGateway implements AnkiGroupGateway {
 
     return this.invoke<TResult[]>("multi", { actions });
   }
+}
+
+function extractMultiModelFieldNames(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    return value.filter((fieldName): fieldName is string => typeof fieldName === "string");
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const multiActionResponse = value as Partial<AnkiMultiActionResponse<unknown>>;
+  if (multiActionResponse.error) {
+    return undefined;
+  }
+
+  if (!Array.isArray(multiActionResponse.result)) {
+    return undefined;
+  }
+
+  return multiActionResponse.result.filter((fieldName): fieldName is string => typeof fieldName === "string");
 }
 
 function extractDeckNoteCount(rawStats: unknown, deckId: number | undefined): number | undefined {

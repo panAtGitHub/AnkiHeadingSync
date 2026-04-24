@@ -19,6 +19,13 @@ export interface CardTypeConfig {
 
 export type CardTypeConfigs = Record<CardTypeConfigId, CardTypeConfig>;
 
+export interface AnkiModelFieldCacheEntry {
+  fieldNames: string[];
+  loadedAt: number;
+}
+
+export type AnkiModelFieldCache = Record<string, AnkiModelFieldCacheEntry>;
+
 export const DEFAULT_OBSIDIAN_BACKLINK_LABEL = "Open in Obsidian";
 
 const DEFAULT_BASIC_HEADING_LEVEL = 4;
@@ -41,6 +48,7 @@ export interface PluginSettings {
   cardTypeConfigs: CardTypeConfigs;
   noteFieldMappings: Record<string, NoteModelFieldMapping>;
   ankiNoteTypeCache: string[];
+  ankiModelFieldCache: AnkiModelFieldCache;
   defaultDeck: string;
   fileDeckEnabled: boolean;
   fileDeckMarker: string;
@@ -71,6 +79,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   cardTypeConfigs: createDefaultCardTypeConfigs(),
   noteFieldMappings: {},
   ankiNoteTypeCache: [],
+  ankiModelFieldCache: {},
   defaultDeck: "Obsidian",
   fileDeckEnabled: false,
   fileDeckMarker: "TARGET DECK",
@@ -117,6 +126,7 @@ export function normalizePluginSettings(settings: PluginSettings): PluginSetting
     ...legacySettings,
     cardTypeConfigs,
     ankiNoteTypeCache: normalizeAnkiNoteTypeCache(settings.ankiNoteTypeCache),
+    ankiModelFieldCache: normalizeAnkiModelFieldCache(settings.ankiModelFieldCache),
     obsidianBacklinkLabel: normalizeObsidianBacklinkLabel(settings.obsidianBacklinkLabel),
   };
 }
@@ -130,6 +140,7 @@ export function mergePluginSettings(settings?: Partial<PluginSettings> | null): 
     ...partialSettings,
     cardTypeConfigs,
     noteFieldMappings: partialSettings.noteFieldMappings ?? DEFAULT_SETTINGS.noteFieldMappings,
+    ankiModelFieldCache: partialSettings.ankiModelFieldCache ?? DEFAULT_SETTINGS.ankiModelFieldCache,
     includeFolders: partialSettings.includeFolders ?? DEFAULT_SETTINGS.includeFolders,
     excludeFolders: partialSettings.excludeFolders ?? DEFAULT_SETTINGS.excludeFolders,
   });
@@ -144,6 +155,7 @@ export function validatePluginSettings(settings: PluginSettings): void {
 
   validateNoteFieldMappings(settings.noteFieldMappings);
   validateAnkiNoteTypeCache(settings.ankiNoteTypeCache);
+  validateAnkiModelFieldCache(settings.ankiModelFieldCache);
 
   if (!settings.defaultDeck.trim()) {
     throw new PluginUserError("errors.settings.defaultDeckRequired");
@@ -205,6 +217,32 @@ function validateAnkiNoteTypeCache(ankiNoteTypeCache: string[]): void {
   for (const noteType of ankiNoteTypeCache) {
     if (typeof noteType !== "string") {
       throw new PluginUserError("errors.settings.ankiNoteTypeCacheStrings");
+    }
+  }
+}
+
+function validateAnkiModelFieldCache(ankiModelFieldCache: AnkiModelFieldCache): void {
+  if (!ankiModelFieldCache || typeof ankiModelFieldCache !== "object" || Array.isArray(ankiModelFieldCache)) {
+    throw new PluginUserError("errors.settings.ankiModelFieldCacheObject");
+  }
+
+  for (const cacheEntry of Object.values(ankiModelFieldCache)) {
+    if (!cacheEntry || typeof cacheEntry !== "object" || Array.isArray(cacheEntry)) {
+      throw new PluginUserError("errors.settings.ankiModelFieldCacheEntryObject");
+    }
+
+    if (!Array.isArray(cacheEntry.fieldNames)) {
+      throw new PluginUserError("errors.settings.ankiModelFieldCacheFieldNamesArray");
+    }
+
+    for (const fieldName of cacheEntry.fieldNames) {
+      if (typeof fieldName !== "string") {
+        throw new PluginUserError("errors.settings.ankiModelFieldCacheFieldNamesStrings");
+      }
+    }
+
+    if (!Number.isFinite(cacheEntry.loadedAt)) {
+      throw new PluginUserError("errors.settings.ankiModelFieldCacheLoadedAt");
     }
   }
 }
@@ -436,4 +474,52 @@ function normalizeAnkiNoteTypeCache(value: unknown): string[] {
   }
 
   return [...noteTypeSet].sort((left, right) => left.localeCompare(right));
+}
+
+function normalizeAnkiModelFieldCache(value: unknown): AnkiModelFieldCache {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const normalizedEntries = Object.entries(value).flatMap(([modelName, cacheEntry]) => {
+    const trimmedModelName = modelName.trim();
+    if (trimmedModelName.length === 0 || !cacheEntry || typeof cacheEntry !== "object" || Array.isArray(cacheEntry)) {
+      return [];
+    }
+
+    const entry = cacheEntry as Partial<AnkiModelFieldCacheEntry>;
+    const loadedAt = typeof entry.loadedAt === "number" && Number.isFinite(entry.loadedAt) ? entry.loadedAt : 0;
+    return [[trimmedModelName, {
+      fieldNames: normalizeModelFieldNames(entry.fieldNames),
+      loadedAt,
+    }] as const];
+  });
+
+  normalizedEntries.sort(([left], [right]) => left.localeCompare(right));
+  return Object.fromEntries(normalizedEntries);
+}
+
+function normalizeModelFieldNames(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const normalizedFieldNames: string[] = [];
+  const seenFieldNames = new Set<string>();
+
+  for (const fieldName of value) {
+    if (typeof fieldName !== "string") {
+      continue;
+    }
+
+    const trimmedFieldName = fieldName.trim();
+    if (trimmedFieldName.length === 0 || seenFieldNames.has(trimmedFieldName)) {
+      continue;
+    }
+
+    seenFieldNames.add(trimmedFieldName);
+    normalizedFieldNames.push(trimmedFieldName);
+  }
+
+  return normalizedFieldNames;
 }

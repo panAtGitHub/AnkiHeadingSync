@@ -187,6 +187,13 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
     return this.modelDetailsByName[modelName]?.fieldNames ?? [];
   }
 
+  async getModelFieldNamesByModelNames(modelNames: string[]): Promise<Record<string, string[]>> {
+    return Object.fromEntries(await Promise.all(modelNames.map(async (modelName) => [
+      modelName,
+      await this.getModelFieldNames(modelName),
+    ])));
+  }
+
   async getModelTemplates(modelName: string): Promise<Record<string, AnkiModelTemplate>> {
     return this.modelTemplatesByName[modelName] ?? {};
   }

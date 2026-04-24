@@ -161,6 +161,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private renderCardTypesCard(containerEl: HTMLElement): void {
+    this.hydrateVisibleCardTypeCaches();
     containerEl.createEl("p", { text: t("settings.cards.cardTypes.desc") });
 
     const actionRow = containerEl.createDiv();
@@ -631,26 +632,26 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     try {
       const noteModels = await this.plugin.listNoteModels();
-      this.availableNoteModels.splice(0, this.availableNoteModels.length, ...[...noteModels].sort((left, right) => left.localeCompare(right)));
-      await this.plugin.updateSettings({ ankiNoteTypeCache: this.getAvailableNoteModels() });
-      const selectedConfigs = [...VISIBLE_CARD_TYPE_CONFIG_IDS];
-      let configuredCount = 0;
+      const nextAvailableNoteModels = Array.from(new Set(noteModels)).sort((left, right) => left.localeCompare(right));
+      this.availableNoteModels.splice(0, this.availableNoteModels.length, ...nextAvailableNoteModels);
 
-      for (const configId of selectedConfigs) {
-        const runtimeCardType = this.getRuntimeCardType(configId);
-        const modelName = this.plugin.settings.cardTypeConfigs[configId].noteType;
-        const mappingKey = createNoteFieldMappingKey(runtimeCardType, modelName);
-        let modelDetails: NoteModelDetails;
-        try {
-          modelDetails = await this.plugin.getNoteModelDetails(modelName);
-        } catch {
-          continue;
-        }
+      const fieldNamesByModelName = await this.plugin.getModelFieldNamesByModelNames(nextAvailableNoteModels);
+      const loadedAt = Date.now();
+      const ankiModelFieldCache = Object.entries(fieldNamesByModelName).reduce<AnkiHeadingSyncPlugin["settings"]["ankiModelFieldCache"]>((cache, [modelName, fieldNames]) => {
+        cache[modelName] = {
+          fieldNames: [...fieldNames],
+          loadedAt,
+        };
+        return cache;
+      }, {});
 
-        this.loadedModelDetails[mappingKey] = modelDetails;
-        this.seedDraftMapping(runtimeCardType, modelName, modelDetails);
-        configuredCount += 1;
-      }
+      await this.plugin.updateSettings({
+        ankiNoteTypeCache: this.getAvailableNoteModels(),
+        ankiModelFieldCache,
+      });
+
+      this.hydrateVisibleCardTypeCaches(ankiModelFieldCache);
+      const configuredCount = this.countConfiguredCardTypes(ankiModelFieldCache);
 
       this.cardTypeStatus = {
         key: "settings.cards.cardTypes.loadedSummary",
@@ -667,7 +668,47 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     }
   }
 
-  private seedDraftMapping(runtimeCardType: NoteModelFieldMappingCardType, modelName: string, modelDetails: NoteModelDetails): void {
+  private hydrateVisibleCardTypeCaches(
+    ankiModelFieldCache: AnkiHeadingSyncPlugin["settings"]["ankiModelFieldCache"] = this.plugin.settings.ankiModelFieldCache,
+  ): void {
+    for (const configId of VISIBLE_CARD_TYPE_CONFIG_IDS) {
+      this.hydrateCardTypeCache(configId, ankiModelFieldCache);
+    }
+  }
+
+  private hydrateCardTypeCache(
+    configId: CardTypeConfigId,
+    ankiModelFieldCache: AnkiHeadingSyncPlugin["settings"]["ankiModelFieldCache"],
+  ): void {
+    const runtimeCardType = this.getRuntimeCardType(configId);
+    const modelName = this.plugin.settings.cardTypeConfigs[configId].noteType;
+    const mappingKey = createNoteFieldMappingKey(runtimeCardType, modelName);
+    const cacheEntry = ankiModelFieldCache[modelName];
+
+    if (!cacheEntry) {
+      return;
+    }
+
+    const modelDetails = this.createCachedModelDetails(modelName, cacheEntry.fieldNames);
+    this.loadedModelDetails[mappingKey] = modelDetails;
+    this.seedDraftMapping(runtimeCardType, modelName, modelDetails, cacheEntry.loadedAt);
+  }
+
+  private createCachedModelDetails(modelName: string, fieldNames: string[]): NoteModelDetails {
+    return {
+      fieldNames: [...fieldNames],
+      isCloze: modelName.toLowerCase().includes("cloze"),
+    };
+  }
+
+  private countConfiguredCardTypes(ankiModelFieldCache: AnkiHeadingSyncPlugin["settings"]["ankiModelFieldCache"]): number {
+    return VISIBLE_CARD_TYPE_CONFIG_IDS.reduce((configuredCount, configId) => {
+      const selectedModelName = this.plugin.settings.cardTypeConfigs[configId].noteType;
+      return configuredCount + (ankiModelFieldCache[selectedModelName] ? 1 : 0);
+    }, 0);
+  }
+
+  private seedDraftMapping(runtimeCardType: NoteModelFieldMappingCardType, modelName: string, modelDetails: NoteModelDetails, loadedAt = Date.now()): void {
     const mappingKey = createNoteFieldMappingKey(runtimeCardType, modelName);
     const currentMapping = this.plugin.settings.noteFieldMappings[mappingKey] ?? this.draftMappings[mappingKey];
 
@@ -675,12 +716,12 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       this.draftMappings[mappingKey] = {
         ...currentMapping,
         loadedFieldNames: [...modelDetails.fieldNames],
-        loadedAt: Date.now(),
+        loadedAt,
       };
       return;
     }
 
-    this.draftMappings[mappingKey] = this.noteFieldMappingService.suggest(runtimeCardType, modelName, modelDetails.fieldNames);
+    this.draftMappings[mappingKey] = this.noteFieldMappingService.suggest(runtimeCardType, modelName, modelDetails.fieldNames, loadedAt);
   }
 
   private getSelectableNoteModels(selectedModelName: string): string[] {

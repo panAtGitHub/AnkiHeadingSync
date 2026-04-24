@@ -283,6 +283,8 @@ class FakePlugin {
   public readonly app = {};
   public readonly updateCalls: Array<Record<string, unknown>> = [];
   public listNoteModelsCalls = 0;
+  public getModelFieldNamesByModelNamesCalls = 0;
+  public getNoteModelDetailsCalls = 0;
   public listFolderTreeCalls = 0;
   public insertDeckTemplateCalls = 0;
   public settings = normalizePluginSettings({
@@ -336,24 +338,20 @@ class FakePlugin {
     return ["Basic", "Custom Basic", "Cloze", "Custom Cloze", "Semantic QA", QA_GROUP_MODEL_NAME];
   }
 
+  async getModelFieldNamesByModelNames(modelNames: string[]): Promise<Record<string, string[]>> {
+    this.getModelFieldNamesByModelNamesCalls += 1;
+
+    return modelNames.reduce<Record<string, string[]>>((fieldNamesByModelName, modelName) => {
+      fieldNamesByModelName[modelName] = this.getFieldNamesForModel(modelName);
+      return fieldNamesByModelName;
+    }, {});
+  }
+
   async getNoteModelDetails(modelName: string): Promise<{ fieldNames: string[]; isCloze: boolean }> {
-    if (modelName.includes("Cloze")) {
-      return {
-        fieldNames: ["Text", "Extra", "Hint"],
-        isCloze: true,
-      };
-    }
-
-    if (modelName === "Semantic QA") {
-      return {
-        fieldNames: ["Title", "Body", "Source"],
-        isCloze: false,
-      };
-    }
-
+    this.getNoteModelDetailsCalls += 1;
     return {
-      fieldNames: ["Title", "Body", "Hint"],
-      isCloze: false,
+      fieldNames: this.getFieldNamesForModel(modelName),
+      isCloze: modelName.includes("Cloze"),
     };
   }
 
@@ -364,6 +362,22 @@ class FakePlugin {
 
   async insertDeckTemplateToCurrentFile(): Promise<void> {
     this.insertDeckTemplateCalls += 1;
+  }
+
+  private getFieldNamesForModel(modelName: string): string[] {
+    if (modelName.includes("Cloze")) {
+      return ["Text", "Extra", "Hint"];
+    }
+
+    if (modelName === "Semantic QA") {
+      return ["Title", "Body", "Source"];
+    }
+
+    if (modelName === "Basic") {
+      return ["Front", "Back", "Extra"];
+    }
+
+    return ["Title", "Body", "Hint"];
   }
 }
 
@@ -620,7 +634,10 @@ describe("PluginSettingTab", () => {
     await flushPromises();
 
     expect(plugin.listNoteModelsCalls).toBe(1);
+    expect(plugin.getModelFieldNamesByModelNamesCalls).toBe(1);
+    expect(plugin.getNoteModelDetailsCalls).toBe(0);
     expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("已获取 6 个笔记模板，已选择并配置 3 个卡片模式。"))).toBe(true);
   });
 
   it("persists loaded Anki note types and uses the cache before the next manual refresh", async () => {
@@ -640,11 +657,32 @@ describe("PluginSettingTab", () => {
       "Semantic QA",
     ]);
     expect(plugin.updateCalls.some((call) => Array.isArray(call.ankiNoteTypeCache))).toBe(true);
+    expect(plugin.settings.ankiModelFieldCache).toEqual(expect.objectContaining({
+      Basic: {
+        fieldNames: ["Front", "Back", "Extra"],
+        loadedAt: expect.any(Number),
+      },
+      "Custom Basic": {
+        fieldNames: ["Title", "Body", "Hint"],
+        loadedAt: expect.any(Number),
+      },
+      Cloze: {
+        fieldNames: ["Text", "Extra", "Hint"],
+        loadedAt: expect.any(Number),
+      },
+    }));
+    expect(plugin.updateCalls.some((call) => typeof call.ankiModelFieldCache === "object" && call.ankiModelFieldCache !== null)).toBe(true);
 
     const cachedPlugin = new FakePlugin();
     cachedPlugin.settings = normalizePluginSettings({
       ...cachedPlugin.settings,
       ankiNoteTypeCache: ["Basic", "Cached Basic", "Cached Cloze"],
+      ankiModelFieldCache: {
+        "Cached Basic": {
+          fieldNames: ["Front", "Back", "Hint"],
+          loadedAt: 123,
+        },
+      },
       cardTypeConfigs: {
         ...cachedPlugin.settings.cardTypeConfigs,
         basic: {
@@ -659,7 +697,50 @@ describe("PluginSettingTab", () => {
 
     const basicNoteTypeSelect = queryByDataset(cachedTab.containerEl, "cardTypeNoteType", "basic");
     expect(collectOptionValues(basicNoteTypeSelect)).toEqual(["Basic", "Cached Basic", "Cached Cloze"]);
+    const basicQuestionFieldSelect = queryByDataset(cachedTab.containerEl, "cardTypeQuestionField", "basic");
+    const basicAnswerFieldSelect = queryByDataset(cachedTab.containerEl, "cardTypeAnswerField", "basic");
+    expect(collectOptionValues(basicQuestionFieldSelect)).toEqual(["", "Front", "Back", "Hint"]);
+    expect(collectOptionValues(basicAnswerFieldSelect)).toEqual(["", "Front", "Back", "Hint"]);
     expect(cachedPlugin.listNoteModelsCalls).toBe(0);
+  });
+
+  it("switching note type immediately reuses cached field names", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      ankiNoteTypeCache: ["Basic", "Custom Basic"],
+      ankiModelFieldCache: {
+        Basic: {
+          fieldNames: ["Front", "Back", "Extra"],
+          loadedAt: 100,
+        },
+        "Custom Basic": {
+          fieldNames: ["Title", "Body", "Hint"],
+          loadedAt: 200,
+        },
+      },
+      cardTypeConfigs: {
+        ...plugin.settings.cardTypeConfigs,
+        basic: {
+          ...plugin.settings.cardTypeConfigs.basic,
+          noteType: "Custom Basic",
+        },
+      },
+    });
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+
+    const basicNoteTypeSelect = queryByDataset(tab.containerEl, "cardTypeNoteType", "basic");
+    basicNoteTypeSelect.value = "Basic";
+    await basicNoteTypeSelect.trigger("change");
+    await flushPromises();
+
+    const basicQuestionFieldSelect = queryByDataset(tab.containerEl, "cardTypeQuestionField", "basic");
+    const basicAnswerFieldSelect = queryByDataset(tab.containerEl, "cardTypeAnswerField", "basic");
+    expect(collectOptionValues(basicQuestionFieldSelect)).toEqual(["", "Front", "Back", "Extra"]);
+    expect(collectOptionValues(basicAnswerFieldSelect)).toEqual(["", "Front", "Back", "Extra"]);
+    expect(plugin.getNoteModelDetailsCalls).toBe(0);
   });
 
   it("folder tree expand and check refresh only the scope card", async () => {

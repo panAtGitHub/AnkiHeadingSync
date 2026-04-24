@@ -47,6 +47,7 @@ describe("DataJsonPluginConfigRepository", () => {
     expect(settings.semanticQaNoteType).toBe("Semantic QA");
     expect(settings.obsidianBacklinkLabel).toBe("Open in Obsidian");
     expect(settings.obsidianBacklinkPlacement).toBe("answer-last-line");
+    expect(settings.ankiModelFieldCache).toEqual({});
   });
 
   it("normalizes blank backlink labels on load and save", async () => {
@@ -99,6 +100,38 @@ describe("DataJsonPluginConfigRepository", () => {
         titleField: "Front",
         bodyField: "Back",
         loadedAt: 123,
+      },
+    });
+  });
+
+  it("persists cached Anki model fields across save and reload", async () => {
+    const store = new InMemoryPluginDataStore();
+    const repository = new DataJsonPluginConfigRepository(store);
+
+    await repository.save({
+      ...DEFAULT_SETTINGS,
+      ankiModelFieldCache: {
+        Basic: {
+          fieldNames: ["Front", "Back"],
+          loadedAt: 123,
+        },
+        Cloze: {
+          fieldNames: ["Text", "Extra"],
+          loadedAt: 456,
+        },
+      },
+    });
+
+    const reloaded = await repository.load();
+
+    expect(reloaded.ankiModelFieldCache).toEqual({
+      Basic: {
+        fieldNames: ["Front", "Back"],
+        loadedAt: 123,
+      },
+      Cloze: {
+        fieldNames: ["Text", "Extra"],
+        loadedAt: 456,
       },
     });
   });

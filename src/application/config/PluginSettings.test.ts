@@ -81,6 +81,7 @@ describe("PluginSettings", () => {
     expect(DEFAULT_SETTINGS.syncObsidianTagsToAnki).toBe(true);
     expect(DEFAULT_SETTINGS.keepPureTagLinesInCardBody).toBe(true);
     expect(DEFAULT_SETTINGS.ankiNoteTypeCache).toEqual([]);
+    expect(DEFAULT_SETTINGS.ankiModelFieldCache).toEqual({});
     expect(DEFAULT_SETTINGS.cardTypeConfigs).toEqual({
       basic: {
         enabled: true,
@@ -121,6 +122,59 @@ describe("PluginSettings", () => {
     }).ankiNoteTypeCache).toEqual(["Basic", "Cloze"]);
   });
 
+  it("normalizes cached Anki model fields on load and save paths", () => {
+    const settings = mergePluginSettings({
+      ankiModelFieldCache: {
+        "  Custom Basic  ": {
+          fieldNames: [" Front ", "", "Back", "Front"],
+          loadedAt: 123,
+        },
+        Cloze: {
+          fieldNames: [" Text ", "Extra", "Text"],
+          loadedAt: Number.NaN,
+        },
+        "   ": {
+          fieldNames: ["Ignored"],
+          loadedAt: 999,
+        },
+      },
+    });
+
+    expect(settings.ankiModelFieldCache).toEqual({
+      Cloze: {
+        fieldNames: ["Text", "Extra"],
+        loadedAt: 0,
+      },
+      "Custom Basic": {
+        fieldNames: ["Front", "Back"],
+        loadedAt: 123,
+      },
+    });
+
+    expect(normalizePluginSettings({
+      ...DEFAULT_SETTINGS,
+      ankiModelFieldCache: {
+        Basic: {
+          fieldNames: [" Title ", "Body", "Title"],
+          loadedAt: 456,
+        },
+        "Custom Cloze": {
+          fieldNames: "Text" as never,
+          loadedAt: "invalid" as never,
+        },
+      },
+    }).ankiModelFieldCache).toEqual({
+      Basic: {
+        fieldNames: ["Title", "Body"],
+        loadedAt: 456,
+      },
+      "Custom Cloze": {
+        fieldNames: [],
+        loadedAt: 0,
+      },
+    });
+  });
+
   it("rejects invalid cached Anki note type lists", () => {
     expectPluginUserError(() => {
       validatePluginSettings({
@@ -135,6 +189,60 @@ describe("PluginSettings", () => {
         ankiNoteTypeCache: ["Basic", 1] as never,
       });
     }, "errors.settings.ankiNoteTypeCacheStrings");
+  });
+
+  it("rejects invalid cached Anki model field maps", () => {
+    expectPluginUserError(() => {
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        ankiModelFieldCache: "Basic" as never,
+      });
+    }, "errors.settings.ankiModelFieldCacheObject");
+
+    expectPluginUserError(() => {
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        ankiModelFieldCache: {
+          Basic: [] as never,
+        },
+      });
+    }, "errors.settings.ankiModelFieldCacheEntryObject");
+
+    expectPluginUserError(() => {
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        ankiModelFieldCache: {
+          Basic: {
+            fieldNames: "Front" as never,
+            loadedAt: 1,
+          },
+        },
+      });
+    }, "errors.settings.ankiModelFieldCacheFieldNamesArray");
+
+    expectPluginUserError(() => {
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        ankiModelFieldCache: {
+          Basic: {
+            fieldNames: ["Front", 1] as never,
+            loadedAt: 1,
+          },
+        },
+      });
+    }, "errors.settings.ankiModelFieldCacheFieldNamesStrings");
+
+    expectPluginUserError(() => {
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        ankiModelFieldCache: {
+          Basic: {
+            fieldNames: ["Front"],
+            loadedAt: "invalid" as never,
+          },
+        },
+      });
+    }, "errors.settings.ankiModelFieldCacheLoadedAt");
   });
 
   it("fills new backlink defaults when loading legacy snapshots", () => {

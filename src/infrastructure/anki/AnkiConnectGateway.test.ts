@@ -34,6 +34,74 @@ describe("AnkiConnectGateway", () => {
     });
   });
 
+  it("loads model field names in one multi request and skips per-item errors", async () => {
+    requestUrlMock.mockResolvedValue({
+      json: {
+        error: null,
+        result: [
+          {
+            error: null,
+            result: ["Front", "Back"],
+          },
+          {
+            error: "missing model",
+            result: null,
+          },
+          ["Text", "Extra"],
+        ],
+      },
+    });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    const fieldNamesByModelName = await gateway.getModelFieldNamesByModelNames(["Basic", "Missing", "Cloze"]);
+
+    expect(fieldNamesByModelName).toEqual({
+      Basic: ["Front", "Back"],
+      Cloze: ["Text", "Extra"],
+    });
+    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+      action: "multi",
+      version: 6,
+      params: {
+        actions: [
+          {
+            action: "modelFieldNames",
+            params: {
+              modelName: "Basic",
+            },
+          },
+          {
+            action: "modelFieldNames",
+            params: {
+              modelName: "Missing",
+            },
+          },
+          {
+            action: "modelFieldNames",
+            params: {
+              modelName: "Cloze",
+            },
+          },
+        ],
+      },
+    });
+  });
+
+  it("bubbles top-level multi errors when loading model field names", async () => {
+    requestUrlMock.mockResolvedValue({
+      json: {
+        error: "AnkiConnect unavailable",
+        result: null,
+      },
+    });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+
+    await expect(gateway.getModelFieldNamesByModelNames(["Basic"]))
+      .rejects
+      .toThrow("AnkiConnect unavailable");
+  });
+
   it("loads deck names from AnkiConnect", async () => {
     requestUrlMock.mockResolvedValue({
       json: {

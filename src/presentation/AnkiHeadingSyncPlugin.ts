@@ -86,6 +86,10 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
     return this.ankiGateway.listNoteModels();
   }
 
+  async getModelFieldNamesByModelNames(modelNames: string[]): Promise<Record<string, string[]>> {
+    return this.ankiGateway.getModelFieldNamesByModelNames(modelNames);
+  }
+
   async getNoteModelDetails(modelName: string): Promise<NoteModelDetails> {
     return this.ankiGateway.getModelDetails(modelName);
   }
