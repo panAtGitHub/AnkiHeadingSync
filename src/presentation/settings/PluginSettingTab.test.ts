@@ -573,6 +573,14 @@ async function flushPromises(): Promise<void> {
   await Promise.resolve();
 }
 
+async function expandCard(tab: AnkiHeadingSyncSettingTab, cardId: string): Promise<void> {
+  if (queryByDataset(tab.containerEl, "settingsCardBody", cardId).style.display === "block") {
+    return;
+  }
+
+  await queryByDataset(tab.containerEl, "settingsCardToggle", cardId).trigger("click");
+}
+
 describe("PluginSettingTab", () => {
   const originalResizeObserver = globalThis.ResizeObserver;
 
@@ -593,7 +601,7 @@ describe("PluginSettingTab", () => {
     Reflect.set(globalThis, "ResizeObserver", originalResizeObserver);
   });
 
-  it("renders five cards with the required default expansion state", () => {
+  it("renders five cards collapsed by default", () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
@@ -602,11 +610,34 @@ describe("PluginSettingTab", () => {
     expect(queryByDataset(tab.containerEl, "settingsPageHeader", "true")).toBeDefined();
     const cards = queryAllByDataset(tab.containerEl, "settingsCard");
     expect(cards).toHaveLength(5);
-    expect(queryByDataset(tab.containerEl, "settingsCardBody", "card-types").style.display).toBe("block");
-    expect(queryByDataset(tab.containerEl, "settingsCardBody", "commands").style.display).toBe("block");
     expect(queryByDataset(tab.containerEl, "settingsCardBody", "sync-content").style.display).toBe("none");
+    expect(queryByDataset(tab.containerEl, "settingsCardBody", "card-types").style.display).toBe("none");
+    expect(queryByDataset(tab.containerEl, "settingsCardBody", "commands").style.display).toBe("none");
     expect(queryByDataset(tab.containerEl, "settingsCardBody", "scope").style.display).toBe("none");
     expect(queryByDataset(tab.containerEl, "settingsCardBody", "deck").style.display).toBe("none");
+
+    for (const cardId of ["card-types", "sync-content", "scope", "deck", "commands"] as const) {
+      expect(queryByDataset(tab.containerEl, "settingsCardToggle", cardId).textContent.startsWith("▸ ")).toBe(true);
+    }
+  });
+
+  it("expands only the clicked card while others remain collapsed", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
+
+    expect(queryByDataset(tab.containerEl, "settingsCardBody", "scope").style.display).toBe("block");
+    expect(queryByDataset(tab.containerEl, "settingsCardBody", "card-types").style.display).toBe("none");
+    expect(queryByDataset(tab.containerEl, "settingsCardBody", "sync-content").style.display).toBe("none");
+    expect(queryByDataset(tab.containerEl, "settingsCardBody", "deck").style.display).toBe("none");
+    expect(queryByDataset(tab.containerEl, "settingsCardBody", "commands").style.display).toBe("none");
+
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
+
+    expect(queryByDataset(tab.containerEl, "settingsCardBody", "scope").style.display).toBe("none");
   });
 
   it("applies sticky styles to the opaque page header gap, mask, and card headers", () => {
@@ -673,11 +704,12 @@ describe("PluginSettingTab", () => {
     expect(resizeObserver?.disconnected).toBe(true);
   });
 
-  it("renders card 1 as three readable card type blocks", () => {
+  it("renders card 1 as three readable card type blocks", async () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
+    await expandCard(tab, "card-types");
 
     expect(queryByDataset(tab.containerEl, "cardTypeList", "true")).toBeDefined();
     expect(findElements(tab.containerEl, (element) => element.tag === "th")).toHaveLength(0);
@@ -698,6 +730,7 @@ describe("PluginSettingTab", () => {
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
+    await expandCard(tab, "card-types");
     await queryByDataset(tab.containerEl, "cardTypesRefresh", "true").trigger("click");
     await flushPromises();
 
@@ -755,6 +788,7 @@ describe("PluginSettingTab", () => {
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
+    await expandCard(tab, "card-types");
 
     const markerInput = queryByDataset(tab.containerEl, "cardTypeMarker", "cloze");
     markerInput.value = "#cloze-a";
@@ -779,12 +813,22 @@ describe("PluginSettingTab", () => {
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
+    await expandCard(tab, "card-types");
 
     const clozeHeading = queryByDataset(tab.containerEl, "cardTypeHeading", "cloze");
     clozeHeading.value = "4";
     await clozeHeading.trigger("change");
 
-    expect(plugin.settings.cardTypeConfigs.cloze.headingLevel).toBe(5);
+    vi.useFakeTimers();
+    const clozeMarker = queryByDataset(tab.containerEl, "cardTypeMarker", "cloze");
+    clozeMarker.value = "";
+    await clozeMarker.trigger("input");
+    vi.advanceTimersByTime(500);
+    await flushPromises();
+    vi.useRealTimers();
+
+    expect(plugin.settings.cardTypeConfigs.cloze.headingLevel).toBe(4);
+    expect(plugin.settings.cardTypeConfigs.cloze.extraMarker).toBe("#anki-cloze");
     expect(collectTexts(tab.containerEl).some((text) => text.includes("同一个 H4 只能有一个启用的默认卡片类型"))).toBe(true);
   });
 
@@ -809,6 +853,7 @@ describe("PluginSettingTab", () => {
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
+    await expandCard(tab, "card-types");
     const initialEmptyCount = getEmptyCallCount(tab.containerEl);
 
     await queryByDataset(tab.containerEl, "cardTypesRefresh", "true").trigger("click");
@@ -826,6 +871,7 @@ describe("PluginSettingTab", () => {
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
+    await expandCard(tab, "card-types");
     await queryByDataset(tab.containerEl, "cardTypesRefresh", "true").trigger("click");
     await flushPromises();
 
@@ -876,6 +922,7 @@ describe("PluginSettingTab", () => {
     const cachedTab = new AnkiHeadingSyncSettingTab(cachedPlugin as never);
 
     cachedTab.display();
+    await expandCard(cachedTab, "card-types");
     await flushPromises();
 
     const basicNoteTypeSelect = queryByDataset(cachedTab.containerEl, "cardTypeNoteType", "basic");
@@ -890,11 +937,12 @@ describe("PluginSettingTab", () => {
     expect(collectTexts(cachedTab.containerEl).some((text) => text.includes("当前使用缓存的 3 个笔记模板，已选择并配置 1 个卡片模式。"))).toBe(true);
   });
 
-  it("shows cache-empty status and skips background checking when there is no cached note type", () => {
+  it("shows cache-empty status and skips background checking when there is no cached note type", async () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
+    await expandCard(tab, "card-types");
 
     expect(plugin.listNoteModelsCalls).toBe(0);
     expect(plugin.getModelFieldNamesByModelNamesCalls).toBe(0);
@@ -924,6 +972,7 @@ describe("PluginSettingTab", () => {
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
+    await expandCard(tab, "card-types");
     await flushPromises();
 
     expect(plugin.listNoteModelsCalls).toBe(1);
@@ -955,6 +1004,7 @@ describe("PluginSettingTab", () => {
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
+    await expandCard(tab, "card-types");
     await flushPromises();
 
     expect(plugin.listNoteModelsCalls).toBe(1);
@@ -986,6 +1036,7 @@ describe("PluginSettingTab", () => {
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
+    await expandCard(tab, "card-types");
     await flushPromises();
     expect(collectTexts(tab.containerEl).some((text) => text.includes("和本页缓存的 2 个模板不一致"))).toBe(true);
 
@@ -1024,6 +1075,7 @@ describe("PluginSettingTab", () => {
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
+    await expandCard(tab, "card-types");
 
     const basicNoteTypeSelect = queryByDataset(tab.containerEl, "cardTypeNoteType", "basic");
     basicNoteTypeSelect.value = "Basic";
@@ -1060,6 +1112,7 @@ describe("PluginSettingTab", () => {
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
+    await expandCard(tab, "card-types");
 
     expect(queryByDataset(tab.containerEl, "qaGroupWarning", "qa-group").textContent).toContain("第 02 组缺少答案字段");
     const acceptWarning = queryByDataset(tab.containerEl, "qaGroupWarningAccept", "qa-group");

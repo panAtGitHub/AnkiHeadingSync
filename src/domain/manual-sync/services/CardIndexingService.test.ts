@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_SETTINGS } from "@/application/config/PluginSettings";
 import { buildGroupSrc } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
 import type { CardState, GroupBlockState } from "@/domain/manual-sync/entities/PluginState";
 import { hashString } from "@/domain/shared/hash";
@@ -190,8 +191,14 @@ describe("CardIndexingService", () => {
         content: ["#### Prompt", "Answer", "", "", "Remarks"].join("\n"),
       },
       {
-        qaHeadingLevel: 4,
-        clozeHeadingLevel: 5,
+        cardTypeConfigs: {
+          ...DEFAULT_SETTINGS.cardTypeConfigs,
+          cloze: {
+            ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+            headingLevel: 5,
+            extraMarker: "",
+          },
+        },
         cardAnswerCutoffMode: "double-blank-lines",
         fileStamp: "1:1",
         knownCards: [],
@@ -217,8 +224,14 @@ describe("CardIndexingService", () => {
         content: ["#### Prompt", "Answer", "", "", "Remarks", "<!--ID: 42-->"].join("\n"),
       },
       {
-        qaHeadingLevel: 4,
-        clozeHeadingLevel: 5,
+        cardTypeConfigs: {
+          ...DEFAULT_SETTINGS.cardTypeConfigs,
+          cloze: {
+            ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+            headingLevel: 5,
+            extraMarker: "",
+          },
+        },
         cardAnswerCutoffMode: "double-blank-lines",
         fileStamp: "1:1",
         knownCards: [],
@@ -245,8 +258,14 @@ describe("CardIndexingService", () => {
         content: ["##### Cloze", "{{c1::Answer}}", "", "", "Remarks"].join("\n"),
       },
       {
-        qaHeadingLevel: 4,
-        clozeHeadingLevel: 5,
+        cardTypeConfigs: {
+          ...DEFAULT_SETTINGS.cardTypeConfigs,
+          cloze: {
+            ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+            headingLevel: 5,
+            extraMarker: "",
+          },
+        },
         cardAnswerCutoffMode: "double-blank-lines",
         fileStamp: "1:1",
         knownCards: [],
@@ -259,6 +278,72 @@ describe("CardIndexingService", () => {
       bodyMarkdown: "{{c1::Answer}}",
       contentEndLine: 2,
     });
+  });
+
+  it("routes H4 headings by marker priority with the default card type configs", () => {
+    const service = new CardIndexingService();
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: [
+          "#### Basic",
+          "Answer",
+          "",
+          "#### Cloze #anki-cloze",
+          "{{c1::Answer}}",
+          "",
+          "#### Concepts #anki-list",
+          "- Alpha",
+          "  - First answer",
+        ].join("\n"),
+      },
+      {
+        cardTypeConfigs: DEFAULT_SETTINGS.cardTypeConfigs,
+        fileStamp: "1:1",
+        knownCards: [],
+        pendingWriteBack: [],
+      },
+    );
+
+    expect(indexedFile.cards.map((card) => card.cardType)).toEqual(["basic", "cloze"]);
+    expect(indexedFile.groupBlocks?.[0]).toMatchObject({
+      headingText: "Concepts #anki-list",
+      headingLevel: 4,
+    });
+  });
+
+  it("does not produce cloze cards when the cloze config is disabled", () => {
+    const service = new CardIndexingService();
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: [
+          "#### Cloze #anki-cloze",
+          "{{c1::Answer}}",
+        ].join("\n"),
+      },
+      {
+        cardTypeConfigs: {
+          ...DEFAULT_SETTINGS.cardTypeConfigs,
+          basic: {
+            ...DEFAULT_SETTINGS.cardTypeConfigs.basic,
+            enabled: false,
+          },
+          cloze: {
+            ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+            enabled: false,
+          },
+        },
+        fileStamp: "1:1",
+        knownCards: [],
+        pendingWriteBack: [],
+      },
+    );
+
+    expect(indexedFile.cards).toHaveLength(0);
+    expect(indexedFile.groupBlocks ?? []).toHaveLength(0);
   });
 
   it("splits a tagged QA heading into semantic QA child cards with distinct titles and backlink anchors", () => {
@@ -488,8 +573,14 @@ describe("CardIndexingService", () => {
         tags: ["📖::一人公司", "3地区"],
       },
       {
-        qaHeadingLevel: 4,
-        clozeHeadingLevel: 5,
+        cardTypeConfigs: {
+          ...DEFAULT_SETTINGS.cardTypeConfigs,
+          cloze: {
+            ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+            headingLevel: 5,
+            extraMarker: "",
+          },
+        },
         semanticQaMarker: "#anki-list-qa",
         syncObsidianTagsToAnki: true,
         fileStamp: "1:1",

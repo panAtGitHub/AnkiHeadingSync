@@ -67,7 +67,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private readonly debouncedTextSaves = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly textDraftValues = new Map<string, string>();
   private readonly cardShells = new Map<SettingsCardId, SettingsCardShell>();
-  private readonly expandedCardIds = new Set<SettingsCardId>(["card-types", "commands"]);
+  private readonly expandedCardIds = new Set<SettingsCardId>();
   private readonly expandedFolderPaths = new Set<string>();
 
   private folderTree: FolderTreeNode[] = [];

@@ -30,9 +30,12 @@ export type AnkiModelFieldCache = Record<string, AnkiModelFieldCacheEntry>;
 export const DEFAULT_OBSIDIAN_BACKLINK_LABEL = "Open in Obsidian";
 
 const DEFAULT_BASIC_HEADING_LEVEL = 4;
-const DEFAULT_CLOZE_HEADING_LEVEL = 5;
+const LEGACY_DEFAULT_CLOZE_HEADING_LEVEL = 5;
+const DEFAULT_CLOZE_HEADING_LEVEL = 4;
 const DEFAULT_BASIC_NOTE_TYPE = "";
 const DEFAULT_CLOZE_NOTE_TYPE = "";
+const LEGACY_DEFAULT_CLOZE_MARKER = "";
+const DEFAULT_CLOZE_MARKER = "#anki-cloze";
 const DEFAULT_SEMANTIC_QA_NOTE_TYPE = "Semantic QA";
 const DEFAULT_QA_GROUP_MARKER = "#anki-list";
 const DEFAULT_SEMANTIC_QA_MARKER = "#anki-list-qa";
@@ -375,7 +378,7 @@ function createDefaultCardTypeConfigs(): CardTypeConfigs {
     cloze: {
       enabled: true,
       headingLevel: DEFAULT_CLOZE_HEADING_LEVEL,
-      extraMarker: "",
+      extraMarker: DEFAULT_CLOZE_MARKER,
       noteType: DEFAULT_CLOZE_NOTE_TYPE,
     },
     "semantic-qa": {
@@ -430,15 +433,51 @@ function mergeCardTypeConfigs(
       ? { ...fallbackConfig, ...rawConfig }
       : fallbackConfig;
 
-    nextConfigs[configId] = {
+    const normalizedConfig: CardTypeConfig = {
       enabled: typeof mergedConfig.enabled === "boolean" ? mergedConfig.enabled : fallbackConfig.enabled,
       headingLevel: sanitizeHeadingLevel(mergedConfig.headingLevel, fallbackConfig.headingLevel),
       extraMarker: sanitizeMarker(mergedConfig.extraMarker, fallbackConfig.extraMarker),
       noteType: sanitizeNoteType(mergedConfig.noteType, fallbackConfig.noteType),
     };
+
+    nextConfigs[configId] = configId === "cloze"
+      ? migrateLegacyDefaultClozeConfig(normalizedConfig, rawConfig, legacySettings)
+      : normalizedConfig;
   }
 
   return nextConfigs;
+}
+
+function migrateLegacyDefaultClozeConfig(
+  config: CardTypeConfig,
+  rawConfig: Partial<CardTypeConfig> | null | undefined,
+  legacySettings: Partial<PluginSettings>,
+): CardTypeConfig {
+  if (config.headingLevel === LEGACY_DEFAULT_CLOZE_HEADING_LEVEL && config.extraMarker === LEGACY_DEFAULT_CLOZE_MARKER) {
+    return {
+      ...config,
+      headingLevel: DEFAULT_CLOZE_HEADING_LEVEL,
+      extraMarker: DEFAULT_CLOZE_MARKER,
+    };
+  }
+
+  if (!hasExplicitClozeRecognitionConfig(rawConfig) && legacySettings.clozeHeadingLevel === LEGACY_DEFAULT_CLOZE_HEADING_LEVEL) {
+    return {
+      ...config,
+      headingLevel: DEFAULT_CLOZE_HEADING_LEVEL,
+      extraMarker: DEFAULT_CLOZE_MARKER,
+    };
+  }
+
+  return config;
+}
+
+function hasExplicitClozeRecognitionConfig(rawConfig: Partial<CardTypeConfig> | null | undefined): boolean {
+  if (!rawConfig || typeof rawConfig !== "object" || Array.isArray(rawConfig)) {
+    return false;
+  }
+
+  return "headingLevel" in rawConfig || "extraMarker" in rawConfig;
 }
 
 function deriveLegacySettings(cardTypeConfigs: CardTypeConfigs): Pick<PluginSettings, "qaHeadingLevel" | "clozeHeadingLevel" | "qaGroupMarker" | "qaNoteType" | "clozeNoteType" | "semanticQaMarker" | "semanticQaNoteType"> {

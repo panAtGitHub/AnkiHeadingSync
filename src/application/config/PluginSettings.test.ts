@@ -96,8 +96,8 @@ describe("PluginSettings", () => {
       },
       cloze: {
         enabled: true,
-        headingLevel: 5,
-        extraMarker: "",
+        headingLevel: 4,
+        extraMarker: "#anki-cloze",
         noteType: "",
       },
       "semantic-qa": {
@@ -172,6 +172,69 @@ describe("PluginSettings", () => {
         loadedAt: 0,
       },
     });
+  });
+
+  it("migrates the old default cloze recognition to H4 + #anki-cloze", () => {
+    const settings = mergePluginSettings({
+      cardTypeConfigs: {
+        ...DEFAULT_SETTINGS.cardTypeConfigs,
+        cloze: {
+          ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+          headingLevel: 5,
+          extraMarker: "",
+        },
+      },
+    });
+
+    expect(settings.cardTypeConfigs.cloze).toEqual(expect.objectContaining({
+      headingLevel: 4,
+      extraMarker: "#anki-cloze",
+    }));
+  });
+
+  it("migrates legacy cloze H5 snapshots when no per-card recognition override exists", () => {
+    const settings = mergePluginSettings({
+      clozeHeadingLevel: 5,
+      clozeNoteType: "Legacy Cloze",
+    });
+
+    expect(settings.cardTypeConfigs.cloze).toEqual(expect.objectContaining({
+      headingLevel: 4,
+      extraMarker: "#anki-cloze",
+      noteType: "Legacy Cloze",
+    }));
+  });
+
+  it("preserves user customized cloze recognition settings", () => {
+    const customizedHeading = mergePluginSettings({
+      cardTypeConfigs: {
+        ...DEFAULT_SETTINGS.cardTypeConfigs,
+        cloze: {
+          ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+          headingLevel: 6,
+          extraMarker: "",
+        },
+      },
+    });
+    expect(customizedHeading.cardTypeConfigs.cloze).toEqual(expect.objectContaining({
+      headingLevel: 6,
+      extraMarker: "",
+    }));
+
+    const customizedMarker = mergePluginSettings({
+      cardTypeConfigs: {
+        ...DEFAULT_SETTINGS.cardTypeConfigs,
+        cloze: {
+          ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+          headingLevel: 4,
+          extraMarker: "#custom-cloze",
+        },
+      },
+    });
+    expect(customizedMarker.cardTypeConfigs.cloze).toEqual(expect.objectContaining({
+      headingLevel: 4,
+      extraMarker: "#custom-cloze",
+    }));
   });
 
   it("rejects invalid cached Anki note type lists", () => {
@@ -267,8 +330,8 @@ describe("PluginSettings", () => {
       },
       cloze: {
         enabled: true,
-        headingLevel: 5,
-        extraMarker: "",
+        headingLevel: 4,
+        extraMarker: "#anki-cloze",
         noteType: "Legacy Cloze",
       },
       "semantic-qa": {
