@@ -512,6 +512,22 @@ describe("PluginSettingTab", () => {
     expect(queryByDataset(tab.containerEl, "settingsCardBody", "deck").style.display).toBe("none");
   });
 
+  it("applies sticky styles to all settings card headers", () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+
+    for (const cardId of ["card-types", "sync-content", "scope", "deck", "commands"] as const) {
+      const header = queryByDataset(tab.containerEl, "settingsCardToggle", cardId);
+      expect(header.style.position).toBe("sticky");
+      expect(header.style.top).toBe("8px");
+      expect(header.style.zIndex).toBe("20");
+      expect(header.style.background).toBe("var(--background-primary)");
+      expect(header.style.boxShadow).toBe("0 2px 8px rgba(0, 0, 0, 0.08)");
+    }
+  });
+
   it("renders card 1 as three readable card type blocks", () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
@@ -635,9 +651,11 @@ describe("PluginSettingTab", () => {
     const initialEmptyCount = getEmptyCallCount(tab.containerEl);
 
     await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
+    expect(queryByDataset(tab.containerEl, "settingsCardBody", "scope").style.display).toBe("block");
     expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
 
     await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
+    expect(queryByDataset(tab.containerEl, "settingsCardBody", "scope").style.display).toBe("none");
     expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
   });
 
