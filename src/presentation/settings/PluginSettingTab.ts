@@ -1307,7 +1307,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     groupEl.style.alignItems = "center";
     groupEl.style.gap = "8px";
     groupEl.style.minWidth = "0";
-    groupEl.style.overflow = "hidden";
+    groupEl.style.overflow = "visible";
 
     const labelEl = groupEl.createEl("span", { text: label });
     labelEl.style.whiteSpace = "nowrap";
@@ -1316,12 +1316,13 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const slotEl = groupEl.createDiv();
     slotEl.style.flex = "1 1 0";
     slotEl.style.minWidth = "0";
-    slotEl.style.overflow = "hidden";
+    slotEl.style.overflow = "visible";
 
     return slotEl;
   }
 
   private applyFluidEllipsis(element: HTMLElement): void {
+    element.style.boxSizing = "border-box";
     element.style.width = "100%";
     element.style.maxWidth = "100%";
     element.style.minWidth = "0";
