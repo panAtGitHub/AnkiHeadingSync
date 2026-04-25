@@ -36,14 +36,12 @@ const FOLDER_TREE_STATUS_LOADING: UserFacingMessage = { key: "settings.scope.loa
 const TEXT_SAVE_DEBOUNCE_MS = 500;
 const SETTINGS_CARD_ORDER = ["card-types", "sync-content", "scope", "deck", "commands"] as const;
 const VISIBLE_CARD_TYPE_CONFIG_IDS = ["basic", "qa-group", "cloze"] as const;
-const STICKY_HEADER_MASK_HEIGHT = "96px";
 
 type SettingsCardId = (typeof SETTINGS_CARD_ORDER)[number];
 type NoteTypeCacheCheckStatus = "idle" | "checking" | "same" | "changed" | "failed";
 
 interface SettingsCardShell {
   cardEl: HTMLElement;
-  stickyHeaderEl: HTMLElement;
   headerEl: HTMLButtonElement;
   bodyEl: HTMLElement;
 }
@@ -118,45 +116,25 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       cardEl.style.position = "relative";
       cardEl.style.zIndex = "0";
 
-      const stickyHeaderEl = cardEl.createDiv();
-      stickyHeaderEl.dataset.settingsCardStickyHeader = cardId;
-      stickyHeaderEl.style.position = "sticky";
-      stickyHeaderEl.style.top = "0";
-      stickyHeaderEl.style.zIndex = "80";
-      stickyHeaderEl.style.display = "block";
-      stickyHeaderEl.style.width = "100%";
-      stickyHeaderEl.style.maxWidth = "100%";
-      stickyHeaderEl.style.boxSizing = "border-box";
-      stickyHeaderEl.style.background = "var(--background-primary)";
-      stickyHeaderEl.style.border = "2px solid var(--background-modifier-border)";
-      stickyHeaderEl.style.borderRadius = "0";
-      stickyHeaderEl.style.boxShadow = "none";
-
-      const stickyHeaderMaskEl = stickyHeaderEl.createDiv();
-      stickyHeaderMaskEl.dataset.settingsCardStickyMask = cardId;
-      stickyHeaderMaskEl.style.position = "absolute";
-      stickyHeaderMaskEl.style.left = "0";
-      stickyHeaderMaskEl.style.right = "0";
-      stickyHeaderMaskEl.style.top = `-${STICKY_HEADER_MASK_HEIGHT}`;
-      stickyHeaderMaskEl.style.height = STICKY_HEADER_MASK_HEIGHT;
-      stickyHeaderMaskEl.style.background = "var(--background-primary)";
-      stickyHeaderMaskEl.style.pointerEvents = "none";
-
-      const headerEl = stickyHeaderEl.createEl("button") as HTMLButtonElement;
+      const headerEl = cardEl.createEl("button") as HTMLButtonElement;
       headerEl.type = "button";
       headerEl.dataset.settingsCardToggle = cardId;
-      headerEl.style.position = "relative";
+      headerEl.style.position = "sticky";
+      headerEl.style.top = "0";
+      headerEl.style.zIndex = "80";
       headerEl.style.display = "flex";
       headerEl.style.alignItems = "center";
       headerEl.style.justifyContent = "flex-start";
       headerEl.style.width = "100%";
       headerEl.style.maxWidth = "100%";
+      headerEl.style.boxSizing = "border-box";
       headerEl.style.padding = "10px 14px";
       headerEl.style.fontSize = "1.5em";
       headerEl.style.fontWeight = "600";
-      headerEl.style.background = "transparent";
-      headerEl.style.border = "none";
+      headerEl.style.background = "var(--background-primary)";
+      headerEl.style.border = "2px solid var(--background-modifier-border)";
       headerEl.style.borderRadius = "0";
+      headerEl.style.marginBottom = "8px";
       headerEl.style.textAlign = "left";
       headerEl.style.boxShadow = "none";
       headerEl.addEventListener("click", () => {
@@ -171,7 +149,6 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
       this.cardShells.set(cardId, {
         cardEl,
-        stickyHeaderEl,
         headerEl,
         bodyEl,
       });

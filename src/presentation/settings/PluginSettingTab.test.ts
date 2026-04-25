@@ -520,32 +520,20 @@ describe("PluginSettingTab", () => {
 
     for (const cardId of ["card-types", "sync-content", "scope", "deck", "commands"] as const) {
       const card = queryByDataset(tab.containerEl, "settingsCard", cardId);
-      const stickyHeader = queryByDataset(tab.containerEl, "settingsCardStickyHeader", cardId);
-      const stickyMask = queryByDataset(tab.containerEl, "settingsCardStickyMask", cardId);
       const header = queryByDataset(tab.containerEl, "settingsCardToggle", cardId);
       const body = queryByDataset(tab.containerEl, "settingsCardBody", cardId);
 
       expect(card.style.position).toBe("relative");
       expect(card.style.zIndex).toBe("0");
-      expect(stickyHeader.style.position).toBe("sticky");
-      expect(stickyHeader.style.top).toBe("0");
-      expect(stickyHeader.style.zIndex).toBe("80");
-      expect(stickyHeader.style.width).toBe("100%");
-      expect(stickyHeader.style.background).toBe("var(--background-primary)");
-      expect(stickyHeader.style.border).toBe("2px solid var(--background-modifier-border)");
-      expect(stickyHeader.style.boxShadow).toBe("none");
-      expect(stickyMask.style.position).toBe("absolute");
-      expect(stickyMask.style.top).toBe("-96px");
-      expect(stickyMask.style.height).toBe("96px");
-      expect(stickyMask.style.background).toBe("var(--background-primary)");
-      expect(stickyMask.style.pointerEvents).toBe("none");
-      expect(header.style.position).toBe("relative");
+      expect(header.style.position).toBe("sticky");
+      expect(header.style.top).toBe("0");
+      expect(header.style.zIndex).toBe("80");
       expect(header.style.display).toBe("flex");
       expect(header.style.width).toBe("100%");
-      expect(header.style.background).toBe("transparent");
+      expect(header.style.background).toBe("var(--background-primary)");
       expect(header.style.fontSize).toBe("1.5em");
       expect(header.style.fontWeight).toBe("600");
-      expect(header.style.border).toBe("none");
+      expect(header.style.border).toBe("2px solid var(--background-modifier-border)");
       expect(header.style.boxShadow).toBe("none");
       expect(body.style.position).toBe("relative");
       expect(body.style.zIndex).toBe("0");
