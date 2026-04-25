@@ -45,6 +45,7 @@ const SETTINGS_PAGE_HEADER_HEIGHT_FALLBACK = `${SETTINGS_PAGE_HEADER_FALLBACK_HE
 const SETTINGS_STICKY_CARD_GAP = `${SETTINGS_STICKY_CARD_GAP_PX}px`;
 const SETTINGS_PAGE_HEADER_HEIGHT_VALUE = `var(${SETTINGS_PAGE_HEADER_HEIGHT_VARIABLE}, ${SETTINGS_PAGE_HEADER_HEIGHT_FALLBACK})`;
 const SETTINGS_STICKY_CARD_GAP_VALUE = `var(${SETTINGS_STICKY_CARD_GAP_VARIABLE}, ${SETTINGS_STICKY_CARD_GAP})`;
+const SETTINGS_PAGE_HEADER_PADDING_TOP = "12px";
 const SETTINGS_PAGE_HEADER_MASK_TOP = "-128px";
 const SETTINGS_PAGE_HEADER_MASK_SIDE = "-24px";
 
@@ -118,8 +119,9 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       pageHeaderEl.style.zIndex = "300";
       pageHeaderEl.style.width = "100%";
       pageHeaderEl.style.boxSizing = "border-box";
-      pageHeaderEl.style.padding = "12px 0";
-      pageHeaderEl.style.marginBottom = SETTINGS_STICKY_CARD_GAP_VALUE;
+      pageHeaderEl.style.paddingTop = SETTINGS_PAGE_HEADER_PADDING_TOP;
+      pageHeaderEl.style.paddingBottom = `calc(${SETTINGS_PAGE_HEADER_PADDING_TOP} + ${SETTINGS_STICKY_CARD_GAP_VALUE})`;
+      pageHeaderEl.style.marginBottom = "0";
       pageHeaderEl.style.overflow = "visible";
       pageHeaderEl.style.background = SETTINGS_PAGE_HEADER_BACKGROUND;
       pageHeaderEl.style.backgroundColor = SETTINGS_PAGE_HEADER_BACKGROUND;
@@ -171,7 +173,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       headerEl.style.alignItems = "center";
       headerEl.style.justifyContent = "flex-start";
       headerEl.style.position = "sticky";
-      headerEl.style.top = `calc(${SETTINGS_PAGE_HEADER_HEIGHT_VALUE} + ${SETTINGS_STICKY_CARD_GAP_VALUE})`;
+      headerEl.style.top = SETTINGS_PAGE_HEADER_HEIGHT_VALUE;
       headerEl.style.zIndex = "200";
       headerEl.style.width = "100%";
       headerEl.style.maxWidth = "100%";

@@ -609,7 +609,7 @@ describe("PluginSettingTab", () => {
     expect(queryByDataset(tab.containerEl, "settingsCardBody", "deck").style.display).toBe("none");
   });
 
-  it("applies sticky styles to the page header, shared gap, mask, and card headers", () => {
+  it("applies sticky styles to the opaque page header gap, mask, and card headers", () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
@@ -622,7 +622,8 @@ describe("PluginSettingTab", () => {
     expect(pageHeader.style.zIndex).toBe("300");
     expect(pageHeader.style.width).toBe("100%");
     expect(pageHeader.style.boxSizing).toBe("border-box");
-    expect(pageHeader.style.marginBottom).toBe("var(--ahs-settings-sticky-card-gap, 8px)");
+    expect(pageHeader.style.marginBottom).toBe("0");
+    expect(pageHeader.style.paddingBottom).toBe("calc(12px + var(--ahs-settings-sticky-card-gap, 8px))");
     expect(pageHeader.style.backgroundColor).toBe("var(--modal-background, var(--background-primary))");
     expect(pageHeader.style.boxShadow).toBe("none");
     expect(collectTexts(pageHeader)).toContain("Anki Heading Sync");
@@ -640,7 +641,7 @@ describe("PluginSettingTab", () => {
     for (const cardId of ["card-types", "sync-content", "scope", "deck", "commands"] as const) {
       const header = queryByDataset(tab.containerEl, "settingsCardToggle", cardId);
       expect(header.style.position).toBe("sticky");
-      expect(header.style.top).toBe("calc(var(--ahs-settings-page-header-height, 64px) + var(--ahs-settings-sticky-card-gap, 8px))");
+      expect(header.style.top).toBe("var(--ahs-settings-page-header-height, 64px)");
       expect(header.style.zIndex).toBe("200");
       expect(header.style.display).toBe("flex");
       expect(header.style.width).toBe("100%");
