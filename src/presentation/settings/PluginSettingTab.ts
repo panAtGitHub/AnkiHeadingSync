@@ -283,7 +283,6 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private renderCardTypesCard(containerEl: HTMLElement): void {
     this.hydrateVisibleCardTypeCaches();
     this.maybeStartNoteTypeCacheCheck();
-    containerEl.createEl("p", { text: t("settings.cards.cardTypes.desc") });
 
     const actionRow = containerEl.createDiv();
     actionRow.style.display = "flex";
@@ -1012,8 +1011,12 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
   private countConfiguredCardTypes(ankiModelFieldCache: AnkiHeadingSyncPlugin["settings"]["ankiModelFieldCache"]): number {
     return VISIBLE_CARD_TYPE_CONFIG_IDS.reduce((configuredCount, configId) => {
-      const selectedModelName = this.plugin.settings.cardTypeConfigs[configId].noteType;
-      return configuredCount + (ankiModelFieldCache[selectedModelName] ? 1 : 0);
+      const config = this.plugin.settings.cardTypeConfigs[configId];
+      if (!config.enabled) {
+        return configuredCount;
+      }
+
+      return configuredCount + (ankiModelFieldCache[config.noteType] ? 1 : 0);
     }, 0);
   }
 

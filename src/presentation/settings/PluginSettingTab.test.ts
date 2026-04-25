@@ -725,6 +725,16 @@ describe("PluginSettingTab", () => {
     expect(() => queryByDataset(tab.containerEl, "cardTypeMarker", "semantic-qa")).toThrow("Element not found");
   });
 
+  it("does not render the legacy card-types description copy", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await expandCard(tab, "card-types");
+
+    expect(collectTexts(tab.containerEl)).not.toContain("直接编辑识别规则，修改后自动保存。");
+  });
+
   it("auto saves toggle, heading, note type and field mapping edits", async () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
@@ -1047,6 +1057,104 @@ describe("PluginSettingTab", () => {
     expect(plugin.getModelFieldNamesByModelNamesCalls).toBe(1);
     expect(collectTexts(tab.containerEl).some((text) => text.includes("已获取 3 个笔记模板，已选择并配置 2 个卡片模式。"))).toBe(true);
     expect(collectTexts(tab.containerEl).some((text) => text.includes("和本页缓存的 2 个模板不一致"))).toBe(false);
+  });
+
+  it("counts only enabled visible card types with cached fields in the status summary", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      ankiNoteTypeCache: ["Basic", "Custom Cloze", QA_GROUP_USER_MODEL_NAME],
+      ankiModelFieldCache: {
+        Basic: {
+          fieldNames: ["Front", "Back", "Extra"],
+          loadedAt: 100,
+        },
+        "Custom Cloze": {
+          fieldNames: ["Text", "Extra", "Hint"],
+          loadedAt: 100,
+        },
+        [QA_GROUP_USER_MODEL_NAME]: {
+          fieldNames: ["题目", "标题", "问题01", "答案01"],
+          loadedAt: 100,
+        },
+      },
+      cardTypeConfigs: {
+        ...plugin.settings.cardTypeConfigs,
+        basic: {
+          ...plugin.settings.cardTypeConfigs.basic,
+          enabled: true,
+          noteType: "Basic",
+        },
+        "qa-group": {
+          ...plugin.settings.cardTypeConfigs["qa-group"],
+          enabled: true,
+          noteType: QA_GROUP_USER_MODEL_NAME,
+        },
+        cloze: {
+          ...plugin.settings.cardTypeConfigs.cloze,
+          enabled: false,
+          noteType: "Custom Cloze",
+        },
+      },
+    });
+    plugin.noteModels = ["Basic", "Custom Cloze", QA_GROUP_USER_MODEL_NAME];
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await expandCard(tab, "card-types");
+    await flushPromises();
+
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("当前使用缓存的 3 个笔记模板，已选择并配置 2 个卡片模式。"))).toBe(true);
+
+    const clozeToggle = queryByDataset(tab.containerEl, "cardTypeEnabled", "cloze");
+    clozeToggle.checked = true;
+    await clozeToggle.trigger("change");
+
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("当前使用缓存的 3 个笔记模板，已选择并配置 3 个卡片模式。"))).toBe(true);
+  });
+
+  it("excludes enabled card types without cached fields from the configured count", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      ankiNoteTypeCache: ["Basic", "Custom Cloze", QA_GROUP_USER_MODEL_NAME],
+      ankiModelFieldCache: {
+        Basic: {
+          fieldNames: ["Front", "Back", "Extra"],
+          loadedAt: 100,
+        },
+        [QA_GROUP_USER_MODEL_NAME]: {
+          fieldNames: ["题目", "标题", "问题01", "答案01"],
+          loadedAt: 100,
+        },
+      },
+      cardTypeConfigs: {
+        ...plugin.settings.cardTypeConfigs,
+        basic: {
+          ...plugin.settings.cardTypeConfigs.basic,
+          enabled: true,
+          noteType: "Basic",
+        },
+        "qa-group": {
+          ...plugin.settings.cardTypeConfigs["qa-group"],
+          enabled: true,
+          noteType: QA_GROUP_USER_MODEL_NAME,
+        },
+        cloze: {
+          ...plugin.settings.cardTypeConfigs.cloze,
+          enabled: true,
+          noteType: "Custom Cloze",
+        },
+      },
+    });
+    plugin.noteModels = ["Basic", "Custom Cloze", QA_GROUP_USER_MODEL_NAME];
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await expandCard(tab, "card-types");
+    await flushPromises();
+
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("当前使用缓存的 3 个笔记模板，已选择并配置 2 个卡片模式。"))).toBe(true);
   });
 
   it("switching note type immediately reuses cached field names", async () => {
