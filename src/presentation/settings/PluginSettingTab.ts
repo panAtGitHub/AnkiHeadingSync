@@ -118,11 +118,22 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       headerEl.type = "button";
       headerEl.dataset.settingsCardToggle = cardId;
       headerEl.style.position = "sticky";
-      headerEl.style.top = "8px";
-      headerEl.style.zIndex = "20";
+      headerEl.style.top = "0";
+      headerEl.style.zIndex = "30";
+      headerEl.style.display = "flex";
+      headerEl.style.alignItems = "center";
+      headerEl.style.justifyContent = "flex-start";
+      headerEl.style.width = "100%";
+      headerEl.style.maxWidth = "100%";
+      headerEl.style.padding = "10px 14px";
       headerEl.style.background = "var(--background-primary)";
+      headerEl.style.backdropFilter = "blur(8px)";
+      headerEl.style.border = "none";
+      headerEl.style.borderBottom = "1px solid var(--background-modifier-border)";
+      headerEl.style.borderRadius = "0";
       headerEl.style.marginBottom = "8px";
-      headerEl.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.08)";
+      headerEl.style.textAlign = "left";
+      headerEl.style.boxShadow = "0 6px 14px rgba(0, 0, 0, 0.08)";
       headerEl.addEventListener("click", () => {
         this.toggleCard(cardId);
       });

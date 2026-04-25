@@ -521,10 +521,13 @@ describe("PluginSettingTab", () => {
     for (const cardId of ["card-types", "sync-content", "scope", "deck", "commands"] as const) {
       const header = queryByDataset(tab.containerEl, "settingsCardToggle", cardId);
       expect(header.style.position).toBe("sticky");
-      expect(header.style.top).toBe("8px");
-      expect(header.style.zIndex).toBe("20");
+      expect(header.style.top).toBe("0");
+      expect(header.style.zIndex).toBe("30");
+      expect(header.style.display).toBe("flex");
+      expect(header.style.width).toBe("100%");
       expect(header.style.background).toBe("var(--background-primary)");
-      expect(header.style.boxShadow).toBe("0 2px 8px rgba(0, 0, 0, 0.08)");
+      expect(header.style.borderBottom).toBe("1px solid var(--background-modifier-border)");
+      expect(header.style.boxShadow).toBe("0 6px 14px rgba(0, 0, 0, 0.08)");
     }
   });
 
