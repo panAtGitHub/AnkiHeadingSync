@@ -274,7 +274,9 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     const ankiRow = blockEl.createDiv();
     ankiRow.style.display = "grid";
-    ankiRow.style.gridTemplateColumns = "minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr)";
+    ankiRow.style.gridTemplateColumns = configId === "qa-group"
+      ? "minmax(0, 1.1fr) minmax(0, 0.75fr) minmax(220px, 0.95fr)"
+      : "minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr)";
     ankiRow.style.alignItems = "center";
     ankiRow.style.columnGap = "16px";
     ankiRow.style.rowGap = "8px";
@@ -347,13 +349,15 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     }
 
     const slotFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.qaGroupSlotFields"));
-    slotFieldGroup.createEl("span", {
+    const slotSummaryEl = slotFieldGroup.createEl("span", {
       text: qaGroupState.mapping
         ? t("settings.cards.cardTypes.qaGroup.detectedSlots", {
             count: qaGroupState.mapping.slots.length,
           })
         : (selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel")),
-    }).dataset.qaGroupSlotSummary = configId;
+    });
+    slotSummaryEl.dataset.qaGroupSlotSummary = configId;
+    this.applyFluidEllipsis(slotSummaryEl);
 
     if (qaGroupState.error) {
       const errorEl = containerEl.createDiv({
