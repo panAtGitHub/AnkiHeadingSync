@@ -547,6 +547,10 @@ function collectTexts(container: QueryRoot): string[] {
     .filter((text): text is string => Boolean(text));
 }
 
+function collectSettingNames(container: QueryRoot): string[] {
+  return asFakeContainer(container).settings.map((setting) => setting.name);
+}
+
 function collectOptionValues(selectEl: FakeElementInstance): string[] {
   return selectEl.children
     .filter((element) => element.tag === "option")
@@ -733,6 +737,48 @@ describe("PluginSettingTab", () => {
     await expandCard(tab, "card-types");
 
     expect(collectTexts(tab.containerEl)).not.toContain("直接编辑识别规则，修改后自动保存。");
+  });
+
+  it("renders sync-content section titles and settings in the new grouped order", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await expandCard(tab, "sync-content");
+
+    const sectionTitles = queryAllByDataset(tab.containerEl, "syncContentSectionTitle").map((element) => element.textContent || element.text);
+    expect(sectionTitles).toEqual([
+      "1. 确定「卡片正文」范围",
+      "2. 确定是否增加回链，方便从 Anki「卡片级跳转」回 Obsidian",
+      "3. 确定是否读取「标签」",
+      "4. 「填空题」专项",
+    ]);
+
+    expect(collectSettingNames(tab.containerEl)).toEqual([
+      "卡片正文截止模式",
+      "添加 Obsidian 回链",
+      "Obsidian 回链显示名称",
+      "Obsidian 回链放置位置",
+      "同步 Obsidian 标签到 Anki",
+      "在卡片正文中保留纯标签行",
+      "高亮转填空题",
+    ]);
+    expect(findSetting(tab.containerEl, "高亮转填空题")).toBeDefined();
+    expect(() => findSetting(tab.containerEl, "高亮转 Cloze")).toThrow("Setting not found");
+  });
+
+  it("keeps saving highlights-to-cloze through the same internal config field", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await expandCard(tab, "sync-content");
+
+    const highlightsSetting = findSetting(tab.containerEl, "高亮转填空题");
+    await getToggle(highlightsSetting).triggerChange(false);
+
+    expect(plugin.settings.convertHighlightsToCloze).toBe(false);
+    expect(plugin.updateCalls).toContainEqual({ convertHighlightsToCloze: false });
   });
 
   it("auto saves toggle, heading, note type and field mapping edits", async () => {

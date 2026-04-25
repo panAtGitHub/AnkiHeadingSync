@@ -497,7 +497,8 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private renderSyncContentCard(containerEl: HTMLElement): void {
     containerEl.createEl("p", { text: t("settings.cards.syncContent.desc") });
 
-    new Setting(containerEl)
+    const bodyRangeSection = this.createSyncContentSection(containerEl, "body-range", t("settings.cards.syncContent.sections.bodyRange"));
+    new Setting(bodyRangeSection)
       .setName(t("settings.cardAnswerCutoffMode.name"))
       .setDesc(t("settings.cardAnswerCutoffMode.desc"))
       .addDropdown((dropdown) => {
@@ -508,7 +509,8 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
       });
 
-    new Setting(containerEl)
+    const backlinkSection = this.createSyncContentSection(containerEl, "backlink", t("settings.cards.syncContent.sections.backlink"));
+    new Setting(backlinkSection)
       .setName(t("settings.syncOptions.addObsidianBacklink.name"))
       .setDesc(t("settings.syncOptions.addObsidianBacklink.desc"))
       .addToggle((toggle) => {
@@ -517,7 +519,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
       });
 
-    new Setting(containerEl)
+    new Setting(backlinkSection)
       .setName(t("settings.syncOptions.obsidianBacklinkLabel.name"))
       .setDesc(t("settings.syncOptions.obsidianBacklinkLabel.desc"))
       .addText((text) => {
@@ -535,7 +537,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
           });
       });
 
-    new Setting(containerEl)
+    new Setting(backlinkSection)
       .setName(t("settings.syncOptions.obsidianBacklinkPlacement.name"))
       .setDesc(t("settings.syncOptions.obsidianBacklinkPlacement.desc"))
       .addDropdown((dropdown) => {
@@ -547,16 +549,8 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
       });
 
-    new Setting(containerEl)
-      .setName(t("settings.syncOptions.highlightsToCloze.name"))
-      .setDesc(t("settings.syncOptions.highlightsToCloze.desc"))
-      .addToggle((toggle) => {
-        toggle.setValue(this.plugin.settings.convertHighlightsToCloze).onChange((value) => {
-          void this.plugin.updateSettings({ convertHighlightsToCloze: value });
-        });
-      });
-
-    new Setting(containerEl)
+    const tagsSection = this.createSyncContentSection(containerEl, "tags", t("settings.cards.syncContent.sections.tags"));
+    new Setting(tagsSection)
       .setName(t("settings.syncOptions.syncObsidianTagsToAnki.name"))
       .setDesc(t("settings.syncOptions.syncObsidianTagsToAnki.desc"))
       .addToggle((toggle) => {
@@ -565,7 +559,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
       });
 
-    new Setting(containerEl)
+    new Setting(tagsSection)
       .setName(t("settings.syncOptions.keepPureTagLinesInCardBody.name"))
       .setDesc(t("settings.syncOptions.keepPureTagLinesInCardBody.desc"))
       .addToggle((toggle) => {
@@ -573,6 +567,31 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
           void this.plugin.updateSettings({ keepPureTagLinesInCardBody: value });
         });
       });
+
+    const clozeSection = this.createSyncContentSection(containerEl, "cloze-special", t("settings.cards.syncContent.sections.clozeSpecial"));
+    new Setting(clozeSection)
+      .setName(t("settings.syncOptions.highlightsToCloze.name"))
+      .setDesc(t("settings.syncOptions.highlightsToCloze.desc"))
+      .addToggle((toggle) => {
+        toggle.setValue(this.plugin.settings.convertHighlightsToCloze).onChange((value) => {
+          void this.plugin.updateSettings({ convertHighlightsToCloze: value });
+        });
+      });
+  }
+
+  private createSyncContentSection(containerEl: HTMLElement, sectionId: string, title: string): HTMLElement {
+    const sectionEl = containerEl.createDiv();
+    sectionEl.dataset.syncContentSection = sectionId;
+    sectionEl.style.display = "flex";
+    sectionEl.style.flexDirection = "column";
+    sectionEl.style.gap = "8px";
+    sectionEl.style.marginTop = "16px";
+
+    const titleEl = sectionEl.createEl("h4", { text: title });
+    titleEl.dataset.syncContentSectionTitle = sectionId;
+    titleEl.style.margin = "0";
+
+    return sectionEl;
   }
 
   private renderScopeCard(containerEl: HTMLElement): void {

@@ -20,7 +20,7 @@ export const zh = {
       desc: "默认是 H4",
     },
     clozeHeadingLevel: {
-      name: "Cloze 标题层级",
+      name: "填空题标题层级",
       desc: "默认是 H5",
     },
     cardAnswerCutoffMode: {
@@ -74,8 +74,8 @@ export const zh = {
         },
       },
       highlightsToCloze: {
-        name: "高亮转 Cloze",
-        desc: "把 ==highlight== 片段转换成 cloze 卡片使用的挖空格式。",
+        name: "高亮转填空题",
+        desc: "把 ==highlight== 片段转换成填空题使用的挖空格式。",
       },
       syncObsidianTagsToAnki: {
         name: "同步 Obsidian 标签到 Anki",
@@ -113,8 +113,8 @@ export const zh = {
           description: "选择 QA 笔记类型，从 Anki 读取字段，然后确认标题/正文映射。",
         },
         cloze: {
-          title: "Cloze",
-          description: "选择 Cloze 笔记类型，从 Anki 读取字段，然后确认主字段映射。",
+          title: "填空题",
+          description: "选择填空题笔记类型，从 Anki 读取字段，然后确认主字段映射。",
         },
         semanticQa: {
           title: "语义 QA",
@@ -136,7 +136,7 @@ export const zh = {
       bodyFieldLabel: "{{title}} 正文字段",
       bodyFieldDesc: "选择接收正文片段的 Anki 字段。",
       mainField: {
-        name: "Cloze 主字段",
+        name: "填空题主字段",
         desc: "同步时，所选字段会接收 标题 + <br><br> + 正文。",
       },
       selectFieldPlaceholder: "-- 选择字段 --",
@@ -274,6 +274,12 @@ export const zh = {
       syncContent: {
         title: "同步内容",
         desc: "这些选项只影响卡片渲染内容，修改后仅刷新这一张卡片。",
+        sections: {
+          bodyRange: "1. 确定「卡片正文」范围",
+          backlink: "2. 确定是否增加回链，方便从 Anki「卡片级跳转」回 Obsidian",
+          tags: "3. 确定是否读取「标签」",
+          clozeSpecial: "4. 「填空题」专项",
+        },
       },
       scope: {
         title: "卡片同步范围",
@@ -351,7 +357,7 @@ export const zh = {
     },
     settings: {
       headingLevelsRange: "标题层级必须是 1 到 6 之间的整数。",
-      headingLevelsDifferent: "QA 和 Cloze 的标题层级必须不同。",
+      headingLevelsDifferent: "QA 和填空题的标题层级必须不同。",
       cardTypeConfigsObject: "卡片类型配置必须是对象。",
       cardTypeEnabledBoolean: "每种卡片类型的启用状态必须是布尔值。",
       cardTypeExtraMarkerString: "每种卡片类型的额外标记必须是字符串。",
@@ -360,7 +366,7 @@ export const zh = {
       qaNoteTypeRequired: "QA 笔记类型不能为空。",
       qaGroupMarkerRequired: "QA Group 标记不能为空。",
       qaGroupMarkerInvalid: "QA Group 标记必须是类似 #anki-list 的 hashtag 样式 token。",
-      clozeNoteTypeRequired: "Cloze 笔记类型不能为空。",
+      clozeNoteTypeRequired: "填空题笔记类型不能为空。",
       semanticQaMarkerRequired: "语义 QA 标记不能为空。",
       semanticQaMarkerInvalid: "语义 QA 标记必须是类似 #anki-list-qa 的 hashtag 样式 token。",
       qaGroupMarkerConflict: "QA Group 标记必须和语义 QA 标记不同。",
@@ -405,26 +411,26 @@ export const zh = {
     noteFieldMapping: {
       noteTypeNotSelected: {
         basic: "基础卡尚未选择 Anki 笔记模板。请先在设置页选择模板后再同步。",
-        cloze: "Cloze 尚未选择 Anki 笔记模板。请先在设置页选择模板后再同步。",
+        cloze: "填空题尚未选择 Anki 笔记模板。请先在设置页选择模板后再同步。",
         semanticQa: "语义 QA 尚未选择 Anki 笔记模板。请先在设置页选择模板后再同步。",
         qaGroup: "问答题（多级列表）尚未选择 Anki 笔记模板。请先在设置页选择模板后再同步。",
       },
       missingSavedMapping: {
         basic: "找不到基础卡笔记类型 \"{{modelName}}\" 的已保存字段映射。请打开插件设置并先从 Anki 读取字段。",
-        cloze: "找不到 Cloze 笔记类型 \"{{modelName}}\" 的已保存字段映射。请打开插件设置并先从 Anki 读取字段。",
+        cloze: "找不到填空题笔记类型 \"{{modelName}}\" 的已保存字段映射。请打开插件设置并先从 Anki 读取字段。",
         semanticQa: "找不到语义 QA 笔记类型 \"{{modelName}}\" 的已保存字段映射。请打开插件设置并先从 Anki 读取字段。",
       },
       incompleteSavedMapping: {
         basic: "基础卡笔记类型 \"{{modelName}}\" 的已保存字段映射不完整。请打开插件设置并保存标题字段和正文字段。",
         semanticQa: "语义 QA 笔记类型 \"{{modelName}}\" 的已保存字段映射不完整。请打开插件设置并保存标题字段和正文字段。",
-        cloze: "Cloze 笔记类型 \"{{modelName}}\" 的已保存字段映射不完整。请打开插件设置并保存主字段。",
+        cloze: "填空题笔记类型 \"{{modelName}}\" 的已保存字段映射不完整。请打开插件设置并保存主字段。",
       },
       titleBodyMustDiffer: {
         basic: "基础卡笔记类型 \"{{modelName}}\" 的标题字段和正文字段必须不同。",
         semanticQa: "语义 QA 笔记类型 \"{{modelName}}\" 的标题字段和正文字段必须不同。",
       },
       stale: "笔记类型 \"{{modelName}}\" 的已保存字段映射已过期，因为这些字段在 Anki 中已不存在：{{fields}}。请重新从 Anki 读取字段。",
-      clozeIncompatible: "Cloze 笔记类型 \"{{modelName}}\" 在 Anki 中不是 cloze 兼容模型。",
+      clozeIncompatible: "填空题笔记类型 \"{{modelName}}\" 在 Anki 中不是填空题兼容模型。",
       qaGroupMissingTitle: "问答题（多级列表）笔记模板 \"{{modelName}}\" 缺少可识别的题目字段。请使用 题目、标题、正面、Stem 或 Title 之一。",
       qaGroupNoCompleteSlots: "问答题（多级列表）笔记模板 \"{{modelName}}\" 没有可用的完整问题/答案字段组。",
       qaGroupNonContinuousSlots: "问答题（多级列表）笔记模板 \"{{modelName}}\" 的第一组问题/答案字段不是从第 {{firstIndex}} 组开始连续编号。请从第 1 组开始。",

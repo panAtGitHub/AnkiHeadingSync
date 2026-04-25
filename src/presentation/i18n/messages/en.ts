@@ -276,6 +276,12 @@ export const en = {
       syncContent: {
         title: "Sync content",
         desc: "These options affect rendered content only. Updating them refreshes this card only.",
+        sections: {
+          bodyRange: "1. Choose the card body range",
+          backlink: "2. Add backlinks for card-level jumps from Anki to Obsidian",
+          tags: "3. Read tags",
+          clozeSpecial: "4. Cloze-specific options",
+        },
       },
       scope: {
         title: "Card sync scope",
