@@ -278,7 +278,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     ankiRow.style.alignItems = "center";
     ankiRow.style.columnGap = "16px";
     ankiRow.style.rowGap = "8px";
-    ankiRow.style.overflow = "hidden";
+    ankiRow.style.overflow = "visible";
     ankiRow.style.width = "100%";
 
     const noteTypeGroup = this.createGridControlSlot(ankiRow, t("settings.cards.cardTypes.labels.noteType"));
@@ -1322,11 +1322,14 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private applyFluidEllipsis(element: HTMLElement): void {
+    const tagName = (element.tagName || (element as unknown as { tag?: string }).tag || "").toLowerCase();
+    const isFieldControl = tagName === "select" || tagName === "input";
     element.style.boxSizing = "border-box";
-    element.style.width = "100%";
-    element.style.maxWidth = "100%";
+    element.style.width = isFieldControl ? "calc(100% - 2px)" : "100%";
+    element.style.maxWidth = isFieldControl ? "calc(100% - 2px)" : "100%";
     element.style.minWidth = "0";
-    element.style.overflow = "hidden";
+    element.style.margin = isFieldControl ? "1px" : "0";
+    element.style.overflow = isFieldControl ? "visible" : "hidden";
     element.style.textOverflow = "ellipsis";
     element.style.whiteSpace = "nowrap";
   }
