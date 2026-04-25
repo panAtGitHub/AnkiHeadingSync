@@ -40,14 +40,14 @@ export function createNoteFieldMappingKey(cardType: NoteModelFieldMappingCardTyp
   return `${cardType}:${modelName}`;
 }
 
-export function isBasicLikeNoteModelFieldMapping(mapping: NoteModelFieldMapping): mapping is BasicLikeNoteModelFieldMapping {
-  return mapping.cardType === "basic" || mapping.cardType === "semantic-qa";
+export function isBasicLikeNoteModelFieldMapping(mapping: NoteModelFieldMapping | undefined): mapping is BasicLikeNoteModelFieldMapping {
+  return mapping?.cardType === "basic" || mapping?.cardType === "semantic-qa";
 }
 
-export function isClozeNoteModelFieldMapping(mapping: NoteModelFieldMapping): mapping is ClozeNoteModelFieldMapping {
-  return mapping.cardType === "cloze";
+export function isClozeNoteModelFieldMapping(mapping: NoteModelFieldMapping | undefined): mapping is ClozeNoteModelFieldMapping {
+  return mapping?.cardType === "cloze";
 }
 
-export function isQaGroupFieldMapping(mapping: NoteModelFieldMapping): mapping is QaGroupFieldMapping {
-  return mapping.cardType === "qa-group";
+export function isQaGroupFieldMapping(mapping: NoteModelFieldMapping | undefined): mapping is QaGroupFieldMapping {
+  return mapping?.cardType === "qa-group";
 }

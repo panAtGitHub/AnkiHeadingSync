@@ -44,6 +44,38 @@ describe("QaGroupSyncService", () => {
     expect(result.markerWrites[0]?.freeSlots).toEqual([3]);
   });
 
+  it("writes the stem to the user-selected QA Group title field", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    ankiGateway.modelDetailsByName[QA_GROUP_USER_NOTE_TYPE] = {
+      fieldNames: ["题目", "标题", "问题01", "答案01", "问题02", "答案02", "问题03", "答案03"],
+      isCloze: false,
+    };
+    const baseSettings = createModule3Settings();
+    const service = new QaGroupSyncService(ankiGateway);
+
+    await service.sync([createIndexedGroupBlock()], createEmptyPluginState(), createModule3Settings({
+      noteFieldMappings: {
+        ...baseSettings.noteFieldMappings,
+        [`qa-group:${QA_GROUP_USER_NOTE_TYPE}`]: {
+          cardType: "qa-group",
+          modelName: QA_GROUP_USER_NOTE_TYPE,
+          loadedFieldNames: ["题目", "标题", "问题01", "答案01", "问题02", "答案02", "问题03", "答案03"],
+          titleField: "标题",
+          slots: [
+            { index: 1, questionField: "问题01", answerField: "答案01" },
+            { index: 2, questionField: "问题02", answerField: "答案02" },
+            { index: 3, questionField: "问题03", answerField: "答案03" },
+          ],
+          warnings: [],
+          loadedAt: 1,
+        },
+      },
+    }));
+
+    expect(ankiGateway.addedNotes[0]?.fields.标题).toBe("Concepts");
+    expect(ankiGateway.addedNotes[0]?.fields).not.toHaveProperty("题目");
+  });
+
   it("renders QA Group stem, questions, and answers as inline Markdown HTML", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     const vaultGateway = new FakeManualSyncVaultGateway();

@@ -324,17 +324,23 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const qaGroupState = this.getQaGroupFieldState(configId);
 
     const titleFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.qaGroupTitleField"));
-    titleFieldGroup.createEl("span", {
-      text: qaGroupState.mapping?.titleField
-        ?? (selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel")),
-    }).dataset.qaGroupTitleField = configId;
+    if (qaGroupState.mapping) {
+      const titleFieldSelect = this.createFieldSelect(titleFieldGroup, `card-type-qa-group-title-field:${configId}`);
+      titleFieldSelect.dataset.qaGroupTitleField = configId;
+      this.applyFluidEllipsis(titleFieldSelect);
+      this.populateFieldSelect(titleFieldSelect, qaGroupState.mapping.loadedFieldNames, qaGroupState.mapping.titleField);
+      titleFieldSelect.addEventListener("change", () => this.saveFieldMapping(configId, { titleField: titleFieldSelect.value || undefined }));
+    } else {
+      titleFieldGroup.createEl("span", {
+        text: selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel"),
+      }).dataset.qaGroupTitleField = configId;
+    }
 
     const slotFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.qaGroupSlotFields"));
     slotFieldGroup.createEl("span", {
       text: qaGroupState.mapping
         ? t("settings.cards.cardTypes.qaGroup.detectedSlots", {
             count: qaGroupState.mapping.slots.length,
-            summary: summarizeQaGroupSlots(qaGroupState.mapping),
           })
         : (selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel")),
     }).dataset.qaGroupSlotSummary = configId;
@@ -808,6 +814,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
           modelDetails.fieldNames,
           loadedAt,
           isQaGroupFieldMapping(currentMapping) ? currentMapping.acceptedWarnings : undefined,
+          isQaGroupFieldMapping(currentMapping) ? currentMapping.titleField : undefined,
         );
       } catch {
         delete this.draftMappings[mappingKey];
@@ -862,7 +869,14 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     if (runtimeCardType === "qa-group") {
       try {
-        const suggestedMapping = this.qaGroupFieldMappingService.suggest(modelName, modelDetails.fieldNames);
+        const currentMapping = this.plugin.settings.noteFieldMappings[mappingKey] ?? this.draftMappings[mappingKey];
+        const suggestedMapping = this.qaGroupFieldMappingService.suggest(
+          modelName,
+          modelDetails.fieldNames,
+          Date.now(),
+          isQaGroupFieldMapping(currentMapping) ? currentMapping.acceptedWarnings : undefined,
+          isQaGroupFieldMapping(currentMapping) ? currentMapping.titleField : undefined,
+        );
         this.draftMappings[mappingKey] = suggestedMapping;
         return {
           ...suggestedMapping,
@@ -890,7 +904,14 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     if (modelDetails) {
       if (runtimeCardType === "qa-group") {
-        return this.qaGroupFieldMappingService.suggest(modelName, modelDetails.fieldNames);
+        const currentMapping = this.plugin.settings.noteFieldMappings[mappingKey] ?? this.draftMappings[mappingKey];
+        return this.qaGroupFieldMappingService.suggest(
+          modelName,
+          modelDetails.fieldNames,
+          Date.now(),
+          isQaGroupFieldMapping(currentMapping) ? currentMapping.acceptedWarnings : undefined,
+          isQaGroupFieldMapping(currentMapping) ? currentMapping.titleField : undefined,
+        );
       }
 
       return this.noteFieldMappingService.suggest(runtimeCardType, modelName, modelDetails.fieldNames);
@@ -966,6 +987,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         cacheEntry.fieldNames,
         cacheEntry.loadedAt,
         isQaGroupFieldMapping(currentMapping) ? currentMapping.acceptedWarnings : undefined,
+        isQaGroupFieldMapping(currentMapping) ? currentMapping.titleField : undefined,
       );
 
       this.draftMappings[mappingKey] = nextMapping;
@@ -1009,8 +1031,15 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     }
 
     try {
+      const currentMapping = this.plugin.settings.noteFieldMappings[mappingKey] ?? this.draftMappings[mappingKey];
       return {
-        mapping: this.qaGroupFieldMappingService.suggest(modelName, modelDetails.fieldNames),
+        mapping: this.qaGroupFieldMappingService.suggest(
+          modelName,
+          modelDetails.fieldNames,
+          Date.now(),
+          isQaGroupFieldMapping(currentMapping) ? currentMapping.acceptedWarnings : undefined,
+          isQaGroupFieldMapping(currentMapping) ? currentMapping.titleField : undefined,
+        ),
       };
     } catch (error) {
       return {
@@ -1310,15 +1339,6 @@ function getScopeModeSummary(scopeMode: ScopeMode): string {
   }
 
   return t("settings.scope.summary.all");
-}
-
-function summarizeQaGroupSlots(mapping: QaGroupFieldMapping): string {
-  const slotPairs = mapping.slots.map((slot) => `${slot.questionField}/${slot.answerField}`);
-  if (slotPairs.length <= 3) {
-    return slotPairs.join(", ");
-  }
-
-  return `${slotPairs.slice(0, 3).join(", ")}...`;
 }
 
 function areMappingsEqual(left: NoteModelFieldMapping | undefined, right: NoteModelFieldMapping): boolean {

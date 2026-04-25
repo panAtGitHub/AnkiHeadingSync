@@ -48,6 +48,14 @@ describe("QaGroupFieldMappingService", () => {
     });
   });
 
+  it("keeps a user-selected title field when it still exists", () => {
+    const service = new QaGroupFieldMappingService();
+
+    const mapping = service.suggest("问答题（多级列表）", ["题目", "标题", "问题01", "答案01"], 123, undefined, "标题");
+
+    expect(mapping.titleField).toBe("标题");
+  });
+
   it("supports the legacy Stem plus Sxx_Q/Sxx_A shape as a normal user template", () => {
     const service = new QaGroupFieldMappingService();
 
@@ -84,13 +92,18 @@ describe("QaGroupFieldMappingService", () => {
     expect(reset.acceptedWarnings).toBeUndefined();
   });
 
-  it("throws when no preferred title field exists", () => {
+  it("leaves the title field unset when no preferred title field exists", () => {
     const service = new QaGroupFieldMappingService();
 
-    const error = expectPluginUserError(() => service.suggest("问答题（多级列表）", ["问题01", "答案01"]));
+    const mapping = service.suggest("问答题（多级列表）", ["问题01", "答案01"]);
 
+    expect(mapping.titleField).toBeUndefined();
+    expect(mapping.slots).toEqual([
+      { index: 1, questionField: "问题01", answerField: "答案01" },
+    ]);
+
+    const error = expectPluginUserError(() => service.validateMapping(mapping, mapping.loadedFieldNames));
     expect(error.userMessage.key).toBe("errors.noteFieldMapping.qaGroupMissingTitle");
-    expect(error.userMessage.params).toEqual({ modelName: "问答题（多级列表）" });
   });
 
   it("throws when the first detected slot does not start from one", () => {

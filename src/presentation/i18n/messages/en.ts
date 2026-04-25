@@ -255,7 +255,7 @@ export const en = {
         qaGroup: {
           noModel: "Select an Anki note type first",
           unavailable: "Read fields from Anki first",
-          detectedSlots: "Detected {{count}} pair(s): {{summary}}",
+          detectedSlots: "Detected {{count}} pair(s)",
           acceptWarnings: "I confirm these warnings can be ignored and sync may continue",
           warning: {
             missingAnswer: "Slot {{index}} is missing its answer field, so {{questionField}} / {{answerField}} was ignored.",

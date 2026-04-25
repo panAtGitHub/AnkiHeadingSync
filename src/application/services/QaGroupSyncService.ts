@@ -488,6 +488,7 @@ export class QaGroupSyncService {
       fieldNames,
       this.now(),
       isQaGroupFieldMapping(storedMapping) ? storedMapping.acceptedWarnings : undefined,
+      isQaGroupFieldMapping(storedMapping) ? storedMapping.titleField : undefined,
     );
     this.qaGroupFieldMappingService.validateMapping(mapping, fieldNames);
     this.qaGroupFieldMappingService.validateWarningsAccepted(mapping);

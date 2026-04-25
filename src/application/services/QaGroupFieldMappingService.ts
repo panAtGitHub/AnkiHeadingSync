@@ -25,14 +25,11 @@ export class QaGroupFieldMappingService {
     fieldNames: string[],
     loadedAt = Date.now(),
     acceptedWarnings?: string[],
+    preferredTitleField?: string,
   ): QaGroupFieldMapping {
-    const titleField = findFieldName(fieldNames, TITLE_FIELD_PRIORITY);
-    if (!titleField) {
-      throw new PluginUserError("errors.noteFieldMapping.qaGroupMissingTitle", {
-        modelName,
-      });
-    }
-
+    const titleField = preferredTitleField && fieldNames.includes(preferredTitleField)
+      ? preferredTitleField
+      : findFieldName(fieldNames, TITLE_FIELD_PRIORITY);
     const detectedFields = detectSlots(fieldNames, modelName);
 
     return {

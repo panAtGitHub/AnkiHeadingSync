@@ -384,7 +384,7 @@ class FakePlugin {
     }
 
     if (modelName === QA_GROUP_USER_MODEL_NAME) {
-      return ["题目", "问题01", "答案01", "问题02", "答案02"];
+      return ["题目", "标题", "问题01", "答案01", "问题02", "答案02"];
     }
 
     return ["Title", "Body", "Hint"];
@@ -567,10 +567,13 @@ describe("PluginSettingTab", () => {
       bodyField: "Body",
     }));
 
-    expect(queryByDataset(tab.containerEl, "qaGroupTitleField", "qa-group").textContent).toBe("题目");
-    expect(queryByDataset(tab.containerEl, "qaGroupSlotSummary", "qa-group").textContent).toContain("已识别 2 组");
+    const qaGroupTitleField = queryByDataset(tab.containerEl, "qaGroupTitleField", "qa-group");
+    expect(qaGroupTitleField.value).toBe("题目");
+    qaGroupTitleField.value = "标题";
+    await qaGroupTitleField.trigger("change");
+    expect(queryByDataset(tab.containerEl, "qaGroupSlotSummary", "qa-group").textContent).toBe("已识别 2 组");
     expect(plugin.settings.noteFieldMappings[createNoteFieldMappingKey("qa-group", plugin.settings.cardTypeConfigs["qa-group"].noteType)]).toEqual(expect.objectContaining({
-      titleField: "题目",
+      titleField: "标题",
       slots: [
         { index: 1, questionField: "问题01", answerField: "答案01" },
         { index: 2, questionField: "问题02", answerField: "答案02" },

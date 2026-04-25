@@ -253,7 +253,7 @@ export const zh = {
         qaGroup: {
           noModel: "请先选择 Anki 笔记模板",
           unavailable: "请先手动读取字段",
-          detectedSlots: "已识别 {{count}} 组：{{summary}}",
+          detectedSlots: "已识别 {{count}} 组",
           acceptWarnings: "我已确认忽略当前警告，并允许同步",
           warning: {
             missingAnswer: "第 {{index}} 组缺少答案字段，已忽略 {{questionField}} / {{answerField}}。",
