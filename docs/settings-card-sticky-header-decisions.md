@@ -1,121 +1,89 @@
-# 设置页卡片标题 Sticky 实现决策
+# 设置页页面级 Sticky 标题栏实现决策
 
-本文锁定本轮“设置页卡片标题 sticky 悬浮”的最终实现策略。
+本文锁定本轮设置页 sticky 修复的最终决策：固定的是页面级白色标题栏，而不是每个设置卡片标题。
 
-## 1. 样式落点决策
+## 1. sticky 目标决策
 
-- sticky 样式直接写在 [PluginSettingTab.ts](src/presentation/settings/PluginSettingTab.ts) 的 `initializeCards()` 中。
-- 不新建 `styles.css`。
-- 不引入 settings card CSS class 体系。
+- sticky 目标改为页面级 header 容器。
+- 不再让 `settingsCardToggle` sticky。
 
-原因：
-
-- 当前仓库没有现成的 settings stylesheet。
-- 现有 settings 页布局样式大量使用 inline style。
-- 本轮改动只影响 card header，一次性在 `headerEl` 上落样式最小、最稳定。
-
-## 2. sticky 行为决策
-
-- 所有五个 settings card header 都使用同一套 sticky 样式。
-- sticky 目标元素保持为原有 `button` header。
-- DOM 结构继续保持：
+最终结构：
 
 ```text
-cardEl
-  headerEl(button)
-  bodyEl(div)
+containerEl
+  pageHeaderEl(sticky)
+    h2
+  cardsContainerEl
+    cardEl
+      headerEl(button)
+      bodyEl(div)
 ```
 
-- 不把 header 移到单独容器。
-- 不做全局固定标题栏。
+## 2. 页面级标题栏样式决策
 
-原因：
-
-- 浏览器可利用当前 cardEl 边界自然完成“当前卡片吸附，下一卡片接替”。
-- 这能最大程度保持当前展开/折叠和局部刷新行为不变。
-
-## 3. 最终样式决策
-
+- `pageHeaderEl` 使用 inline style。
 - 必选样式：
   - `position: sticky`
-  - `top: 8px`
-  - `zIndex: 20`
+  - `top: 0`
+  - `zIndex: 100`
+  - `width: 100%`
+  - `boxSizing: border-box`
+  - `padding: 12px 0`
   - `background: var(--background-primary)`
-- 额外样式采用轻量版本：
-  - `marginBottom: 8px`
-  - `boxShadow: 0 2px 8px rgba(0, 0, 0, 0.08)`
-
-- 本轮不额外加：
-  - `border`
-  - `borderRadius`
-  - `width: fit-content`
+  - `boxShadow: none`
+- 额外使用 `marginBottom: 8px` 与下方内容拉开少量距离。
 
 原因：
 
-- 目标是提供 sticky 吸附感，而不是把 header 重新视觉包装成独立卡片。
-- 当前按钮基础外观应继续尽量交给 Obsidian 主题处理。
-- 只补最小 sticky 必需样式和轻微阴影，视觉风险最低。
+- 用户要的是页面顶部白色固定标题区。
+- sticky header 仍在文档流内，配合少量底部间距即可避免内容贴得太紧。
 
-## 4. 兼容性决策
+## 3. 卡片标题样式决策
 
-- 不新增任何 `overflow` 到 `cardEl` 或 `bodyEl`。
-- 不调整现有 card shell 边界。
-- 如果后续在真实 Obsidian 主题中出现 sticky 不生效，优先排查外层宿主容器，而不是引入 JS fallback。
+- `settingsCardToggle` 保留普通标题条样式：
+  - `fontSize: 1.5em`
+  - `fontWeight: 600`
+  - `border: 2px solid var(--background-modifier-border)`
+  - `background: var(--background-primary)`
+  - `boxShadow: none`
+- 取消以下样式：
+  - `position: sticky`
+  - `top`
+  - `zIndex`
 
 原因：
 
-- 当前仓库内未发现 card shell 祖先上的 overflow 阻断。
-- 本轮没有证据表明需要 CSS 之外的方案。
+- 卡片标题只应承担“标题 + 点击折叠展开”职责。
+- 继续让它们 sticky 会重复制造遮挡和叠层冲突。
+
+## 4. DOM 初始化决策
+
+- `display()` 首次初始化时先创建 `settingsPageHeader`。
+- 再创建 `settingsCardsContainer`，并把五张卡片初始化到该容器里。
+- 不对现有 `renderCard()`、`toggleCard()`、`bodyEl.empty()` 做行为改动。
 
 ## 5. 性能决策
 
 - 严格使用 CSS sticky。
-- 不实现：
-  - `window.addEventListener("scroll", ...)`
-  - `containerEl.addEventListener("scroll", ...)`
+- 不引入：
+  - `scroll` listener
   - `IntersectionObserver`
   - `requestAnimationFrame`
 
-原因：
+## 6. 测试决策
 
-- 当前 DOM 结构已足够支持 sticky。
-- JS 滚动同步会扩大变更面，并增加设置页滚动负担。
-- 本轮目标明确要求无滚动监听。
+- `PluginSettingTab.test.ts` 需要断言：
+  - `settingsPageHeader` 存在
+  - `settingsPageHeader` 是 sticky
+  - 每个 `settingsCardToggle` 不再 sticky
+  - 每个 `settingsCardToggle` 继续保留标题按钮视觉样式
+- 原有展开/折叠、局部刷新和 card 1 刷新测试继续保留。
 
-## 6. 行为保留决策
+## 7. 与旧方案的受控偏离
 
-- 保持以下逻辑不变：
-  - `expandedCardIds`
-  - `toggleCard()`
-  - `renderCard()`
-  - `bodyEl.style.display = expanded ? "block" : "none"`
-  - `bodyEl.empty()`
-  - 所有局部刷新调用点
+- 偏离 1：取消“每个卡片标题 sticky”。
+  - 这是本轮修复的核心。
+  - 原方案已经被截图与真实滚动行为证明方向错误。
 
-原因：
-
-- sticky 只是展示增强，不应改变现有设置页状态管理或刷新模型。
-
-## 7. 测试决策
-
-- 在 [PluginSettingTab.test.ts](src/presentation/settings/PluginSettingTab.test.ts) 新增一条 DOM 断言：
-  - 五个 `settingsCardToggle` 都存在 sticky 样式
-  - 至少断言：
-    - `position = sticky`
-    - `top = 8px`
-    - `zIndex = 20`
-    - `background = var(--background-primary)`
-- 原有以下测试继续保留并通过：
-  - 展开/折叠不重建整页
-  - 读取 Anki 配置只刷新 card 1
-  - folder tree 交互不重建整页
-
-## 8. 与计划的受控偏离
-
-- 偏离 1：不新增 `styles.css` 或 class-based 样式。
-  - 原计划允许 class 或 inline 二选一。
-  - 仓库现实更偏向 inline style，因此本轮使用 inline。
-
-- 偏离 2：不额外加 `border` / `borderRadius` / `fit-content`。
-  - 原计划将这些作为可选视觉项。
-  - 为避免 header 视觉权重过重，本轮只保留 sticky 必需样式和轻微阴影。
+- 偏离 2：不使用每卡片 sticky wrapper、mask、负 margin。
+  - 原因是用户真实目标是页面级顶栏遮挡，而不是 section 级吸附。

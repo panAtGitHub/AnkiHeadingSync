@@ -503,6 +503,7 @@ describe("PluginSettingTab", () => {
 
     tab.display();
 
+    expect(queryByDataset(tab.containerEl, "settingsPageHeader", "true")).toBeDefined();
     const cards = queryAllByDataset(tab.containerEl, "settingsCard");
     expect(cards).toHaveLength(5);
     expect(queryByDataset(tab.containerEl, "settingsCardBody", "card-types").style.display).toBe("block");
@@ -512,22 +513,27 @@ describe("PluginSettingTab", () => {
     expect(queryByDataset(tab.containerEl, "settingsCardBody", "deck").style.display).toBe("none");
   });
 
-  it("applies sticky styles to all settings card headers", () => {
+  it("applies sticky styles to the page header and keeps section headers static", () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
 
-    for (const cardId of ["card-types", "sync-content", "scope", "deck", "commands"] as const) {
-      const card = queryByDataset(tab.containerEl, "settingsCard", cardId);
-      const header = queryByDataset(tab.containerEl, "settingsCardToggle", cardId);
-      const body = queryByDataset(tab.containerEl, "settingsCardBody", cardId);
+    const pageHeader = queryByDataset(tab.containerEl, "settingsPageHeader", "true");
+    expect(pageHeader.style.position).toBe("sticky");
+    expect(pageHeader.style.top).toBe("0");
+    expect(pageHeader.style.zIndex).toBe("100");
+    expect(pageHeader.style.width).toBe("100%");
+    expect(pageHeader.style.boxSizing).toBe("border-box");
+    expect(pageHeader.style.background).toBe("var(--background-primary)");
+    expect(pageHeader.style.boxShadow).toBe("none");
+    expect(collectTexts(pageHeader)).toContain("Anki Heading Sync");
 
-      expect(card.style.position).toBe("relative");
-      expect(card.style.zIndex).toBe("0");
-      expect(header.style.position).toBe("sticky");
-      expect(header.style.top).toBe("0");
-      expect(header.style.zIndex).toBe("80");
+    for (const cardId of ["card-types", "sync-content", "scope", "deck", "commands"] as const) {
+      const header = queryByDataset(tab.containerEl, "settingsCardToggle", cardId);
+      expect(header.style.position).toBeUndefined();
+      expect(header.style.top).toBeUndefined();
+      expect(header.style.zIndex).toBeUndefined();
       expect(header.style.display).toBe("flex");
       expect(header.style.width).toBe("100%");
       expect(header.style.background).toBe("var(--background-primary)");
@@ -535,9 +541,6 @@ describe("PluginSettingTab", () => {
       expect(header.style.fontWeight).toBe("600");
       expect(header.style.border).toBe("2px solid var(--background-modifier-border)");
       expect(header.style.boxShadow).toBe("none");
-      expect(body.style.position).toBe("relative");
-      expect(body.style.zIndex).toBe("0");
-      expect(body.style.paddingTop).toBe("8px");
     }
   });
 

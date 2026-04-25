@@ -95,8 +95,25 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     if (!this.displayInitialized) {
       containerEl.empty();
-      containerEl.createEl("h2", { text: t("settings.pluginTitle") });
-      this.initializeCards(containerEl);
+
+      const pageHeaderEl = containerEl.createDiv();
+      pageHeaderEl.dataset.settingsPageHeader = "true";
+      pageHeaderEl.style.position = "sticky";
+      pageHeaderEl.style.top = "0";
+      pageHeaderEl.style.zIndex = "100";
+      pageHeaderEl.style.width = "100%";
+      pageHeaderEl.style.boxSizing = "border-box";
+      pageHeaderEl.style.padding = "12px 0";
+      pageHeaderEl.style.marginBottom = "8px";
+      pageHeaderEl.style.background = "var(--background-primary)";
+      pageHeaderEl.style.boxShadow = "none";
+
+      const titleEl = pageHeaderEl.createEl("h2", { text: t("settings.pluginTitle") });
+      titleEl.style.margin = "0";
+
+      const cardsContainerEl = containerEl.createDiv();
+      cardsContainerEl.dataset.settingsCardsContainer = "true";
+      this.initializeCards(cardsContainerEl);
       this.displayInitialized = true;
     }
 
@@ -113,15 +130,10 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     for (const cardId of SETTINGS_CARD_ORDER) {
       const cardEl = containerEl.createDiv();
       cardEl.dataset.settingsCard = cardId;
-      cardEl.style.position = "relative";
-      cardEl.style.zIndex = "0";
 
       const headerEl = cardEl.createEl("button") as HTMLButtonElement;
       headerEl.type = "button";
       headerEl.dataset.settingsCardToggle = cardId;
-      headerEl.style.position = "sticky";
-      headerEl.style.top = "0";
-      headerEl.style.zIndex = "80";
       headerEl.style.display = "flex";
       headerEl.style.alignItems = "center";
       headerEl.style.justifyContent = "flex-start";
@@ -143,9 +155,6 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
       const bodyEl = cardEl.createDiv();
       bodyEl.dataset.settingsCardBody = cardId;
-      bodyEl.style.position = "relative";
-      bodyEl.style.zIndex = "0";
-      bodyEl.style.paddingTop = "8px";
 
       this.cardShells.set(cardId, {
         cardEl,
