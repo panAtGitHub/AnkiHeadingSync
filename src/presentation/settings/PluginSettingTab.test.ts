@@ -9,14 +9,37 @@ const {
   FakeElement,
   FakePluginSettingTab,
   FakeSetting,
+  FakeResizeObserver,
   getLanguageMock,
+  getResizeObserverInstances,
+  resetResizeObserverInstances,
 } = vi.hoisted(() => {
   const hoistedGetLanguage = vi.fn(() => "zh");
+  const hoistedResizeObserverInstances: HoistedFakeResizeObserver[] = [];
+
+  class HoistedFakeStyle {
+    [key: string]: unknown;
+
+    setProperty(name: string, value: string): void {
+      this[name] = value;
+    }
+
+    getPropertyValue(name: string): string {
+      const value = this[name];
+      return typeof value === "string" ? value : "";
+    }
+
+    removeProperty(name: string): string {
+      const value = this.getPropertyValue(name);
+      delete this[name];
+      return value;
+    }
+  }
 
   class HoistedFakeElement {
     public readonly children: HoistedFakeElement[] = [];
     public readonly dataset: Record<string, string> = {};
-    public readonly style: Record<string, string> = {};
+    public readonly style = new HoistedFakeStyle();
     public readonly ownedSettings: HoistedFakeSetting[] = [];
     public checked = false;
     public indeterminate = false;
@@ -28,6 +51,7 @@ const {
     public scrollTop = 0;
 
     private readonly listeners = new Map<string, Array<() => void | Promise<void>>>();
+    private rectHeight = 0;
 
     constructor(
       public readonly root: HoistedFakeContainerEl,
@@ -72,6 +96,26 @@ const {
     setAttr(name: string, value: string | number): this {
       (this as Record<string, unknown>)[name] = value;
       return this;
+    }
+
+    setBoundingClientRect(rect: { height?: number }): void {
+      if (typeof rect.height === "number") {
+        this.rectHeight = rect.height;
+      }
+    }
+
+    getBoundingClientRect(): DOMRect {
+      return {
+        bottom: this.rectHeight,
+        height: this.rectHeight,
+        left: 0,
+        right: 0,
+        toJSON: () => ({}),
+        top: 0,
+        width: 0,
+        x: 0,
+        y: 0,
+      } as DOMRect;
     }
 
     private removeOwnedSettingsRecursively(): void {
@@ -256,13 +300,44 @@ const {
     }
   }
 
+  class HoistedFakeResizeObserver {
+    public readonly observedElements: HoistedFakeElement[] = [];
+    public disconnected = false;
+
+    constructor(
+      private readonly callback: (
+        entries: Array<{ target: HoistedFakeElement }>,
+        observer: HoistedFakeResizeObserver,
+      ) => void,
+    ) {
+      hoistedResizeObserverInstances.push(this);
+    }
+
+    observe(target: HoistedFakeElement): void {
+      this.observedElements.push(target);
+    }
+
+    disconnect(): void {
+      this.disconnected = true;
+    }
+
+    trigger(): void {
+      this.callback(this.observedElements.map((target) => ({ target })), this);
+    }
+  }
+
   return {
     FakeButtonComponent: HoistedFakeButtonComponent,
     FakeDropdownComponent: HoistedFakeDropdownComponent,
     FakeElement: HoistedFakeElement,
     FakePluginSettingTab: HoistedFakePluginSettingTab,
+    FakeResizeObserver: HoistedFakeResizeObserver,
     FakeSetting: HoistedFakeSetting,
     getLanguageMock: hoistedGetLanguage,
+    getResizeObserverInstances: () => hoistedResizeObserverInstances,
+    resetResizeObserverInstances: () => {
+      hoistedResizeObserverInstances.length = 0;
+    },
   };
 });
 
@@ -478,6 +553,17 @@ function collectOptionValues(selectEl: FakeElementInstance): string[] {
     .map((element) => element.value);
 }
 
+function getStyleProperty(element: { style: { getPropertyValue?: (name: string) => string } }, property: string): string {
+  const style = element.style as { getPropertyValue?: (name: string) => string; [key: string]: unknown };
+
+  if (typeof style.getPropertyValue === "function") {
+    return style.getPropertyValue(property);
+  }
+
+  const value = style[property];
+  return typeof value === "string" ? value : "";
+}
+
 function getEmptyCallCount(container: QueryRoot): number {
   return asFakeContainer(container).emptyCallCount;
 }
@@ -488,13 +574,23 @@ async function flushPromises(): Promise<void> {
 }
 
 describe("PluginSettingTab", () => {
+  const originalResizeObserver = globalThis.ResizeObserver;
+
   beforeEach(() => {
     getLanguageMock.mockReturnValue("zh");
     vi.useRealTimers();
+    resetResizeObserverInstances();
+    Reflect.set(globalThis, "ResizeObserver", FakeResizeObserver);
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    if (typeof originalResizeObserver === "undefined") {
+      Reflect.deleteProperty(globalThis, "ResizeObserver");
+      return;
+    }
+
+    Reflect.set(globalThis, "ResizeObserver", originalResizeObserver);
   });
 
   it("renders five cards with the required default expansion state", () => {
@@ -513,35 +609,65 @@ describe("PluginSettingTab", () => {
     expect(queryByDataset(tab.containerEl, "settingsCardBody", "deck").style.display).toBe("none");
   });
 
-  it("applies sticky styles to the page header and keeps section headers static", () => {
+  it("applies sticky styles to the page header, mask, and card headers", () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
 
     const pageHeader = queryByDataset(tab.containerEl, "settingsPageHeader", "true");
+    const pageHeaderMask = queryByDataset(pageHeader, "settingsPageHeaderMask", "true");
     expect(pageHeader.style.position).toBe("sticky");
-    expect(pageHeader.style.top).toBe("0");
-    expect(pageHeader.style.zIndex).toBe("100");
+    expect(pageHeader.style.top).toBe("0px");
+    expect(pageHeader.style.zIndex).toBe("300");
     expect(pageHeader.style.width).toBe("100%");
     expect(pageHeader.style.boxSizing).toBe("border-box");
-    expect(pageHeader.style.background).toBe("var(--background-primary)");
+    expect(pageHeader.style.backgroundColor).toBe("var(--modal-background, var(--background-primary))");
     expect(pageHeader.style.boxShadow).toBe("none");
     expect(collectTexts(pageHeader)).toContain("Anki Heading Sync");
 
+    expect(pageHeaderMask.style.position).toBe("absolute");
+    expect(pageHeaderMask.style.top).toBe("-128px");
+    expect(pageHeaderMask.style.left).toBe("-24px");
+    expect(pageHeaderMask.style.right).toBe("-24px");
+    expect(pageHeaderMask.style.bottom).toBe("0px");
+    expect(pageHeaderMask.style.backgroundColor).toBe("var(--modal-background, var(--background-primary))");
+
+    expect(getStyleProperty(tab.containerEl, "--ahs-settings-page-header-height")).toBe("64px");
+
     for (const cardId of ["card-types", "sync-content", "scope", "deck", "commands"] as const) {
       const header = queryByDataset(tab.containerEl, "settingsCardToggle", cardId);
-      expect(header.style.position).toBeUndefined();
-      expect(header.style.top).toBeUndefined();
-      expect(header.style.zIndex).toBeUndefined();
+      expect(header.style.position).toBe("sticky");
+      expect(header.style.top).toBe("var(--ahs-settings-page-header-height, 64px)");
+      expect(header.style.zIndex).toBe("200");
       expect(header.style.display).toBe("flex");
       expect(header.style.width).toBe("100%");
-      expect(header.style.background).toBe("var(--background-primary)");
+      expect(header.style.backgroundColor).toBe("var(--modal-background, var(--background-primary))");
       expect(header.style.fontSize).toBe("1.5em");
       expect(header.style.fontWeight).toBe("600");
       expect(header.style.border).toBe("2px solid var(--background-modifier-border)");
       expect(header.style.boxShadow).toBe("none");
     }
+  });
+
+  it("updates the page header height variable from ResizeObserver and disconnects it on hide", () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+
+    const pageHeader = queryByDataset(tab.containerEl, "settingsPageHeader", "true");
+    pageHeader.setBoundingClientRect({ height: 72 });
+
+    const resizeObserver = getResizeObserverInstances().at(0);
+    expect(resizeObserver).toBeDefined();
+    resizeObserver?.trigger();
+
+    expect(getStyleProperty(tab.containerEl, "--ahs-settings-page-header-height")).toBe("72px");
+
+    tab.hide();
+
+    expect(resizeObserver?.disconnected).toBe(true);
   });
 
   it("renders card 1 as three readable card type blocks", () => {

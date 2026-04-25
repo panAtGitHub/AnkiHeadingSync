@@ -36,6 +36,11 @@ const FOLDER_TREE_STATUS_LOADING: UserFacingMessage = { key: "settings.scope.loa
 const TEXT_SAVE_DEBOUNCE_MS = 500;
 const SETTINGS_CARD_ORDER = ["card-types", "sync-content", "scope", "deck", "commands"] as const;
 const VISIBLE_CARD_TYPE_CONFIG_IDS = ["basic", "qa-group", "cloze"] as const;
+const SETTINGS_PAGE_HEADER_BACKGROUND = "var(--modal-background, var(--background-primary))";
+const SETTINGS_PAGE_HEADER_HEIGHT_VARIABLE = "--ahs-settings-page-header-height";
+const SETTINGS_PAGE_HEADER_HEIGHT_FALLBACK = "64px";
+const SETTINGS_PAGE_HEADER_MASK_TOP = "-128px";
+const SETTINGS_PAGE_HEADER_MASK_SIDE = "-24px";
 
 type SettingsCardId = (typeof SETTINGS_CARD_ORDER)[number];
 type NoteTypeCacheCheckStatus = "idle" | "checking" | "same" | "changed" | "failed";
@@ -69,6 +74,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private noteTypeCacheCheckPromise: Promise<void> | null = null;
   private detectedAnkiNoteTypeCache: string[] | null = null;
   private noteTypeCacheCheckToken = 0;
+  private pageHeaderResizeObserver: ResizeObserver | null = null;
 
   constructor(plugin: AnkiHeadingSyncPlugin) {
     super(plugin.app, plugin);
@@ -78,6 +84,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   declare plugin: AnkiHeadingSyncPlugin;
 
   hide(): void {
+    this.disconnectPageHeaderResizeObserver();
     super.hide();
     this.displayInitialized = false;
     this.cardShells.clear();
@@ -92,6 +99,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     const previousScrollTop = containerEl.scrollTop;
+    containerEl.style.setProperty(SETTINGS_PAGE_HEADER_HEIGHT_VARIABLE, SETTINGS_PAGE_HEADER_HEIGHT_FALLBACK);
 
     if (!this.displayInitialized) {
       containerEl.empty();
@@ -99,17 +107,35 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       const pageHeaderEl = containerEl.createDiv();
       pageHeaderEl.dataset.settingsPageHeader = "true";
       pageHeaderEl.style.position = "sticky";
-      pageHeaderEl.style.top = "0";
-      pageHeaderEl.style.zIndex = "100";
+      pageHeaderEl.style.top = "0px";
+      pageHeaderEl.style.zIndex = "300";
       pageHeaderEl.style.width = "100%";
       pageHeaderEl.style.boxSizing = "border-box";
       pageHeaderEl.style.padding = "12px 0";
       pageHeaderEl.style.marginBottom = "8px";
-      pageHeaderEl.style.background = "var(--background-primary)";
+      pageHeaderEl.style.overflow = "visible";
+      pageHeaderEl.style.background = SETTINGS_PAGE_HEADER_BACKGROUND;
+      pageHeaderEl.style.backgroundColor = SETTINGS_PAGE_HEADER_BACKGROUND;
       pageHeaderEl.style.boxShadow = "none";
+
+      const pageHeaderMaskEl = pageHeaderEl.createDiv();
+      pageHeaderMaskEl.dataset.settingsPageHeaderMask = "true";
+      pageHeaderMaskEl.style.position = "absolute";
+      pageHeaderMaskEl.style.top = SETTINGS_PAGE_HEADER_MASK_TOP;
+      pageHeaderMaskEl.style.left = SETTINGS_PAGE_HEADER_MASK_SIDE;
+      pageHeaderMaskEl.style.right = SETTINGS_PAGE_HEADER_MASK_SIDE;
+      pageHeaderMaskEl.style.bottom = "0px";
+      pageHeaderMaskEl.style.zIndex = "0";
+      pageHeaderMaskEl.style.pointerEvents = "none";
+      pageHeaderMaskEl.style.background = SETTINGS_PAGE_HEADER_BACKGROUND;
+      pageHeaderMaskEl.style.backgroundColor = SETTINGS_PAGE_HEADER_BACKGROUND;
 
       const titleEl = pageHeaderEl.createEl("h2", { text: t("settings.pluginTitle") });
       titleEl.style.margin = "0";
+      titleEl.style.position = "relative";
+      titleEl.style.zIndex = "1";
+
+      this.observePageHeaderHeight(pageHeaderEl);
 
       const cardsContainerEl = containerEl.createDiv();
       cardsContainerEl.dataset.settingsCardsContainer = "true";
@@ -137,13 +163,17 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       headerEl.style.display = "flex";
       headerEl.style.alignItems = "center";
       headerEl.style.justifyContent = "flex-start";
+      headerEl.style.position = "sticky";
+      headerEl.style.top = `var(${SETTINGS_PAGE_HEADER_HEIGHT_VARIABLE}, ${SETTINGS_PAGE_HEADER_HEIGHT_FALLBACK})`;
+      headerEl.style.zIndex = "200";
       headerEl.style.width = "100%";
       headerEl.style.maxWidth = "100%";
       headerEl.style.boxSizing = "border-box";
       headerEl.style.padding = "10px 14px";
       headerEl.style.fontSize = "1.5em";
       headerEl.style.fontWeight = "600";
-      headerEl.style.background = "var(--background-primary)";
+      headerEl.style.background = SETTINGS_PAGE_HEADER_BACKGROUND;
+      headerEl.style.backgroundColor = SETTINGS_PAGE_HEADER_BACKGROUND;
       headerEl.style.border = "2px solid var(--background-modifier-border)";
       headerEl.style.borderRadius = "0";
       headerEl.style.marginBottom = "8px";
@@ -211,6 +241,34 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     }
 
     this.renderCommandsCard(shell.bodyEl);
+  }
+
+  private observePageHeaderHeight(pageHeaderEl: HTMLElement): void {
+    this.disconnectPageHeaderResizeObserver();
+    this.updatePageHeaderHeight(pageHeaderEl);
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    this.pageHeaderResizeObserver = new ResizeObserver(() => {
+      this.updatePageHeaderHeight(pageHeaderEl);
+    });
+    this.pageHeaderResizeObserver.observe(pageHeaderEl);
+  }
+
+  private updatePageHeaderHeight(pageHeaderEl: HTMLElement): void {
+    const measuredHeight = pageHeaderEl.getBoundingClientRect().height;
+    if (!Number.isFinite(measuredHeight) || measuredHeight <= 0) {
+      return;
+    }
+
+    this.containerEl.style.setProperty(SETTINGS_PAGE_HEADER_HEIGHT_VARIABLE, `${Math.round(measuredHeight)}px`);
+  }
+
+  private disconnectPageHeaderResizeObserver(): void {
+    this.pageHeaderResizeObserver?.disconnect();
+    this.pageHeaderResizeObserver = null;
   }
 
   private renderCardTypesCard(containerEl: HTMLElement): void {
