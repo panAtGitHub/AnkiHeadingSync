@@ -289,6 +289,8 @@ class FakePlugin {
   public getNoteModelDetailsCalls = 0;
   public listFolderTreeCalls = 0;
   public insertDeckTemplateCalls = 0;
+  public listNoteModelsError: Error | null = null;
+  public noteModels = ["Basic", "Custom Basic", "Cloze", "Custom Cloze", "Semantic QA", QA_GROUP_USER_MODEL_NAME];
   public settings = normalizePluginSettings({
     ...DEFAULT_SETTINGS,
     qaNoteType: "Custom Basic",
@@ -337,7 +339,11 @@ class FakePlugin {
 
   async listNoteModels(): Promise<string[]> {
     this.listNoteModelsCalls += 1;
-    return ["Basic", "Custom Basic", "Cloze", "Custom Cloze", "Semantic QA", QA_GROUP_USER_MODEL_NAME];
+    if (this.listNoteModelsError) {
+      throw this.listNoteModelsError;
+    }
+
+    return [...this.noteModels];
   }
 
   async getModelFieldNamesByModelNames(modelNames: string[]): Promise<Record<string, string[]>> {
@@ -703,9 +709,11 @@ describe("PluginSettingTab", () => {
         },
       },
     });
+    cachedPlugin.noteModels = ["Basic", "Cached Basic", "Cached Cloze"];
     const cachedTab = new AnkiHeadingSyncSettingTab(cachedPlugin as never);
 
     cachedTab.display();
+    await flushPromises();
 
     const basicNoteTypeSelect = queryByDataset(cachedTab.containerEl, "cardTypeNoteType", "basic");
     expect(collectOptionValues(basicNoteTypeSelect)).toEqual(["Basic", "Cached Basic", "Cached Cloze"]);
@@ -713,7 +721,118 @@ describe("PluginSettingTab", () => {
     const basicAnswerFieldSelect = queryByDataset(cachedTab.containerEl, "cardTypeAnswerField", "basic");
     expect(collectOptionValues(basicQuestionFieldSelect)).toEqual(["", "Front", "Back", "Hint"]);
     expect(collectOptionValues(basicAnswerFieldSelect)).toEqual(["", "Front", "Back", "Hint"]);
-    expect(cachedPlugin.listNoteModelsCalls).toBe(0);
+    expect(cachedPlugin.listNoteModelsCalls).toBe(1);
+    expect(cachedPlugin.getModelFieldNamesByModelNamesCalls).toBe(0);
+    expect(cachedPlugin.getNoteModelDetailsCalls).toBe(0);
+    expect(collectTexts(cachedTab.containerEl).some((text) => text.includes("当前使用缓存的 3 个笔记模板，已选择并配置 1 个卡片模式。"))).toBe(true);
+  });
+
+  it("shows cache-empty status and skips background checking when there is no cached note type", () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+
+    expect(plugin.listNoteModelsCalls).toBe(0);
+    expect(plugin.getModelFieldNamesByModelNamesCalls).toBe(0);
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("当前没有已缓存的 Anki 笔记模板"))).toBe(true);
+  });
+
+  it("warns when the live note type list differs from the cached list without loading fields", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      ankiNoteTypeCache: ["Basic", "Cached Basic", "Cached Cloze"],
+      ankiModelFieldCache: {
+        "Cached Basic": {
+          fieldNames: ["Front", "Back", "Hint"],
+          loadedAt: 123,
+        },
+      },
+      cardTypeConfigs: {
+        ...plugin.settings.cardTypeConfigs,
+        basic: {
+          ...plugin.settings.cardTypeConfigs.basic,
+          noteType: "Cached Basic",
+        },
+      },
+    });
+    plugin.noteModels = ["Basic", "Cached Basic", "Cached Cloze", "Live Only"];
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await flushPromises();
+
+    expect(plugin.listNoteModelsCalls).toBe(1);
+    expect(plugin.getModelFieldNamesByModelNamesCalls).toBe(0);
+    expect(plugin.getNoteModelDetailsCalls).toBe(0);
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("和本页缓存的 3 个模板不一致"))).toBe(true);
+  });
+
+  it("shows cache-check failure while keeping cached dropdowns when the lightweight check fails", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      ankiNoteTypeCache: ["Basic", "Cached Basic"],
+      ankiModelFieldCache: {
+        "Cached Basic": {
+          fieldNames: ["Front", "Back", "Hint"],
+          loadedAt: 123,
+        },
+      },
+      cardTypeConfigs: {
+        ...plugin.settings.cardTypeConfigs,
+        basic: {
+          ...plugin.settings.cardTypeConfigs.basic,
+          noteType: "Cached Basic",
+        },
+      },
+    });
+    plugin.listNoteModelsError = new Error("offline");
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await flushPromises();
+
+    expect(plugin.listNoteModelsCalls).toBe(1);
+    expect(plugin.getModelFieldNamesByModelNamesCalls).toBe(0);
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("后台检查最新模板列表失败"))).toBe(true);
+    expect(collectOptionValues(queryByDataset(tab.containerEl, "cardTypeNoteType", "basic"))).toEqual(["Basic", "Cached Basic"]);
+  });
+
+  it("manual refresh overrides the stale-cache warning with the latest loaded summary", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      ankiNoteTypeCache: ["Basic", "Cached Basic"],
+      ankiModelFieldCache: {
+        "Cached Basic": {
+          fieldNames: ["Front", "Back", "Hint"],
+          loadedAt: 123,
+        },
+      },
+      cardTypeConfigs: {
+        ...plugin.settings.cardTypeConfigs,
+        basic: {
+          ...plugin.settings.cardTypeConfigs.basic,
+          noteType: "Cached Basic",
+        },
+      },
+    });
+    plugin.noteModels = ["Basic", "Cached Basic", "Custom Cloze"];
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await flushPromises();
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("和本页缓存的 2 个模板不一致"))).toBe(true);
+
+    await queryByDataset(tab.containerEl, "cardTypesRefresh", "true").trigger("click");
+    await flushPromises();
+
+    expect(plugin.listNoteModelsCalls).toBe(2);
+    expect(plugin.getModelFieldNamesByModelNamesCalls).toBe(1);
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("已获取 3 个笔记模板，已选择并配置 2 个卡片模式。"))).toBe(true);
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("和本页缓存的 2 个模板不一致"))).toBe(false);
   });
 
   it("switching note type immediately reuses cached field names", async () => {

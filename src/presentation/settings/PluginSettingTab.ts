@@ -32,13 +32,13 @@ import type AnkiHeadingSyncPlugin from "@/presentation/AnkiHeadingSyncPlugin";
 
 import { buildFolderTreeSelection, toggleFolderTreeSelection, type FolderTreeSelectionNode } from "./FolderScopeTree";
 
-const NOTE_TYPE_STATUS_IDLE: UserFacingMessage = { key: "settings.mapping.status.idle" };
 const FOLDER_TREE_STATUS_LOADING: UserFacingMessage = { key: "settings.scope.loading" };
 const TEXT_SAVE_DEBOUNCE_MS = 500;
 const SETTINGS_CARD_ORDER = ["card-types", "sync-content", "scope", "deck", "commands"] as const;
 const VISIBLE_CARD_TYPE_CONFIG_IDS = ["basic", "qa-group", "cloze"] as const;
 
 type SettingsCardId = (typeof SETTINGS_CARD_ORDER)[number];
+type NoteTypeCacheCheckStatus = "idle" | "checking" | "same" | "changed" | "failed";
 
 interface SettingsCardShell {
   cardEl: HTMLElement;
@@ -63,8 +63,12 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private folderTreeLoadPromise: Promise<void> | null = null;
   private hasLoadedFolderTree = false;
   private displayInitialized = false;
-  private cardTypeStatus: UserFacingMessage = NOTE_TYPE_STATUS_IDLE;
   private ankiConfigLoading = false;
+  private cardTypeStatusOverride: UserFacingMessage | null = null;
+  private noteTypeCacheCheckStatus: NoteTypeCacheCheckStatus = "idle";
+  private noteTypeCacheCheckPromise: Promise<void> | null = null;
+  private detectedAnkiNoteTypeCache: string[] | null = null;
+  private noteTypeCacheCheckToken = 0;
 
   constructor(plugin: AnkiHeadingSyncPlugin) {
     super(plugin.app, plugin);
@@ -78,6 +82,11 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     this.displayInitialized = false;
     this.cardShells.clear();
     this.clearDebouncedTextSaves();
+    this.cardTypeStatusOverride = null;
+    this.noteTypeCacheCheckStatus = "idle";
+    this.noteTypeCacheCheckPromise = null;
+    this.detectedAnkiNoteTypeCache = null;
+    this.noteTypeCacheCheckToken += 1;
   }
 
   display(): void {
@@ -174,6 +183,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
   private renderCardTypesCard(containerEl: HTMLElement): void {
     this.hydrateVisibleCardTypeCaches();
+    this.maybeStartNoteTypeCacheCheck();
     containerEl.createEl("p", { text: t("settings.cards.cardTypes.desc") });
 
     const actionRow = containerEl.createDiv();
@@ -191,7 +201,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     loadButton.disabled = this.ankiConfigLoading;
     loadButton.addEventListener("click", () => this.loadAnkiCardTypeConfig());
     actionRow.createEl("span", {
-      text: `${t("settings.cards.cardTypes.statusLabel")}${renderUserFacingMessage(this.cardTypeStatus)}`,
+      text: `${t("settings.cards.cardTypes.statusLabel")}${renderUserFacingMessage(this.getCardTypeStatusMessage())}`,
     });
 
     const cardTypeList = containerEl.createDiv();
@@ -662,12 +672,12 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         cardTypeConfigs: nextCardTypeConfigs,
       }));
     } catch (error) {
-      this.cardTypeStatus = toUserFacingMessage(error, "settings.cards.cardTypes.failedSave");
+      this.cardTypeStatusOverride = toUserFacingMessage(error, "settings.cards.cardTypes.failedSave");
       this.renderCard("card-types");
       return false;
     }
 
-    this.cardTypeStatus = NOTE_TYPE_STATUS_IDLE;
+    this.cardTypeStatusOverride = null;
     await this.plugin.updateSettings({ cardTypeConfigs: nextCardTypeConfigs });
 
     if (configId === "qa-group" && typeof partialConfig.noteType === "string") {
@@ -706,6 +716,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       ...partialMapping,
     } as NoteModelFieldMapping;
 
+    this.cardTypeStatusOverride = null;
     this.draftMappings[mappingKey] = nextMapping;
     await this.plugin.updateSettings({
       noteFieldMappings: {
@@ -720,13 +731,16 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private async loadAnkiCardTypeConfig(): Promise<void> {
+    this.noteTypeCacheCheckToken += 1;
+    this.noteTypeCacheCheckPromise = null;
+    this.cardTypeStatusOverride = null;
+    this.noteTypeCacheCheckStatus = this.resolveManualRefreshCacheStatus();
     this.ankiConfigLoading = true;
-    this.cardTypeStatus = { key: "settings.cards.cardTypes.loadAnki.loading" };
     this.renderCard("card-types");
 
     try {
       const noteModels = await this.plugin.listNoteModels();
-      const nextAvailableNoteModels = Array.from(new Set(noteModels)).sort((left, right) => left.localeCompare(right));
+      const nextAvailableNoteModels = normalizeNoteTypeNames(noteModels);
       this.availableNoteModels.splice(0, this.availableNoteModels.length, ...nextAvailableNoteModels);
 
       const fieldNamesByModelName = await this.plugin.getModelFieldNamesByModelNames(nextAvailableNoteModels);
@@ -748,7 +762,9 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       await this.syncQaGroupMappingFromCache(this.plugin.settings.cardTypeConfigs["qa-group"].noteType, ankiModelFieldCache);
       const configuredCount = this.countConfiguredCardTypes(ankiModelFieldCache);
 
-      this.cardTypeStatus = {
+      this.detectedAnkiNoteTypeCache = [...nextAvailableNoteModels];
+      this.noteTypeCacheCheckStatus = "same";
+      this.cardTypeStatusOverride = {
         key: "settings.cards.cardTypes.loadedSummary",
         params: {
           noteTypeCount: this.availableNoteModels.length,
@@ -756,11 +772,108 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         },
       };
     } catch (error) {
-      this.cardTypeStatus = toUserFacingMessage(error, "settings.cards.cardTypes.failedLoad");
+      this.cardTypeStatusOverride = toUserFacingMessage(error, "settings.cards.cardTypes.failedLoad");
     } finally {
       this.ankiConfigLoading = false;
       this.renderCard("card-types");
     }
+  }
+
+  private maybeStartNoteTypeCacheCheck(): void {
+    if (this.ankiConfigLoading || this.plugin.settings.ankiNoteTypeCache.length === 0) {
+      return;
+    }
+
+    if (this.noteTypeCacheCheckStatus !== "idle" || this.noteTypeCacheCheckPromise) {
+      return;
+    }
+
+    this.noteTypeCacheCheckStatus = "checking";
+    const token = ++this.noteTypeCacheCheckToken;
+    const checkPromise = this.checkNoteTypeCacheFreshness(token).finally(() => {
+      if (this.noteTypeCacheCheckPromise === checkPromise) {
+        this.noteTypeCacheCheckPromise = null;
+      }
+
+      if (token === this.noteTypeCacheCheckToken) {
+        this.renderCard("card-types");
+      }
+    });
+
+    this.noteTypeCacheCheckPromise = checkPromise;
+  }
+
+  private async checkNoteTypeCacheFreshness(token: number): Promise<void> {
+    try {
+      const liveNoteModels = normalizeNoteTypeNames(await this.plugin.listNoteModels());
+      if (token !== this.noteTypeCacheCheckToken) {
+        return;
+      }
+
+      this.detectedAnkiNoteTypeCache = liveNoteModels;
+      this.noteTypeCacheCheckStatus = areStringArraysEqual(this.plugin.settings.ankiNoteTypeCache, liveNoteModels)
+        ? "same"
+        : "changed";
+    } catch {
+      if (token !== this.noteTypeCacheCheckToken) {
+        return;
+      }
+
+      this.noteTypeCacheCheckStatus = "failed";
+    }
+  }
+
+  private getCardTypeStatusMessage(): UserFacingMessage {
+    if (this.ankiConfigLoading) {
+      return { key: "settings.cards.cardTypes.loadAnki.loading" };
+    }
+
+    if (this.cardTypeStatusOverride) {
+      return this.cardTypeStatusOverride;
+    }
+
+    const cachedNoteTypeCount = this.plugin.settings.ankiNoteTypeCache.length;
+    if (cachedNoteTypeCount === 0) {
+      return { key: "settings.cards.cardTypes.cacheEmpty" };
+    }
+
+    const configuredCount = this.countConfiguredCardTypes(this.plugin.settings.ankiModelFieldCache);
+    if (this.noteTypeCacheCheckStatus === "changed") {
+      return {
+        key: "settings.cards.cardTypes.cacheChanged",
+        params: {
+          cachedCount: cachedNoteTypeCount,
+          liveCount: this.detectedAnkiNoteTypeCache?.length ?? cachedNoteTypeCount,
+          configuredCount,
+        },
+      };
+    }
+
+    if (this.noteTypeCacheCheckStatus === "failed") {
+      return {
+        key: "settings.cards.cardTypes.cacheCheckFailed",
+        params: {
+          noteTypeCount: cachedNoteTypeCount,
+          configuredCount,
+        },
+      };
+    }
+
+    return {
+      key: "settings.cards.cardTypes.cacheSummary",
+      params: {
+        noteTypeCount: cachedNoteTypeCount,
+        configuredCount,
+      },
+    };
+  }
+
+  private resolveManualRefreshCacheStatus(): NoteTypeCacheCheckStatus {
+    if (this.noteTypeCacheCheckStatus === "changed" || this.noteTypeCacheCheckStatus === "failed") {
+      return this.noteTypeCacheCheckStatus;
+    }
+
+    return this.plugin.settings.ankiNoteTypeCache.length > 0 ? "same" : "idle";
   }
 
   private hydrateVisibleCardTypeCaches(
@@ -954,6 +1067,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       loadedFieldNames: [...mapping.loadedFieldNames],
     };
 
+    this.cardTypeStatusOverride = null;
     this.draftMappings[mappingKey] = nextMapping;
     await this.plugin.updateSettings({
       noteFieldMappings: {
@@ -1343,6 +1457,31 @@ function getScopeModeSummary(scopeMode: ScopeMode): string {
 
 function areMappingsEqual(left: NoteModelFieldMapping | undefined, right: NoteModelFieldMapping): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function normalizeNoteTypeNames(noteModels: string[]): string[] {
+  const normalizedNoteModels = new Set<string>();
+
+  for (const noteModel of noteModels) {
+    if (typeof noteModel !== "string") {
+      continue;
+    }
+
+    const trimmedNoteModel = noteModel.trim();
+    if (trimmedNoteModel.length > 0) {
+      normalizedNoteModels.add(trimmedNoteModel);
+    }
+  }
+
+  return [...normalizedNoteModels].sort((left, right) => left.localeCompare(right));
+}
+
+function areStringArraysEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
 }
 
 function getScopeModeTreeDescription(scopeMode: ScopeMode): string {
