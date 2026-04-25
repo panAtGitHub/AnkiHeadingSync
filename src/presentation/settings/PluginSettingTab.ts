@@ -274,9 +274,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     const ankiRow = blockEl.createDiv();
     ankiRow.style.display = "grid";
-    ankiRow.style.gridTemplateColumns = configId === "qa-group"
-      ? "minmax(0, 1.1fr) minmax(0, 0.75fr) minmax(220px, 0.95fr)"
-      : "minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr)";
+    ankiRow.style.gridTemplateColumns = "minmax(0, 1.1fr) minmax(0, 0.75fr) minmax(220px, 0.95fr)";
     ankiRow.style.alignItems = "center";
     ankiRow.style.columnGap = "16px";
     ankiRow.style.rowGap = "8px";
