@@ -193,14 +193,198 @@ describe("AnkiBatchExecutor", () => {
 
     expect(ankiGateway.syncedNoteTags).toEqual([]);
   });
+
+  it("migrates a basic note in place when the current note model changed", async () => {
+    const ankiGateway = new CountingAnkiGateway();
+    ankiGateway.modelDetailsByName["New Basic"] = { fieldNames: ["Front", "Back"], isCloze: false };
+    ankiGateway.noteSummariesById.set(300, {
+      noteId: 300,
+      modelName: "Old Basic",
+      cardIds: [700],
+      tags: ["old"],
+    });
+    const executor = new AnkiBatchExecutor(ankiGateway);
+    const updateCard = createPlannedCard("sync-migrate-basic", 300, "Obsidian", "New Basic", "basic");
+
+    const result = await executor.execute(
+      {
+        toCreate: [],
+        toUpdate: [updateCard],
+        toVerifyDeck: [updateCard],
+        toChangeDeck: [],
+        toRewriteMarker: [],
+        toOrphan: [],
+        unchangedCards: 0,
+        warnings: [],
+      },
+      new Map([[updateCard.card.syncKey, createRenderedSyncCard(updateCard)]]),
+      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      {
+        ...createModule3Settings().noteFieldMappings,
+        "basic:New Basic": {
+          cardType: "basic",
+          modelName: "New Basic",
+          loadedFieldNames: ["Front", "Back"],
+          titleField: "Front",
+          bodyField: "Back",
+          loadedAt: 1,
+        },
+      },
+    );
+
+    expect(result.updated).toBe(1);
+    expect(result.migratedNoteTypes).toBe(1);
+    expect(ankiGateway.addedNotes).toEqual([]);
+    expect(ankiGateway.updatedNotes).toEqual([]);
+    expect(ankiGateway.updatedNoteModels).toEqual([
+      {
+        noteId: 300,
+        modelName: "New Basic",
+        fields: {
+          Front: "Heading sync-migrate-basic",
+          Back: "Body sync-migrate-basic",
+        },
+      },
+    ]);
+  });
+
+  it("migrates a cloze note in place when the current note model changed", async () => {
+    const ankiGateway = new CountingAnkiGateway();
+    ankiGateway.modelDetailsByName["New Cloze"] = { fieldNames: ["Text", "Extra"], isCloze: true };
+    ankiGateway.noteSummariesById.set(300, {
+      noteId: 300,
+      modelName: "Old Cloze",
+      cardIds: [700],
+    });
+    const executor = new AnkiBatchExecutor(ankiGateway);
+    const updateCard = createPlannedCard("sync-migrate-cloze", 300, "Obsidian", "New Cloze", "cloze");
+
+    const result = await executor.execute(
+      {
+        toCreate: [],
+        toUpdate: [updateCard],
+        toVerifyDeck: [updateCard],
+        toChangeDeck: [],
+        toRewriteMarker: [],
+        toOrphan: [],
+        unchangedCards: 0,
+        warnings: [],
+      },
+      new Map([[updateCard.card.syncKey, createRenderedSyncCard(updateCard)]]),
+      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      {
+        ...createModule3Settings().noteFieldMappings,
+        "cloze:New Cloze": {
+          cardType: "cloze",
+          modelName: "New Cloze",
+          loadedFieldNames: ["Text", "Extra"],
+          mainField: "Text",
+          loadedAt: 1,
+        },
+      },
+    );
+
+    expect(result.updated).toBe(1);
+    expect(result.migratedNoteTypes).toBe(1);
+    expect(ankiGateway.updatedNoteModels).toEqual([
+      {
+        noteId: 300,
+        modelName: "New Cloze",
+        fields: {
+          Text: "Heading sync-migrate-cloze<br><br>Body sync-migrate-cloze",
+        },
+      },
+    ]);
+  });
+
+  it("keeps the current updateNotes path when the existing and target note models already match", async () => {
+    const ankiGateway = new CountingAnkiGateway();
+    ankiGateway.noteSummariesById.set(300, {
+      noteId: 300,
+      modelName: "Basic",
+      cardIds: [700],
+    });
+    const executor = new AnkiBatchExecutor(ankiGateway);
+    const updateCard = createPlannedCard("sync-update-basic", 300);
+
+    const result = await executor.execute(
+      {
+        toCreate: [],
+        toUpdate: [updateCard],
+        toVerifyDeck: [updateCard],
+        toChangeDeck: [],
+        toRewriteMarker: [],
+        toOrphan: [],
+        unchangedCards: 0,
+        warnings: [],
+      },
+      new Map([[updateCard.card.syncKey, createRenderedSyncCard(updateCard)]]),
+      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      createModule3Settings().noteFieldMappings,
+    );
+
+    expect(result.updated).toBe(1);
+    expect(result.migratedNoteTypes).toBe(0);
+    expect(ankiGateway.updatedNotes).toHaveLength(1);
+    expect(ankiGateway.updatedNoteModels).toEqual([]);
+  });
+
+  it("surfaces the existing mapping error instead of migrating when the target mapping is incomplete", async () => {
+    const ankiGateway = new CountingAnkiGateway();
+    ankiGateway.modelDetailsByName["New Basic"] = { fieldNames: ["Front", "Back"], isCloze: false };
+    ankiGateway.noteSummariesById.set(300, {
+      noteId: 300,
+      modelName: "Old Basic",
+      cardIds: [700],
+    });
+    const executor = new AnkiBatchExecutor(ankiGateway);
+    const updateCard = createPlannedCard("sync-migrate-error", 300, "Obsidian", "New Basic", "basic");
+
+    await expect(executor.execute(
+      {
+        toCreate: [],
+        toUpdate: [updateCard],
+        toVerifyDeck: [updateCard],
+        toChangeDeck: [],
+        toRewriteMarker: [],
+        toOrphan: [],
+        unchangedCards: 0,
+        warnings: [],
+      },
+      new Map([[updateCard.card.syncKey, createRenderedSyncCard(updateCard)]]),
+      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      {
+        ...createModule3Settings().noteFieldMappings,
+        "basic:New Basic": {
+          cardType: "basic",
+          modelName: "New Basic",
+          loadedFieldNames: ["Front", "Back"],
+          titleField: "Front",
+          loadedAt: 1,
+        } as never,
+      },
+    )).rejects.toMatchObject({
+      userMessage: {
+        key: "errors.noteFieldMapping.incompleteSavedMapping.basic",
+      },
+    });
+
+    expect(ankiGateway.updatedNoteModels).toEqual([]);
+  });
 });
 
-function createPlannedCard(syncKey: string, noteId?: number, deck = "Obsidian"): PlannedCard {
+function createPlannedCard(
+  syncKey: string,
+  noteId?: number,
+  deck = "Obsidian",
+  noteModel = "Basic",
+  cardType: IndexedCard["cardType"] = "basic",
+): PlannedCard {
   return {
-    card: createIndexedCard(syncKey, noteId),
+    card: createIndexedCard(syncKey, noteId, cardType),
     noteId,
     deck,
-    noteModel: "Basic",
+    noteModel,
     renderConfigHash: "render-config",
   };
 }
@@ -220,14 +404,14 @@ function createRenderedSyncCard(plannedCard: PlannedCard): RenderedSyncCard {
   };
 }
 
-function createIndexedCard(syncKey: string, noteId?: number): IndexedCard {
+function createIndexedCard(syncKey: string, noteId?: number, cardType: IndexedCard["cardType"] = "basic"): IndexedCard {
   return {
     noteId,
     syncKey,
     idMarkerState: noteId ? "present-valid" : "missing",
     noteIdSource: noteId ? "marker" : undefined,
     filePath: "notes/example.md",
-    cardType: "basic",
+    cardType,
     heading: `Heading ${syncKey}`,
     backlinkHeadingText: `Heading ${syncKey}`,
     headingLevel: 4,

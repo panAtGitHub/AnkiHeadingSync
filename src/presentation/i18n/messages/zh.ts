@@ -328,8 +328,8 @@ export const zh = {
     cleanupEmptyDecksCancelled: "已取消空牌组清理。",
     cleanupEmptyDecksFailed: "清理空牌组失败。",
     summary: {
-      currentFileSync: "当前文件同步完成：文件 {{scannedFiles}}，卡片 {{scannedCards}}，新建 {{created}}，更新 {{updated}}，迁移牌组 {{migratedDecks}}，孤儿 {{orphaned}}，媒体 {{uploadedMedia}}，跳过 {{skippedUnchangedCards}}。",
-      vaultSync: "全库同步完成：文件 {{scannedFiles}}，卡片 {{scannedCards}}，新建 {{created}}，更新 {{updated}}，迁移牌组 {{migratedDecks}}，孤儿 {{orphaned}}，媒体 {{uploadedMedia}}，跳过 {{skippedUnchangedCards}}。",
+      currentFileSync: "当前文件同步完成：文件 {{scannedFiles}}，卡片 {{scannedCards}}，新建 {{created}}，更新 {{updated}}，迁移模板 {{migratedNoteTypes}}，迁移牌组 {{migratedDecks}}，孤儿 {{orphaned}}，媒体 {{uploadedMedia}}，跳过 {{skippedUnchangedCards}}。",
+      vaultSync: "全库同步完成：文件 {{scannedFiles}}，卡片 {{scannedCards}}，新建 {{created}}，更新 {{updated}}，迁移模板 {{migratedNoteTypes}}，迁移牌组 {{migratedDecks}}，孤儿 {{orphaned}}，媒体 {{uploadedMedia}}，跳过 {{skippedUnchangedCards}}。",
       rebuild: "卡片索引重建完成：文件 {{scannedFiles}}，卡片 {{scannedCards}}，迁移牌组 {{migratedDecks}}，孤儿 {{orphaned}}，重写标记 {{rewrittenMarkers}}，跳过 {{skippedUnchangedCards}}。",
       clearCurrentFile: "当前文件已同步卡片清空完成：已跟踪卡片 {{trackedCards}}，已跟踪分组 {{trackedGroups}}，删除笔记 {{deletedNotes}}，移除标记 {{removedMarkers}}，移除 ID 标记 {{removedCardMarkers}}，移除 GI 标记 {{removedGroupMarkers}}，删除本地记录 {{deletedLocalRecords}}。",
       cleanupEmptyDecks: "空牌组清理完成：候选 {{candidateCount}}，已选 {{selectedCount}}，已删 {{deletedCount}}，跳过 {{skippedCount}}。",
@@ -426,6 +426,10 @@ export const zh = {
       qaGroupNonContinuousSlots: "问答题（多级列表）笔记模板 \"{{modelName}}\" 的第一组问题/答案字段不是从第 {{firstIndex}} 组开始连续编号。请从第 1 组开始。",
       qaGroupWarningsUnaccepted: "问答题（多级列表）笔记模板 \"{{modelName}}\" 仍有未确认的字段警告。请先在设置页确认后再同步。",
       qaGroupSlotCapacityExceeded: "问答题（多级列表）笔记模板 \"{{modelName}}\" 只识别到 {{capacity}} 组问题/答案字段，但当前块有 {{itemCount}} 项：{{filePath}}:{{blockStartLine}}。",
+    },
+    noteTypeMigration: {
+      failed: "无法将 Anki 笔记 {{noteId}} 从“{{fromModel}}”迁移到“{{toModel}}”{{location}}：{{reason}}",
+      unsupported: "当前 AnkiConnect 不支持将 Anki 笔记 {{noteId}} 从“{{fromModel}}”迁移到“{{toModel}}”{{location}}。请升级 AnkiConnect，或清理该卡片的 Anki ID 后重新同步。原因：{{reason}}",
     },
     writeBack: {
       summary: "Markdown 标记写回失败，共 {{fileCount}} 个文件。",

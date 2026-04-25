@@ -330,8 +330,8 @@ export const en = {
     cleanupEmptyDecksCancelled: "Empty-deck cleanup was cancelled.",
     cleanupEmptyDecksFailed: "Cleanup empty decks failed.",
     summary: {
-      currentFileSync: "Current file sync completed: files {{scannedFiles}}, cards {{scannedCards}}, created {{created}}, updated {{updated}}, migrated decks {{migratedDecks}}, orphaned {{orphaned}}, media {{uploadedMedia}}, skipped {{skippedUnchangedCards}}.",
-      vaultSync: "Vault sync completed: files {{scannedFiles}}, cards {{scannedCards}}, created {{created}}, updated {{updated}}, migrated decks {{migratedDecks}}, orphaned {{orphaned}}, media {{uploadedMedia}}, skipped {{skippedUnchangedCards}}.",
+      currentFileSync: "Current file sync completed: files {{scannedFiles}}, cards {{scannedCards}}, created {{created}}, updated {{updated}}, migrated note types {{migratedNoteTypes}}, migrated decks {{migratedDecks}}, orphaned {{orphaned}}, media {{uploadedMedia}}, skipped {{skippedUnchangedCards}}.",
+      vaultSync: "Vault sync completed: files {{scannedFiles}}, cards {{scannedCards}}, created {{created}}, updated {{updated}}, migrated note types {{migratedNoteTypes}}, migrated decks {{migratedDecks}}, orphaned {{orphaned}}, media {{uploadedMedia}}, skipped {{skippedUnchangedCards}}.",
       rebuild: "Card index rebuild completed: files {{scannedFiles}}, cards {{scannedCards}}, migrated decks {{migratedDecks}}, orphaned {{orphaned}}, rewritten markers {{rewrittenMarkers}}, skipped {{skippedUnchangedCards}}.",
       clearCurrentFile: "Current file synced cards cleared: tracked cards {{trackedCards}}, tracked groups {{trackedGroups}}, deleted notes {{deletedNotes}}, removed markers {{removedMarkers}}, removed ID markers {{removedCardMarkers}}, removed GI markers {{removedGroupMarkers}}, deleted local records {{deletedLocalRecords}}.",
       cleanupEmptyDecks: "Empty-deck cleanup completed: candidates {{candidateCount}}, selected {{selectedCount}}, deleted {{deletedCount}}, skipped {{skippedCount}}.",
@@ -428,6 +428,10 @@ export const en = {
       qaGroupNonContinuousSlots: "QA Group note type \"{{modelName}}\" must start its question/answer slots at pair {{firstIndex}} = 1. Renumber the first pair to 1.",
       qaGroupWarningsUnaccepted: "QA Group note type \"{{modelName}}\" still has unconfirmed field warnings. Confirm them in settings before syncing.",
       qaGroupSlotCapacityExceeded: "QA Group note type \"{{modelName}}\" only exposes {{capacity}} question/answer pair(s), but the current block has {{itemCount}} item(s): {{filePath}}:{{blockStartLine}}.",
+    },
+    noteTypeMigration: {
+      failed: "Failed to migrate Anki note {{noteId}} from \"{{fromModel}}\" to \"{{toModel}}\"{{location}}: {{reason}}",
+      unsupported: "The current AnkiConnect does not support migrating Anki note {{noteId}} from \"{{fromModel}}\" to \"{{toModel}}\"{{location}}. Upgrade AnkiConnect, or clear the Anki ID and sync again. Reason: {{reason}}",
     },
     writeBack: {
       summary: "Markdown marker write-back failed for {{fileCount}} file(s).",

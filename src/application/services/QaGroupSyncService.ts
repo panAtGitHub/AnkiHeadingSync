@@ -3,6 +3,7 @@ import MarkdownIt from "markdown-it";
 import { createNoteFieldMappingKey, isQaGroupFieldMapping, type QaGroupFieldMapping } from "@/application/config/NoteModelFieldMapping";
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import { PluginUserError } from "@/application/errors/PluginUserError";
+import { createNoteTypeMigrationError } from "@/application/errors/noteTypeMigration";
 import type { AnkiGroupGateway, AnkiNoteDetails } from "@/application/ports/AnkiGateway";
 import type { SourceLocation } from "@/domain/card/value-objects/SourceLocation";
 import { buildGroupSrc, type GroupItem, type IndexedGroupCardBlock } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
@@ -30,6 +31,7 @@ const HIGHLIGHT_PATTERN = /==(.+?)==/g;
 export interface QaGroupSyncExecutionResult {
   created: number;
   updated: number;
+  migratedNoteTypes: number;
   migratedDecks: number;
   markerWrites: GroupMarkerWriteRequest[];
   resolvedNoteIds: Map<string, number>;
@@ -49,9 +51,14 @@ interface RecoveredGroupRecord {
   groupId?: string;
   items: GroupItem[];
   freeSlots: number[];
-  noteDetails?: AnkiNoteDetails;
+  loadedNote?: LoadedQaGroupNote;
   stateRecord?: GroupBlockState;
 }
+
+type LoadedQaGroupNote =
+  | { kind: "missing" }
+  | { kind: "matching"; note: AnkiNoteDetails }
+  | { kind: "model-mismatch"; note: AnkiNoteDetails; actualModelName: string; expectedModelName: string };
 
 export class QaGroupSyncService {
   private sequence = 0;
@@ -75,6 +82,7 @@ export class QaGroupSyncService {
       return {
         created: 0,
         updated: 0,
+        migratedNoteTypes: 0,
         migratedDecks: 0,
         markerWrites: [],
         resolvedNoteIds: new Map(),
@@ -95,6 +103,7 @@ export class QaGroupSyncService {
     const syncedGroupBlocks: GroupBlockState[] = [];
     let created = 0;
     let updated = 0;
+    let migratedNoteTypes = 0;
     let migratedDecks = 0;
     const backlinkAnchor = this.buildGroupBacklinkAnchor(blocks[0] ?? null, settings);
 
@@ -157,7 +166,7 @@ export class QaGroupSyncService {
         legacyInternalFields,
       );
       let noteId = recovered.noteId ?? block.noteId;
-      let existingNote = recovered.noteDetails;
+      let loadedNote = recovered.loadedNote;
 
       if (noteId === undefined) {
         noteId = await this.ankiGateway.addNote({
@@ -169,8 +178,8 @@ export class QaGroupSyncService {
         created += 1;
         touchedSyncKeys.add(block.syncKey);
       } else {
-        existingNote ??= await this.tryLoadQaGroupNote(noteId, block, modelName);
-        if (!existingNote) {
+        loadedNote ??= await this.tryLoadQaGroupNote(noteId, block, modelName);
+        if (loadedNote.kind === "missing") {
           noteId = await this.ankiGateway.addNote({
             deckName: deck,
             modelName,
@@ -181,7 +190,8 @@ export class QaGroupSyncService {
           touchedSyncKeys.add(block.syncKey);
         }
 
-        if (existingNote) {
+        if (loadedNote.kind === "matching") {
+          const existingNote = loadedNote.note;
           const fieldsChanged = !haveEqualFields(existingNote.fields, fields);
           const deckChanged = !(existingNote.deckNames ?? []).includes(deck);
           const tagDiff = diffTagSets(block.tagsHint, existingNote.tags);
@@ -247,6 +257,48 @@ export class QaGroupSyncService {
           }
           touchedSyncKeys.add(block.syncKey);
         }
+
+        if (loadedNote.kind === "model-mismatch") {
+          const deckChanged = !(loadedNote.note.deckNames ?? []).includes(deck);
+          const tagDiff = diffTagSets(block.tagsHint, loadedNote.note.tags);
+          const tagsChanged = tagDiff.addTags.length > 0 || tagDiff.removeTags.length > 0;
+
+          try {
+            await this.ankiGateway.updateNoteModel({
+              noteId,
+              modelName,
+              fields,
+            });
+          } catch (error) {
+            throw createNoteTypeMigrationError({
+              noteId,
+              fromModel: loadedNote.actualModelName,
+              toModel: loadedNote.expectedModelName,
+              error,
+              location: `${block.filePath}:${block.blockStartLine}`,
+            });
+          }
+
+          if (deckChanged && loadedNote.note.cardIds.length > 0) {
+            await this.ankiGateway.changeDecks([{
+              deckName: deck,
+              cardIds: loadedNote.note.cardIds,
+            }]);
+            migratedDecks += 1;
+          }
+
+          if (tagsChanged) {
+            await this.ankiGateway.syncNoteTags([{
+              noteId,
+              addTags: tagDiff.addTags,
+              removeTags: tagDiff.removeTags,
+            }]);
+          }
+
+          updated += 1;
+          migratedNoteTypes += 1;
+          touchedSyncKeys.add(block.syncKey);
+        }
       }
 
       resolvedNoteIds.set(block.syncKey, noteId);
@@ -310,6 +362,7 @@ export class QaGroupSyncService {
     return {
       created,
       updated,
+      migratedNoteTypes,
       migratedDecks,
       markerWrites,
       resolvedNoteIds,
@@ -341,10 +394,31 @@ export class QaGroupSyncService {
     }
 
     if (block.noteId !== undefined) {
-      const note = await this.tryLoadQaGroupNote(block.noteId, block, modelName);
-      if (note) {
-        return noteDetailsToRecoveredGroup(note, mapping, availableSlots, block.groupId);
+      const loadedNote = await this.tryLoadQaGroupNote(block.noteId, block, modelName);
+      if (loadedNote.kind === "matching") {
+        return {
+          ...noteDetailsToRecoveredGroup(loadedNote.note, mapping, availableSlots, block.groupId),
+          loadedNote,
+        };
       }
+
+      if (loadedNote.kind === "model-mismatch") {
+        return {
+          noteId: loadedNote.note.noteId,
+          groupId: block.groupId,
+          items: [],
+          freeSlots: [...availableSlots],
+          loadedNote,
+        };
+      }
+
+      return {
+        noteId: block.noteId,
+        groupId: block.groupId,
+        items: [],
+        freeSlots: [...availableSlots],
+        loadedNote,
+      };
     }
 
     return {
@@ -353,17 +427,25 @@ export class QaGroupSyncService {
     };
   }
 
-  private async tryLoadQaGroupNote(noteId: number, block: IndexedGroupCardBlock, modelName: string): Promise<AnkiNoteDetails | undefined> {
+  private async tryLoadQaGroupNote(noteId: number, _block: IndexedGroupCardBlock, modelName: string): Promise<LoadedQaGroupNote> {
     const note = (await this.ankiGateway.getNoteDetails([noteId]))[0];
     if (!note) {
-      return undefined;
+      return { kind: "missing" };
     }
 
     if (note.modelName !== modelName) {
-      throw new Error(`Note ${noteId} for ${block.filePath}:${block.blockStartLine} is ${note.modelName}, expected ${modelName}.`);
+      return {
+        kind: "model-mismatch",
+        note,
+        actualModelName: note.modelName,
+        expectedModelName: modelName,
+      };
     }
 
-    return note;
+    return {
+      kind: "matching",
+      note,
+    };
   }
 
   private buildGroupBacklinkAnchor(block: IndexedGroupCardBlock | null, settings: PluginSettings): string {
@@ -530,7 +612,6 @@ function noteDetailsToRecoveredGroup(
     groupId: fallbackGroupId,
     items,
     freeSlots: availableSlots.filter((slot) => !occupiedSlots.has(slot)),
-    noteDetails: note,
   };
 }
 

@@ -1,7 +1,7 @@
 import { requestUrl } from "obsidian";
 
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
-import type { AddAnkiNoteInput, AnkiGroupGateway, AnkiModelTemplate, AnkiNoteDetails, AnkiNoteSummary, ChangeDeckInput, CreateAnkiModelInput, DeckStat, SyncAnkiNoteTagsInput, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
+import type { AddAnkiNoteInput, AnkiGroupGateway, AnkiModelTemplate, AnkiNoteDetails, AnkiNoteSummary, ChangeDeckInput, CreateAnkiModelInput, DeckStat, SyncAnkiNoteTagsInput, UpdateAnkiNoteInput, UpdateAnkiNoteModelInput } from "@/application/ports/AnkiGateway";
 import type { MediaAsset } from "@/domain/card/entities/RenderedFields";
 
 interface AnkiResponse<T> {
@@ -327,6 +327,23 @@ export class AnkiConnectGateway implements AnkiGroupGateway {
     }
   }
 
+  async updateNoteModel(input: UpdateAnkiNoteModelInput): Promise<void> {
+    try {
+      await this.invoke("updateNoteModel", {
+        note: {
+          id: input.noteId,
+          modelName: input.modelName,
+          fields: input.fields,
+        },
+      });
+    } catch (error) {
+      throw new Error(buildActionFailureMessage("updateNoteModel", {
+        noteId: input.noteId,
+        modelName: input.modelName,
+      }, error));
+    }
+  }
+
   async updateNotes(inputs: UpdateAnkiNoteInput[]): Promise<void> {
     await this.invokeMulti<void>(inputs.map((input) => ({
       action: "updateNoteFields",
@@ -477,4 +494,26 @@ function extractDeckNoteCount(rawStats: unknown, deckId: number | undefined): nu
   }
 
   return undefined;
+}
+
+function buildActionFailureMessage(
+  action: string,
+  context: { noteId?: number; modelName?: string },
+  error: unknown,
+): string {
+  const scope = typeof context.noteId === "number" && typeof context.modelName === "string"
+    ? ` for note ${context.noteId} to model ${context.modelName}`
+    : typeof context.noteId === "number"
+      ? ` for note ${context.noteId}`
+      : "";
+
+  return `AnkiConnect ${action} failed${scope}: ${extractRequestErrorMessage(error)}`;
+}
+
+function extractRequestErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message.trim();
+  }
+
+  return String(error);
 }

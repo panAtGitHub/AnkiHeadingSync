@@ -1,4 +1,5 @@
 import type { NoteModelFieldMapping } from "@/application/config/NoteModelFieldMapping";
+import { createNoteTypeMigrationError } from "@/application/errors/noteTypeMigration";
 import type { AnkiGateway } from "@/application/ports/AnkiGateway";
 import { BatchScheduler } from "@/application/services/BatchScheduler";
 import { NoteFieldMappingService } from "@/application/services/NoteFieldMappingService";
@@ -10,6 +11,7 @@ import type { PlannedCard, ManualSyncPlan } from "@/domain/manual-sync/value-obj
 export interface AnkiBatchExecutionResult {
   created: number;
   updated: number;
+  migratedNoteTypes: number;
   migratedDecks: number;
   uploadedMedia: number;
   markerWrites: PlannedCard[];
@@ -36,6 +38,7 @@ export class AnkiBatchExecutor {
     const markerWriteMap = new Map<string, PlannedCard>();
     let created = 0;
     let updated = 0;
+    let migratedNoteTypes = 0;
     let migratedDecks = 0;
 
     const summaryIds = Array.from(new Set([
@@ -49,6 +52,11 @@ export class AnkiBatchExecutor {
 
     const addQueue: RenderedSyncCard[] = [];
     const updateQueue: Array<{ plannedCard: PlannedCard; renderedCard: RenderedSyncCard }> = [];
+    const modelMigrationQueue: Array<{
+      plannedCard: PlannedCard;
+      renderedCard: RenderedSyncCard;
+      summary: Awaited<ReturnType<AnkiGateway["getNoteSummaries"]>>[number];
+    }> = [];
     const changeDeckQueue: PlannedCard[] = [];
     const explicitDeckChangeSyncKeys = new Set(plan.toChangeDeck.map((plannedCard) => plannedCard.card.syncKey));
 
@@ -58,7 +66,14 @@ export class AnkiBatchExecutor {
 
     for (const plannedCard of plan.toUpdate) {
       if (plannedCard.noteId && noteSummariesById.has(plannedCard.noteId)) {
-        updateQueue.push({ plannedCard, renderedCard: await this.requireRenderedCard(plannedCard, renderedCards, renderOnDemand) });
+        const renderedCard = await this.requireRenderedCard(plannedCard, renderedCards, renderOnDemand);
+        const summary = noteSummariesById.get(plannedCard.noteId);
+
+        if (summary && summary.modelName !== renderedCard.noteModel) {
+          modelMigrationQueue.push({ plannedCard, renderedCard, summary });
+        } else {
+          updateQueue.push({ plannedCard, renderedCard });
+        }
         continue;
       }
 
@@ -109,7 +124,11 @@ export class AnkiBatchExecutor {
       (batch) => this.ankiGateway.ensureDecks(batch),
     );
 
-    const uploadedMedia = await this.uploadMedia([...addQueue, ...updateQueue.map((entry) => entry.renderedCard)]);
+    const uploadedMedia = await this.uploadMedia([
+      ...addQueue,
+      ...updateQueue.map((entry) => entry.renderedCard),
+      ...modelMigrationQueue.map((entry) => entry.renderedCard),
+    ]);
 
     const addedNoteIds = await this.batchScheduler.runCollectBatches(addQueue, 50, 1, async (batch) => {
       return this.ankiGateway.addNotes(
@@ -150,7 +169,29 @@ export class AnkiBatchExecutor {
       );
     });
 
-    const tagSyncQueue = updateQueue.flatMap(({ plannedCard }) => {
+    await this.batchScheduler.runVoidBatches(modelMigrationQueue, 25, 1, async (batch) => {
+      for (const { plannedCard, renderedCard, summary } of batch) {
+        const fields = await this.mapFields(renderedCard, noteFieldMappings, modelDetailsCache);
+
+        try {
+          await this.ankiGateway.updateNoteModel({
+            noteId: plannedCard.noteId ?? 0,
+            modelName: renderedCard.noteModel,
+            fields,
+          });
+        } catch (error) {
+          throw createNoteTypeMigrationError({
+            noteId: plannedCard.noteId ?? 0,
+            fromModel: summary.modelName,
+            toModel: renderedCard.noteModel,
+            error,
+            location: `${plannedCard.card.filePath}:${plannedCard.card.blockStartLine}`,
+          });
+        }
+      }
+    });
+
+    const tagSyncQueue = [...updateQueue, ...modelMigrationQueue].flatMap(({ plannedCard }) => {
       if (!plannedCard.noteId) {
         return [];
       }
@@ -174,8 +215,9 @@ export class AnkiBatchExecutor {
 
     await this.batchScheduler.runVoidBatches(tagSyncQueue, 50, 1, (batch) => this.ankiGateway.syncNoteTags(batch));
 
-    updated += updateQueue.length;
-    for (const { plannedCard } of updateQueue) {
+    updated += updateQueue.length + modelMigrationQueue.length;
+    migratedNoteTypes = modelMigrationQueue.length;
+    for (const { plannedCard } of [...updateQueue, ...modelMigrationQueue]) {
       if (plannedCard.noteId) {
         touchedSyncKeys.add(plannedCard.card.syncKey);
         resolvedNoteIds.set(plannedCard.card.syncKey, plannedCard.noteId);
@@ -220,6 +262,7 @@ export class AnkiBatchExecutor {
     return {
       created,
       updated,
+      migratedNoteTypes,
       migratedDecks,
       uploadedMedia,
       markerWrites: Array.from(markerWriteMap.values()).map((plannedCard) => ({

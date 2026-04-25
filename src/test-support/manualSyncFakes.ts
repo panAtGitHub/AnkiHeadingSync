@@ -1,7 +1,7 @@
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import { DEFAULT_SETTINGS } from "@/application/config/PluginSettings";
 import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
-import type { AddAnkiNoteInput, AnkiGroupGateway, AnkiModelTemplate, AnkiNoteDetails, AnkiNoteSummary, ChangeDeckInput, CreateAnkiModelInput, DeckStat, SyncAnkiNoteTagsInput, UpdateAnkiNoteInput } from "@/application/ports/AnkiGateway";
+import type { AddAnkiNoteInput, AnkiGroupGateway, AnkiModelTemplate, AnkiNoteDetails, AnkiNoteSummary, ChangeDeckInput, CreateAnkiModelInput, DeckStat, SyncAnkiNoteTagsInput, UpdateAnkiNoteInput, UpdateAnkiNoteModelInput } from "@/application/ports/AnkiGateway";
 import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
 import type { PluginStateRepository } from "@/application/ports/PluginStateRepository";
 import { MarkdownWriteConflictError } from "@/application/ports/VaultGateway";
@@ -142,6 +142,7 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
   public addedNotes: AddAnkiNoteInput[] = [];
   public deletedNotes: number[][] = [];
   public updatedNotes: UpdateAnkiNoteInput[] = [];
+  public updatedNoteModels: UpdateAnkiNoteModelInput[] = [];
   public syncedNoteTags: SyncAnkiNoteTagsInput[] = [];
   public changedDecks: ChangeDeckInput[] = [];
   public deletedDecks: string[][] = [];
@@ -166,6 +167,7 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
   };
   public modelTemplatesByName: Record<string, Record<string, AnkiModelTemplate>> = {};
   public modelStylingByName: Record<string, string> = {};
+  public updateNoteModelError: Error | null = null;
 
   private nextNoteId = 9000;
 
@@ -294,6 +296,31 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
 
   async updateNote(input: UpdateAnkiNoteInput): Promise<void> {
     await this.updateNotes([input]);
+  }
+
+  async updateNoteModel(input: UpdateAnkiNoteModelInput): Promise<void> {
+    if (this.updateNoteModelError) {
+      throw this.updateNoteModelError;
+    }
+
+    this.updatedNoteModels.push(input);
+
+    const summary = this.noteSummariesById.get(input.noteId);
+    if (summary) {
+      this.noteSummariesById.set(input.noteId, {
+        ...summary,
+        modelName: input.modelName,
+      });
+    }
+
+    const detail = this.noteDetailsById.get(input.noteId);
+    if (detail) {
+      this.noteDetailsById.set(input.noteId, {
+        ...detail,
+        modelName: input.modelName,
+        fields: { ...input.fields },
+      });
+    }
   }
 
   async updateNotes(inputs: UpdateAnkiNoteInput[]): Promise<void> {

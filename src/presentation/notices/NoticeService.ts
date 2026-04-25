@@ -23,6 +23,7 @@ export class NoticeService {
       scannedCards: result.scannedCards,
       created: result.created,
       updated: result.updated,
+      migratedNoteTypes: result.migratedNoteTypes,
       migratedDecks: result.migratedDecks,
       orphaned: result.orphaned,
       uploadedMedia: result.uploadedMedia,

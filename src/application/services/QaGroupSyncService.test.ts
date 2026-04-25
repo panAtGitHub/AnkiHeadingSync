@@ -393,6 +393,189 @@ describe("QaGroupSyncService", () => {
     ]);
   });
 
+  it("migrates an existing QA Group note in place when the bound note model changed", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    const vaultGateway = new FakeManualSyncVaultGateway();
+    ankiGateway.noteDetailsById.set(42, {
+      noteId: 42,
+      modelName: "旧问答模板",
+      cardIds: [7001],
+      deckNames: ["notes"],
+      tags: ["old"],
+      fields: {
+        题目: "旧题目",
+        问题01: "旧问题",
+        答案01: "旧答案",
+      },
+    });
+    const service = new QaGroupSyncService(
+      ankiGateway,
+      undefined,
+      undefined,
+      undefined,
+      () => 1234,
+      () => "group-1",
+      () => "item-1",
+      vaultGateway.createBacklink.bind(vaultGateway),
+    );
+
+    const result = await service.sync([
+      createIndexedGroupBlock({
+        noteId: 42,
+        groupId: "group-1",
+        tagsHint: ["fresh"],
+      }),
+    ], createEmptyPluginState(), createModule3Settings());
+
+    expect(result.updated).toBe(1);
+    expect(result.migratedNoteTypes).toBe(1);
+    expect(result.resolvedNoteIds.get("notes/example.md\u0000group\u00001\u0000hash-1")).toBe(42);
+    expect(ankiGateway.addedNotes).toEqual([]);
+    expect(ankiGateway.updatedNotes).toEqual([]);
+    expect(ankiGateway.updatedNoteModels).toEqual([
+      {
+        noteId: 42,
+        modelName: QA_GROUP_USER_NOTE_TYPE,
+        fields: expect.objectContaining({
+          题目: "Concepts",
+          问题01: "Alpha",
+          答案01: expect.stringContaining("First answer"),
+          问题02: "Beta",
+          答案02: expect.stringContaining("Second answer"),
+        }),
+      },
+    ]);
+    expect(ankiGateway.syncedNoteTags).toEqual([
+      {
+        noteId: 42,
+        addTags: ["fresh"],
+        removeTags: ["old"],
+      },
+    ]);
+  });
+
+  it("migrates into a smaller QA Group template when the current markdown still fits and clears unused slots", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    const vaultGateway = new FakeManualSyncVaultGateway();
+    ankiGateway.modelDetailsByName["问答题（6组）"] = {
+      fieldNames: [
+        "题目",
+        "问题01", "答案01",
+        "问题02", "答案02",
+        "问题03", "答案03",
+        "问题04", "答案04",
+        "问题05", "答案05",
+        "问题06", "答案06",
+      ],
+      isCloze: false,
+    };
+    ankiGateway.noteDetailsById.set(42, {
+      noteId: 42,
+      modelName: "旧问答模板 12 组",
+      cardIds: [7001],
+      deckNames: ["notes"],
+      fields: { 题目: "旧题目" },
+    });
+    const service = new QaGroupSyncService(
+      ankiGateway,
+      undefined,
+      undefined,
+      undefined,
+      () => 1234,
+      () => "group-1",
+      () => "item-1",
+      vaultGateway.createBacklink.bind(vaultGateway),
+    );
+
+    const result = await service.sync([
+      createIndexedGroupBlock({
+        noteId: 42,
+        groupId: "group-1",
+        items: [
+          { title: "A", answer: "1", ordinalInMarkdown: 1 },
+          { title: "B", answer: "2", ordinalInMarkdown: 2 },
+          { title: "C", answer: "3", ordinalInMarkdown: 3 },
+          { title: "D", answer: "4", ordinalInMarkdown: 4 },
+          { title: "E", answer: "5", ordinalInMarkdown: 5 },
+        ],
+      }),
+    ], createEmptyPluginState(), createModule3Settings({
+      cardTypeConfigs: {
+        ...createModule3Settings().cardTypeConfigs,
+        "qa-group": {
+          ...createModule3Settings().cardTypeConfigs["qa-group"],
+          noteType: "问答题（6组）",
+        },
+      },
+      noteFieldMappings: {
+        ...createModule3Settings().noteFieldMappings,
+        "qa-group:问答题（6组）": {
+          cardType: "qa-group",
+          modelName: "问答题（6组）",
+          loadedFieldNames: [
+            "题目",
+            "问题01", "答案01",
+            "问题02", "答案02",
+            "问题03", "答案03",
+            "问题04", "答案04",
+            "问题05", "答案05",
+            "问题06", "答案06",
+          ],
+          titleField: "题目",
+          slots: [
+            { index: 1, questionField: "问题01", answerField: "答案01" },
+            { index: 2, questionField: "问题02", answerField: "答案02" },
+            { index: 3, questionField: "问题03", answerField: "答案03" },
+            { index: 4, questionField: "问题04", answerField: "答案04" },
+            { index: 5, questionField: "问题05", answerField: "答案05" },
+            { index: 6, questionField: "问题06", answerField: "答案06" },
+          ],
+          warnings: [],
+          loadedAt: 1,
+        },
+      },
+    }));
+
+    expect(result.migratedNoteTypes).toBe(1);
+    expect(ankiGateway.updatedNoteModels[0]?.modelName).toBe("问答题（6组）");
+    expect(ankiGateway.updatedNoteModels[0]?.fields).toMatchObject({
+      题目: "Concepts",
+      问题01: "A",
+      答案01: expect.stringContaining("1"),
+      问题05: "E",
+      答案05: expect.stringContaining("5"),
+      问题06: "",
+      答案06: "",
+    });
+  });
+
+  it("surfaces a user-facing error when QA Group note type migration fails", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    ankiGateway.updateNoteModelError = new Error("AnkiConnect updateNoteModel failed for note 42 to model 问答题（多级列表）: unsupported action");
+    ankiGateway.noteDetailsById.set(42, {
+      noteId: 42,
+      modelName: "旧问答模板",
+      cardIds: [7001],
+      deckNames: ["notes"],
+      fields: { 题目: "旧题目" },
+    });
+    const service = new QaGroupSyncService(ankiGateway);
+
+    await expect(service.sync([
+      createIndexedGroupBlock({
+        noteId: 42,
+        groupId: "group-1",
+      }),
+    ], createEmptyPluginState(), createModule3Settings())).rejects.toMatchObject({
+      userMessage: {
+        key: "errors.noteTypeMigration.unsupported",
+      },
+    });
+
+    expect(ankiGateway.addedNotes).toEqual([]);
+    expect(ankiGateway.updatedNoteModels).toEqual([]);
+  });
+
   it("rejects a QA Group block when the selected template exposes fewer slots than the block needs", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     const service = new QaGroupSyncService(ankiGateway);

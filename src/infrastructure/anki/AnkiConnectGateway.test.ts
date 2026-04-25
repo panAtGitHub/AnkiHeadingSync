@@ -340,6 +340,61 @@ describe("AnkiConnectGateway", () => {
     });
   });
 
+  it("updates a note model with the target fields payload", async () => {
+    requestUrlMock.mockResolvedValue({
+      json: {
+        error: null,
+        result: null,
+      },
+    });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    await gateway.updateNoteModel({
+      noteId: 42,
+      modelName: "问答题（多级列表）",
+      fields: {
+        题目: "概念",
+        问题01: "Alpha",
+        答案01: "First answer",
+      },
+    });
+
+    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+      action: "updateNoteModel",
+      version: 6,
+      params: {
+        note: {
+          id: 42,
+          modelName: "问答题（多级列表）",
+          fields: {
+            题目: "概念",
+            问题01: "Alpha",
+            答案01: "First answer",
+          },
+        },
+      },
+    });
+  });
+
+  it("preserves note context when updateNoteModel fails", async () => {
+    requestUrlMock.mockResolvedValue({
+      json: {
+        error: "unsupported action",
+        result: null,
+      },
+    });
+
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+
+    await expect(gateway.updateNoteModel({
+      noteId: 42,
+      modelName: "问答题（多级列表）",
+      fields: {
+        题目: "概念",
+      },
+    })).rejects.toThrow("AnkiConnect updateNoteModel failed for note 42 to model 问答题（多级列表）: unsupported action");
+  });
+
   it("syncs note tags by removing obsolete tags before adding current tags", async () => {
     requestUrlMock.mockResolvedValue({
       json: {

@@ -14,6 +14,12 @@ export interface UpdateAnkiNoteInput {
   fields: Record<string, string>;
 }
 
+export interface UpdateAnkiNoteModelInput {
+  noteId: number;
+  modelName: string;
+  fields: Record<string, string>;
+}
+
 export interface SyncAnkiNoteTagsInput {
   noteId: number;
   addTags: string[];
@@ -68,6 +74,7 @@ export interface AnkiGateway {
   addNotes(inputs: AddAnkiNoteInput[]): Promise<number[]>;
   deleteNotes(noteIds: number[]): Promise<void>;
   updateNote(input: UpdateAnkiNoteInput): Promise<void>;
+  updateNoteModel(input: UpdateAnkiNoteModelInput): Promise<void>;
   updateNotes(inputs: UpdateAnkiNoteInput[]): Promise<void>;
   syncNoteTags(inputs: SyncAnkiNoteTagsInput[]): Promise<void>;
   changeDecks(inputs: ChangeDeckInput[]): Promise<void>;

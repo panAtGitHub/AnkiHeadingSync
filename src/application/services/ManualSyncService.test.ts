@@ -22,6 +22,7 @@ describe("ManualSyncService", () => {
 
     expect(result.created).toBe(1);
     expect(result.updated).toBe(0);
+    expect(result.migratedNoteTypes).toBe(0);
     expect(result.migratedDecks).toBe(0);
     expect(result.warnings).toEqual([]);
     expect(ankiGateway.addedNotes[0]?.deckName).toBe("notes");
