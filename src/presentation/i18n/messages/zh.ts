@@ -183,6 +183,7 @@ export const zh = {
           folderAndFile: "文件夹及文件名级映射",
         },
       },
+      examplesTitle: "示例：",
       folderExample: "文件夹映射牌组示例：数学/第一章/第一节.md -> 数学::第一章",
       folderAndFileExample: "文件夹及文件名映射牌组示例：数学/第一章/第一节.md -> 数学::第一章::第一节",
       fallbackDesc: "若均不打开「文件夹及文件名」及「文件级」牌组，则以「默认牌组名称」作为 Anki 的牌组名。",

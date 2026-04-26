@@ -185,6 +185,7 @@ export const en = {
           folderAndFile: "Folder-and-file mapping",
         },
       },
+      examplesTitle: "Examples:",
       folderExample: "Folder-based mapping example: 数学/第一章/第一节.md -> 数学::第一章",
       folderAndFileExample: "Folder-and-file mapping example: 数学/第一章/第一节.md -> 数学::第一章::第一节",
       fallbackDesc: "If neither folder-and-file mapping nor file-level custom decks are used, the default deck name is used as the Anki deck.",

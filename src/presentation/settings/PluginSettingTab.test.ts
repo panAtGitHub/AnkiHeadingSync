@@ -1412,6 +1412,21 @@ describe("PluginSettingTab", () => {
     expect(collectTexts(deckBody)).toContain("若均不打开「文件夹及文件名」及「文件级」牌组，则以「默认牌组名称」作为 Anki 的牌组名。");
     expect(collectTexts(deckBody)).toContain("最终牌组优先级：文件级自定义牌组 > 文件夹映射牌组 > 默认牌组。");
 
+    const exampleBlock = queryByDataset(section1, "deckExampleBlock", "true");
+    const exampleRows = queryAllByDataset(exampleBlock, "deckExampleRow");
+    expect(collectTexts(exampleBlock)).toContain("示例：");
+    expect(exampleRows).toHaveLength(2);
+    expect(exampleRows[0]?.style.color).toBe("var(--text-muted)");
+    expect(exampleRows[0]?.style.fontSize).toBe("var(--font-ui-small)");
+
+    const fallbackHelper = queryByDataset(section3, "deckHelperText", "fallback");
+    const priorityFooter = queryByDataset(deckBody, "deckPriorityFooter", "true");
+    expect(fallbackHelper.style.color).toBe("var(--text-muted)");
+    expect(fallbackHelper.style.fontSize).toBe("var(--font-ui-small)");
+    expect(priorityFooter.style.color).toBe("var(--text-muted)");
+    expect(priorityFooter.style.fontSize).toBe("var(--font-ui-small)");
+    expect(collectTexts(section3)).not.toContain("最终牌组优先级：文件级自定义牌组 > 文件夹映射牌组 > 默认牌组。");
+
     expect(collectOwnedSettingNames(section1)).toEqual(["文件夹映射模式"]);
     expect(collectOwnedSettingNames(section2)).toEqual(["开启文件级自定义牌组"]);
     expect(collectOwnedSettingNames(section3)).toEqual(["默认牌组"]);

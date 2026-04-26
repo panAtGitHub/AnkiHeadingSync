@@ -665,8 +665,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
       });
 
-    folderMappingSection.createEl("p", { text: t("settings.deck.folderExample") });
-    folderMappingSection.createEl("p", { text: t("settings.deck.folderAndFileExample") });
+    this.renderDeckExampleBlock(folderMappingSection);
 
     const fileDeckSection = this.createDeckSection(containerEl, "file-deck", t("settings.cards.deck.sections.fileDeck"));
     new Setting(fileDeckSection)
@@ -762,8 +761,47 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
       });
 
-    defaultDeckSection.createEl("p", { text: t("settings.deck.fallbackDesc") });
-    defaultDeckSection.createEl("p", { text: t("settings.deck.priorityDesc") });
+    this.createDeckHelperText(defaultDeckSection, t("settings.deck.fallbackDesc"), "fallback");
+    this.createDeckPriorityFooter(containerEl);
+  }
+
+  private renderDeckExampleBlock(containerEl: HTMLElement): void {
+    const exampleBlockEl = containerEl.createDiv();
+    exampleBlockEl.dataset.deckExampleBlock = "true";
+    exampleBlockEl.style.display = "flex";
+    exampleBlockEl.style.flexDirection = "column";
+    exampleBlockEl.style.gap = "4px";
+    exampleBlockEl.style.marginTop = "2px";
+
+    const titleEl = exampleBlockEl.createEl("strong", { text: t("settings.deck.examplesTitle") });
+    titleEl.style.fontSize = "var(--font-ui-small)";
+
+    for (const exampleText of [
+      t("settings.deck.folderExample"),
+      t("settings.deck.folderAndFileExample"),
+    ]) {
+      const rowEl = exampleBlockEl.createDiv({ text: exampleText });
+      rowEl.dataset.deckExampleRow = "true";
+      rowEl.style.color = "var(--text-muted)";
+      rowEl.style.fontSize = "var(--font-ui-small)";
+      rowEl.style.lineHeight = "1.4";
+    }
+  }
+
+  private createDeckHelperText(containerEl: HTMLElement, text: string, helperId: string): HTMLElement {
+    const helperEl = containerEl.createDiv({ text });
+    helperEl.dataset.deckHelperText = helperId;
+    helperEl.style.color = "var(--text-muted)";
+    helperEl.style.fontSize = "var(--font-ui-small)";
+    helperEl.style.lineHeight = "1.4";
+    helperEl.style.marginTop = "2px";
+    return helperEl;
+  }
+
+  private createDeckPriorityFooter(containerEl: HTMLElement): void {
+    const footerEl = this.createDeckHelperText(containerEl, t("settings.deck.priorityDesc"), "priority");
+    footerEl.dataset.deckPriorityFooter = "true";
+    footerEl.style.marginTop = "12px";
   }
 
   private createDeckSection(containerEl: HTMLElement, sectionId: string, title: string): HTMLElement {
