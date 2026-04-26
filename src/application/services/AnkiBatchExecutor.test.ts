@@ -196,7 +196,7 @@ describe("AnkiBatchExecutor", () => {
 
   it("migrates a basic note in place when the current note model changed", async () => {
     const ankiGateway = new CountingAnkiGateway();
-    ankiGateway.modelDetailsByName["New Basic"] = { fieldNames: ["Front", "Back"], isCloze: false };
+    ankiGateway.modelDetailsByName["New Basic"] = { fieldNames: ["Front", "Back"] };
     ankiGateway.noteSummariesById.set(300, {
       noteId: 300,
       modelName: "Old Basic",
@@ -250,7 +250,7 @@ describe("AnkiBatchExecutor", () => {
 
   it("migrates a cloze note in place when the current note model changed", async () => {
     const ankiGateway = new CountingAnkiGateway();
-    ankiGateway.modelDetailsByName["New Cloze"] = { fieldNames: ["Text", "Extra"], isCloze: true };
+    ankiGateway.modelDetailsByName["New Cloze"] = { fieldNames: ["Text", "Extra"] };
     ankiGateway.noteSummariesById.set(300, {
       noteId: 300,
       modelName: "Old Cloze",
@@ -291,7 +291,7 @@ describe("AnkiBatchExecutor", () => {
         noteId: 300,
         modelName: "New Cloze",
         fields: {
-          Text: "Heading sync-migrate-cloze<br><br>Body sync-migrate-cloze",
+          Text: "Heading sync-migrate-cloze<br><hr>Body sync-migrate-cloze",
         },
       },
     ]);
@@ -331,7 +331,7 @@ describe("AnkiBatchExecutor", () => {
 
   it("surfaces the existing mapping error instead of migrating when the target mapping is incomplete", async () => {
     const ankiGateway = new CountingAnkiGateway();
-    ankiGateway.modelDetailsByName["New Basic"] = { fieldNames: ["Front", "Back"], isCloze: false };
+    ankiGateway.modelDetailsByName["New Basic"] = { fieldNames: ["Front", "Back"] };
     ankiGateway.noteSummariesById.set(300, {
       noteId: 300,
       modelName: "Old Basic",

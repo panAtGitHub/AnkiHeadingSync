@@ -158,11 +158,10 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
   public updatedModelStyling: Array<{ modelName: string; css: string }> = [];
   public foundNoteIds = new Map<string, number[]>();
   public modelDetailsByName: Record<string, NoteModelDetails> = {
-    Basic: { fieldNames: ["Front", "Back"], isCloze: false },
-    Cloze: { fieldNames: ["Text", "Extra"], isCloze: true },
+    Basic: { fieldNames: ["Front", "Back"] },
+    Cloze: { fieldNames: ["Text", "Extra"] },
     [QA_GROUP_USER_NOTE_TYPE]: {
       fieldNames: ["题目", "问题01", "答案01", "问题02", "答案02", "问题03", "答案03"],
-      isCloze: false,
     },
   };
   public modelTemplatesByName: Record<string, Record<string, AnkiModelTemplate>> = {};
@@ -188,7 +187,7 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
   }
 
   async getModelDetails(modelName: string): Promise<NoteModelDetails> {
-    return this.modelDetailsByName[modelName] ?? { fieldNames: ["Front", "Back"], isCloze: false };
+    return this.modelDetailsByName[modelName] ?? { fieldNames: ["Front", "Back"] };
   }
 
   async getModelFieldNames(modelName: string): Promise<string[]> {
@@ -214,7 +213,6 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
     this.createdModels.push(input);
     this.modelDetailsByName[input.modelName] = {
       fieldNames: [...input.fieldNames],
-      isCloze: Boolean(input.isCloze),
     };
     this.modelTemplatesByName[input.modelName] = Object.fromEntries(input.templates.map((template) => [template.name, { ...template }]));
     this.modelStylingByName[input.modelName] = input.css;
@@ -222,7 +220,7 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
 
   async addModelField(modelName: string, fieldName: string): Promise<void> {
     this.addedModelFields.push({ modelName, fieldName });
-    const existing = this.modelDetailsByName[modelName] ?? { fieldNames: [], isCloze: false };
+    const existing = this.modelDetailsByName[modelName] ?? { fieldNames: [] };
     if (!existing.fieldNames.includes(fieldName)) {
       existing.fieldNames.push(fieldName);
     }

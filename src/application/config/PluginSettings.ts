@@ -361,6 +361,24 @@ function validateNoteFieldMappings(noteFieldMappings: Record<string, NoteModelFi
 
       validateStringList(mapping.warnings, "errors.settings.noteFieldMappingsQaGroupWarningsArray", "errors.settings.noteFieldMappingsQaGroupWarningsStrings");
       validateStringList(mapping.acceptedWarnings, "errors.settings.noteFieldMappingsQaGroupAcceptedWarningsArray", "errors.settings.noteFieldMappingsQaGroupAcceptedWarningsStrings", true);
+
+      if (mapping.derivation !== undefined) {
+        if (!mapping.derivation || typeof mapping.derivation !== "object" || Array.isArray(mapping.derivation)) {
+          throw new PluginUserError("errors.settings.noteFieldMappingsQaGroupDerivationObject");
+        }
+
+        if (mapping.derivation.mode !== "first-pair") {
+          throw new PluginUserError("errors.settings.noteFieldMappingsQaGroupDerivationMode");
+        }
+
+        if (mapping.derivation.firstQuestionField !== undefined && typeof mapping.derivation.firstQuestionField !== "string") {
+          throw new PluginUserError("errors.settings.noteFieldMappingsQaGroupDerivationFirstQuestionField");
+        }
+
+        if (mapping.derivation.firstAnswerField !== undefined && typeof mapping.derivation.firstAnswerField !== "string") {
+          throw new PluginUserError("errors.settings.noteFieldMappingsQaGroupDerivationFirstAnswerField");
+        }
+      }
     }
   }
 }
@@ -637,7 +655,8 @@ function normalizeQaGroupFieldMapping(
   const normalizedSlots = normalizeQaGroupSlots(mapping.slots);
   const normalizedWarnings = normalizeStringList(mapping.warnings);
   const normalizedTitleField = normalizeOptionalFieldName(mapping.titleField);
-  const hasExplicitQaGroupShape = normalizedSlots.length > 0 || normalizedWarnings.length > 0 || acceptedWarnings.length > 0;
+  const normalizedDerivation = normalizeQaGroupDerivation(mapping.derivation);
+  const hasExplicitQaGroupShape = normalizedSlots.length > 0 || normalizedWarnings.length > 0 || acceptedWarnings.length > 0 || normalizedDerivation !== undefined;
 
   if (hasExplicitQaGroupShape) {
     return {
@@ -648,13 +667,14 @@ function normalizeQaGroupFieldMapping(
       slots: normalizedSlots,
       warnings: normalizedWarnings,
       acceptedWarnings: acceptedWarnings.length > 0 ? acceptedWarnings : undefined,
+      derivation: normalizedDerivation,
       loadedAt,
     };
   }
 
   if (loadedFieldNames.length > 0) {
     try {
-      return qaGroupFieldMappingService.suggest(modelName, loadedFieldNames, loadedAt, acceptedWarnings);
+      return qaGroupFieldMappingService.suggest(modelName, loadedFieldNames, loadedAt, acceptedWarnings, normalizedTitleField);
     } catch {
       return {
         cardType: "qa-group",
@@ -664,6 +684,7 @@ function normalizeQaGroupFieldMapping(
         slots: [],
         warnings: [],
         acceptedWarnings: undefined,
+        derivation: normalizedDerivation,
         loadedAt,
       };
     }
@@ -677,7 +698,25 @@ function normalizeQaGroupFieldMapping(
     slots: [],
     warnings: [],
     acceptedWarnings: undefined,
+    derivation: normalizedDerivation,
     loadedAt,
+  };
+}
+
+function normalizeQaGroupDerivation(value: unknown): { mode: "first-pair"; firstQuestionField?: string; firstAnswerField?: string } | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const derivation = value as Partial<{ mode: unknown; firstQuestionField: unknown; firstAnswerField: unknown }>;
+  if (derivation.mode !== "first-pair") {
+    return undefined;
+  }
+
+  return {
+    mode: "first-pair",
+    firstQuestionField: normalizeOptionalFieldName(derivation.firstQuestionField),
+    firstAnswerField: normalizeOptionalFieldName(derivation.firstAnswerField),
   };
 }
 

@@ -3,8 +3,6 @@ import { describe, expect, it } from "vitest";
 import { PluginUserError } from "@/application/errors/PluginUserError";
 
 import {
-  areQaGroupWarningsAccepted,
-  parseQaGroupFieldWarning,
   QaGroupFieldMappingService,
 } from "./QaGroupFieldMappingService";
 
@@ -30,6 +28,11 @@ describe("QaGroupFieldMappingService", () => {
       modelName: "问答题（多级列表）",
       loadedFieldNames: ["题目", "问题01", "答案01", "问题02", "答案02"],
       titleField: "题目",
+      derivation: {
+        mode: "first-pair",
+        firstQuestionField: "问题01",
+        firstAnswerField: "答案01",
+      },
       slots: [
         {
           index: 1,
@@ -68,28 +71,48 @@ describe("QaGroupFieldMappingService", () => {
     ]);
   });
 
-  it("records warnings for incomplete tail slots and preserves accepted warnings only when they still match", () => {
+  it("derives slots from a selected first pair and stops at the first missing pair", () => {
     const service = new QaGroupFieldMappingService();
-    const mapping = service.suggest("问答题（多级列表）", ["题目", "问题01", "答案01", "问题02"], 1);
+    const mapping = service.createMappingFromSelection(
+      "问答题（多级列表）",
+      ["题目", "问题01", "答案01", "问题02"],
+      {
+        titleField: "题目",
+        firstQuestionField: "问题01",
+        firstAnswerField: "答案01",
+      },
+      1,
+    );
 
     expect(mapping.slots).toEqual([
       { index: 1, questionField: "问题01", answerField: "答案01" },
     ]);
-    expect(mapping.warnings).toHaveLength(1);
-    expect(parseQaGroupFieldWarning(mapping.warnings[0] ?? "")).toEqual({
-      kind: "missing-answer",
-      index: 2,
-      questionField: "问题02",
-      answerField: "答案02",
+    expect(mapping.derivation).toEqual({
+      mode: "first-pair",
+      firstQuestionField: "问题01",
+      firstAnswerField: "答案01",
     });
+    expect(mapping.warnings).toEqual([]);
     expect(mapping.acceptedWarnings).toBeUndefined();
+  });
 
-    const accepted = service.suggest("问答题（多级列表）", ["题目", "问题01", "答案01", "问题02"], 1, mapping.warnings);
-    expect(accepted.acceptedWarnings).toEqual(accepted.warnings);
-    expect(areQaGroupWarningsAccepted(accepted.warnings, accepted.acceptedWarnings)).toBe(true);
+  it("keeps a single slot when the selected first pair does not contain numbers", () => {
+    const service = new QaGroupFieldMappingService();
 
-    const reset = service.suggest("问答题（多级列表）", ["题目", "问题01", "答案01", "问题02", "答案03"], 1, mapping.warnings);
-    expect(reset.acceptedWarnings).toBeUndefined();
+    const mapping = service.createMappingFromSelection(
+      "Custom QA Group",
+      ["题目", "Question", "Answer"],
+      {
+        titleField: "题目",
+        firstQuestionField: "Question",
+        firstAnswerField: "Answer",
+      },
+      1,
+    );
+
+    expect(mapping.slots).toEqual([
+      { index: 1, questionField: "Question", answerField: "Answer" },
+    ]);
   });
 
   it("leaves the title field unset when no preferred title field exists", () => {
@@ -116,5 +139,23 @@ describe("QaGroupFieldMappingService", () => {
       modelName: "问答题（多级列表）",
       firstIndex: 2,
     });
+  });
+
+  it("rejects selected first pairs whose numbers do not line up", () => {
+    const service = new QaGroupFieldMappingService();
+
+    const error = expectPluginUserError(() => {
+      service.createMappingFromSelection(
+        "问答题（多级列表）",
+        ["题目", "问题01", "答案02"],
+        {
+          titleField: "题目",
+          firstQuestionField: "问题01",
+          firstAnswerField: "答案02",
+        },
+      );
+    });
+
+    expect(error.userMessage.key).toBe("errors.noteFieldMapping.qaGroupFirstPairNumberMismatch");
   });
 });

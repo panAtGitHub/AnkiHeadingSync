@@ -433,6 +433,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private renderQaGroupFieldControls(containerEl: HTMLElement, configId: Extract<CardTypeConfigId, "qa-group">): void {
     const selectedModelName = this.plugin.settings.cardTypeConfigs[configId].noteType.trim();
     const qaGroupState = this.getQaGroupFieldState(configId);
+    const selectedFields = qaGroupState.mapping ? this.getQaGroupSelectedFields(qaGroupState.mapping) : undefined;
 
     const titleFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.qaGroupTitleField"));
     if (qaGroupState.mapping) {
@@ -440,23 +441,80 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       titleFieldSelect.dataset.qaGroupTitleField = configId;
       this.applyFluidEllipsis(titleFieldSelect);
       this.populateFieldSelect(titleFieldSelect, qaGroupState.mapping.loadedFieldNames, qaGroupState.mapping.titleField);
-      titleFieldSelect.addEventListener("change", () => this.saveFieldMapping(configId, { titleField: titleFieldSelect.value || undefined }));
+      const qaGroupPairRow = containerEl.createDiv();
+      qaGroupPairRow.dataset.qaGroupPairRow = configId;
+      qaGroupPairRow.style.gridColumn = "1 / -1";
+      qaGroupPairRow.style.display = "grid";
+      qaGroupPairRow.style.gridTemplateColumns = "minmax(0, 1fr) minmax(0, 1fr) max-content";
+      qaGroupPairRow.style.alignItems = "center";
+      qaGroupPairRow.style.columnGap = "16px";
+      qaGroupPairRow.style.rowGap = "8px";
+      qaGroupPairRow.style.width = "100%";
+
+      const firstQuestionFieldGroup = this.createGridControlSlot(qaGroupPairRow, t("settings.cards.cardTypes.labels.qaGroupFirstQuestionField"));
+      const firstQuestionFieldSelect = this.createFieldSelect(firstQuestionFieldGroup, `card-type-qa-group-first-question-field:${configId}`);
+      firstQuestionFieldSelect.dataset.qaGroupFirstQuestionField = configId;
+      this.applyFluidEllipsis(firstQuestionFieldSelect);
+      this.populateFieldSelect(firstQuestionFieldSelect, qaGroupState.mapping.loadedFieldNames, selectedFields?.firstQuestionField);
+
+      const firstAnswerFieldGroup = this.createGridControlSlot(qaGroupPairRow, t("settings.cards.cardTypes.labels.qaGroupFirstAnswerField"));
+      const firstAnswerFieldSelect = this.createFieldSelect(firstAnswerFieldGroup, `card-type-qa-group-first-answer-field:${configId}`);
+      firstAnswerFieldSelect.dataset.qaGroupFirstAnswerField = configId;
+      this.applyFluidEllipsis(firstAnswerFieldSelect);
+      this.populateFieldSelect(firstAnswerFieldSelect, qaGroupState.mapping.loadedFieldNames, selectedFields?.firstAnswerField);
+
+      const saveSelection = () => this.saveQaGroupFieldSelection(configId, {
+        titleField: titleFieldSelect.value || undefined,
+        firstQuestionField: firstQuestionFieldSelect.value || undefined,
+        firstAnswerField: firstAnswerFieldSelect.value || undefined,
+      });
+
+      titleFieldSelect.addEventListener("change", saveSelection);
+      firstQuestionFieldSelect.addEventListener("change", saveSelection);
+      firstAnswerFieldSelect.addEventListener("change", saveSelection);
+
+      const slotSummaryEl = qaGroupPairRow.createEl("span", {
+        text: t("settings.cards.cardTypes.qaGroup.configuredSlots", {
+          count: qaGroupState.mapping.slots.length,
+        }),
+      });
+      slotSummaryEl.dataset.qaGroupSlotSummary = configId;
+      slotSummaryEl.style.whiteSpace = "nowrap";
+      slotSummaryEl.style.justifySelf = "start";
+      this.applyFluidEllipsis(slotSummaryEl);
     } else {
       titleFieldGroup.createEl("span", {
         text: selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel"),
       }).dataset.qaGroupTitleField = configId;
-    }
 
-    const slotFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.qaGroupSlotFields"));
-    const slotSummaryEl = slotFieldGroup.createEl("span", {
-      text: qaGroupState.mapping
-        ? t("settings.cards.cardTypes.qaGroup.detectedSlots", {
-            count: qaGroupState.mapping.slots.length,
-          })
-        : (selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel")),
-    });
-    slotSummaryEl.dataset.qaGroupSlotSummary = configId;
-    this.applyFluidEllipsis(slotSummaryEl);
+      const qaGroupPairRow = containerEl.createDiv();
+      qaGroupPairRow.dataset.qaGroupPairRow = configId;
+      qaGroupPairRow.style.gridColumn = "1 / -1";
+      qaGroupPairRow.style.display = "grid";
+      qaGroupPairRow.style.gridTemplateColumns = "minmax(0, 1fr) minmax(0, 1fr) max-content";
+      qaGroupPairRow.style.alignItems = "center";
+      qaGroupPairRow.style.columnGap = "16px";
+      qaGroupPairRow.style.rowGap = "8px";
+      qaGroupPairRow.style.width = "100%";
+
+      const firstQuestionFieldGroup = this.createGridControlSlot(qaGroupPairRow, t("settings.cards.cardTypes.labels.qaGroupFirstQuestionField"));
+      firstQuestionFieldGroup.createEl("span", {
+        text: selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel"),
+      }).dataset.qaGroupFirstQuestionField = configId;
+
+      const firstAnswerFieldGroup = this.createGridControlSlot(qaGroupPairRow, t("settings.cards.cardTypes.labels.qaGroupFirstAnswerField"));
+      firstAnswerFieldGroup.createEl("span", {
+        text: selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel"),
+      }).dataset.qaGroupFirstAnswerField = configId;
+
+      const slotSummaryEl = qaGroupPairRow.createEl("span", {
+        text: selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel"),
+      });
+      slotSummaryEl.dataset.qaGroupSlotSummary = configId;
+      slotSummaryEl.style.whiteSpace = "nowrap";
+      slotSummaryEl.style.justifySelf = "start";
+      this.applyFluidEllipsis(slotSummaryEl);
+    }
 
     if (qaGroupState.error) {
       const errorEl = containerEl.createDiv({
@@ -1132,9 +1190,9 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private createCachedModelDetails(modelName: string, fieldNames: string[]): NoteModelDetails {
+    void modelName;
     return {
       fieldNames: [...fieldNames],
-      isCloze: false,
     };
   }
 
@@ -1207,6 +1265,10 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const mapping = this.draftMappings[mappingKey] ?? this.plugin.settings.noteFieldMappings[mappingKey];
 
     if (mapping) {
+      if (isQaGroupFieldMapping(mapping)) {
+        return this.cloneQaGroupFieldMapping(mapping);
+      }
+
       return {
         ...mapping,
         loadedFieldNames: [...mapping.loadedFieldNames],
@@ -1229,13 +1291,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
           isQaGroupFieldMapping(currentMapping) ? currentMapping.titleField : undefined,
         );
         this.draftMappings[mappingKey] = suggestedMapping;
-        return {
-          ...suggestedMapping,
-          loadedFieldNames: [...suggestedMapping.loadedFieldNames],
-          slots: suggestedMapping.slots.map((slot) => ({ ...slot })),
-          warnings: [...suggestedMapping.warnings],
-          acceptedWarnings: suggestedMapping.acceptedWarnings ? [...suggestedMapping.acceptedWarnings] : undefined,
-        };
+        return this.cloneQaGroupFieldMapping(suggestedMapping);
       } catch {
         return undefined;
       }
@@ -1276,6 +1332,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         slots: [],
         warnings: [],
         acceptedWarnings: undefined,
+        derivation: undefined,
         loadedFieldNames: [],
         loadedAt: Date.now(),
       };
@@ -1313,6 +1370,43 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         [mappingKey]: nextMapping,
       },
     });
+    this.renderCard("card-types");
+  }
+
+  private async saveQaGroupFieldSelection(
+    configId: Extract<CardTypeConfigId, "qa-group">,
+    selection: { titleField?: string; firstQuestionField?: string; firstAnswerField?: string },
+  ): Promise<void> {
+    const modelName = this.plugin.settings.cardTypeConfigs[configId].noteType.trim();
+    if (modelName.length === 0) {
+      return;
+    }
+
+    const mappingKey = createNoteFieldMappingKey("qa-group", modelName);
+    const currentMapping = this.getCurrentMappingForConfig(configId);
+    const loadedFieldNames = currentMapping && isQaGroupFieldMapping(currentMapping)
+      ? currentMapping.loadedFieldNames
+      : (this.loadedModelDetails[mappingKey]?.fieldNames ?? []);
+    const loadedAt = currentMapping && isQaGroupFieldMapping(currentMapping) ? currentMapping.loadedAt : Date.now();
+    const draftMapping = this.createQaGroupSelectionDraft(modelName, loadedFieldNames, loadedAt, selection);
+    this.draftMappings[mappingKey] = draftMapping;
+
+    try {
+      const nextMapping = this.qaGroupFieldMappingService.createMappingFromSelection(modelName, loadedFieldNames, selection, loadedAt);
+      this.cardTypeStatusOverride = null;
+      this.draftMappings[mappingKey] = nextMapping;
+      await this.plugin.updateSettings({
+        noteFieldMappings: {
+          ...this.plugin.settings.noteFieldMappings,
+          [mappingKey]: nextMapping,
+        },
+      });
+    } catch {
+      this.cardTypeStatusOverride = null;
+      this.renderCard("card-types");
+      return;
+    }
+
     this.renderCard("card-types");
   }
 
@@ -1380,14 +1474,27 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const mappingKey = createNoteFieldMappingKey("qa-group", modelName);
     const currentMapping = this.draftMappings[mappingKey] ?? this.plugin.settings.noteFieldMappings[mappingKey];
     if (currentMapping && isQaGroupFieldMapping(currentMapping)) {
+      if (currentMapping.derivation?.mode === "first-pair") {
+        const selectedFields = this.getQaGroupSelectedFields(currentMapping);
+        try {
+          return {
+            mapping: this.qaGroupFieldMappingService.createMappingFromSelection(
+              modelName,
+              currentMapping.loadedFieldNames,
+              selectedFields,
+              currentMapping.loadedAt,
+            ),
+          };
+        } catch (error) {
+          return {
+            mapping: this.cloneQaGroupFieldMapping(currentMapping),
+            error: toUserFacingMessage(error, "settings.cards.cardTypes.failedSave"),
+          };
+        }
+      }
+
       return {
-        mapping: {
-          ...currentMapping,
-          loadedFieldNames: [...currentMapping.loadedFieldNames],
-          slots: currentMapping.slots.map((slot) => ({ ...slot })),
-          warnings: [...currentMapping.warnings],
-          acceptedWarnings: currentMapping.acceptedWarnings ? [...currentMapping.acceptedWarnings] : undefined,
-        },
+        mapping: this.cloneQaGroupFieldMapping(currentMapping),
       };
     }
 
@@ -1415,12 +1522,78 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private refreshSavedQaGroupMapping(mapping: QaGroupFieldMapping, fieldNames: string[], loadedAt: number): QaGroupFieldMapping {
+    if (mapping.derivation?.mode === "first-pair") {
+      try {
+        return this.qaGroupFieldMappingService.createMappingFromSelection(
+          mapping.modelName,
+          fieldNames,
+          this.getQaGroupSelectedFields(mapping),
+          loadedAt,
+        );
+      } catch {
+        return {
+          ...this.cloneQaGroupFieldMapping(mapping),
+          loadedFieldNames: [...fieldNames],
+          loadedAt,
+        };
+      }
+    }
+
     return {
       ...mapping,
       loadedFieldNames: [...fieldNames],
       slots: mapping.slots.map((slot) => ({ ...slot })),
       warnings: [...mapping.warnings],
       acceptedWarnings: mapping.acceptedWarnings ? [...mapping.acceptedWarnings] : undefined,
+      derivation: mapping.derivation ? { ...mapping.derivation } : undefined,
+      loadedAt,
+    };
+  }
+
+  private cloneQaGroupFieldMapping(mapping: QaGroupFieldMapping): QaGroupFieldMapping {
+    return {
+      ...mapping,
+      derivation: mapping.derivation ? { ...mapping.derivation } : undefined,
+      loadedFieldNames: [...mapping.loadedFieldNames],
+      slots: mapping.slots.map((slot) => ({ ...slot })),
+      warnings: [...mapping.warnings],
+      acceptedWarnings: mapping.acceptedWarnings ? [...mapping.acceptedWarnings] : undefined,
+    };
+  }
+
+  private getQaGroupSelectedFields(mapping: QaGroupFieldMapping): { titleField?: string; firstQuestionField?: string; firstAnswerField?: string } {
+    return {
+      titleField: mapping.titleField,
+      firstQuestionField: mapping.derivation?.firstQuestionField ?? mapping.slots[0]?.questionField,
+      firstAnswerField: mapping.derivation?.firstAnswerField ?? mapping.slots[0]?.answerField,
+    };
+  }
+
+  private createQaGroupSelectionDraft(
+    modelName: string,
+    fieldNames: string[],
+    loadedAt: number,
+    selection: { titleField?: string; firstQuestionField?: string; firstAnswerField?: string },
+  ): QaGroupFieldMapping {
+    const titleField = selection.titleField?.trim() || undefined;
+    const firstQuestionField = selection.firstQuestionField?.trim() || undefined;
+    const firstAnswerField = selection.firstAnswerField?.trim() || undefined;
+
+    return {
+      cardType: "qa-group",
+      modelName,
+      titleField,
+      slots: [],
+      warnings: [],
+      acceptedWarnings: undefined,
+      derivation: firstQuestionField || firstAnswerField
+        ? {
+            mode: "first-pair",
+            firstQuestionField,
+            firstAnswerField,
+          }
+        : undefined,
+      loadedFieldNames: [...fieldNames],
       loadedAt,
     };
   }

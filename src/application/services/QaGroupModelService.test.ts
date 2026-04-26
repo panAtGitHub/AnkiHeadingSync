@@ -180,7 +180,6 @@ function createExistingQaGroupGateway(overrides: {
   const ankiGateway = new FakeManualSyncAnkiGateway();
   ankiGateway.modelDetailsByName[definition.modelName] = {
     fieldNames: [...(overrides.fieldNames ?? definition.fieldNames)],
-    isCloze: false,
   };
   ankiGateway.modelTemplatesByName[definition.modelName] = Object.fromEntries(
     (overrides.templates ?? definition.templates).map((template) => [template.name, { ...template }]),

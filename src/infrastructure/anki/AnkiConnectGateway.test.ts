@@ -138,7 +138,6 @@ describe("AnkiConnectGateway", () => {
 
     expect(details).toEqual({
       fieldNames: ["Text", "Extra"],
-      isCloze: false,
     });
   });
 

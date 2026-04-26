@@ -135,7 +135,7 @@ export class NoteFieldMappingService {
     }
 
     return {
-      [mapping.mainField]: `${card.renderedFields.title}<br><br>${card.renderedFields.body}`,
+      [mapping.mainField]: `${card.renderedFields.title}<br><hr>${card.renderedFields.body}`,
     };
   }
 

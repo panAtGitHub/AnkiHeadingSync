@@ -219,7 +219,6 @@ export class AnkiConnectGateway implements AnkiGroupGateway {
   async getModelDetails(modelName: string): Promise<NoteModelDetails> {
     return {
       fieldNames: await this.getModelFieldNames(modelName),
-      isCloze: false,
     };
   }
 

@@ -1,4 +1,4 @@
-import type { QaGroupFieldMapping, QaGroupSlotMapping } from "@/application/config/NoteModelFieldMapping";
+import type { QaGroupFieldDerivation, QaGroupFieldMapping, QaGroupSlotMapping } from "@/application/config/NoteModelFieldMapping";
 import { PluginUserError } from "@/application/errors/PluginUserError";
 
 type QaGroupFieldWarningKind = "missing-answer" | "missing-question";
@@ -10,9 +10,17 @@ interface QaGroupFieldWarningPayload {
   answerField: string;
 }
 
-interface QaGroupDetectedFields {
-  slots: QaGroupSlotMapping[];
-  warnings: string[];
+interface QaGroupFieldSelection {
+  titleField?: string;
+  firstQuestionField?: string;
+  firstAnswerField?: string;
+}
+
+interface IndexedFieldSegment {
+  prefix: string;
+  digits: string;
+  suffix: string;
+  index: number;
 }
 
 const TITLE_FIELD_PRIORITY = ["题目", "标题", "正面", "Stem", "Title"] as const;
@@ -27,21 +35,56 @@ export class QaGroupFieldMappingService {
     acceptedWarnings?: string[],
     preferredTitleField?: string,
   ): QaGroupFieldMapping {
+    void acceptedWarnings;
+
     const titleField = preferredTitleField && fieldNames.includes(preferredTitleField)
       ? preferredTitleField
       : findFieldName(fieldNames, TITLE_FIELD_PRIORITY);
-    const detectedFields = detectSlots(fieldNames, modelName);
+    const firstPair = detectSuggestedFirstPair(fieldNames, modelName);
+
+    return this.createMappingFromSelection(
+      modelName,
+      fieldNames,
+      {
+        titleField,
+        firstQuestionField: firstPair.questionField,
+        firstAnswerField: firstPair.answerField,
+      },
+      loadedAt,
+    );
+  }
+
+  createMappingFromSelection(
+    modelName: string,
+    fieldNames: string[],
+    selection: QaGroupFieldSelection,
+    loadedAt = Date.now(),
+  ): QaGroupFieldMapping {
+    const loadedFieldNames = [...fieldNames];
+    const titleField = normalizeOptionalFieldName(selection.titleField);
+    const firstQuestionField = normalizeOptionalFieldName(selection.firstQuestionField);
+    const firstAnswerField = normalizeOptionalFieldName(selection.firstAnswerField);
+    const derivation = buildQaGroupDerivation(firstQuestionField, firstAnswerField);
+    const availableFields = new Set(loadedFieldNames);
+
+    for (const field of [titleField, firstQuestionField, firstAnswerField]) {
+      if (field && !availableFields.has(field)) {
+        throw new PluginUserError("errors.noteFieldMapping.qaGroupSelectedFieldMissing", {
+          modelName,
+          field,
+        });
+      }
+    }
 
     return {
       cardType: "qa-group",
       modelName,
-      loadedFieldNames: [...fieldNames],
+      loadedFieldNames,
       titleField,
-      slots: detectedFields.slots,
-      warnings: detectedFields.warnings,
-      acceptedWarnings: detectedFields.warnings.length > 0 && areQaGroupWarningsAccepted(detectedFields.warnings, acceptedWarnings)
-        ? [...detectedFields.warnings]
-        : undefined,
+      slots: deriveQaGroupSlots(modelName, loadedFieldNames, titleField, firstQuestionField, firstAnswerField),
+      warnings: [],
+      acceptedWarnings: undefined,
+      derivation,
       loadedAt,
     };
   }
@@ -61,6 +104,8 @@ export class QaGroupFieldMappingService {
 
     const availableFields = new Set(fieldNames);
     const missingFields = new Set<string>();
+    const usedFields = new Set<string>([mapping.titleField]);
+
     if (!availableFields.has(mapping.titleField)) {
       missingFields.add(mapping.titleField);
     }
@@ -73,6 +118,15 @@ export class QaGroupFieldMappingService {
       if (!availableFields.has(slot.answerField)) {
         missingFields.add(slot.answerField);
       }
+
+      if (usedFields.has(slot.questionField) || usedFields.has(slot.answerField) || slot.questionField === slot.answerField) {
+        throw new PluginUserError("errors.noteFieldMapping.qaGroupDuplicateFields", {
+          modelName: mapping.modelName,
+        });
+      }
+
+      usedFields.add(slot.questionField);
+      usedFields.add(slot.answerField);
     }
 
     if (missingFields.size > 0) {
@@ -131,7 +185,7 @@ export function parseQaGroupFieldWarning(warning: string): QaGroupFieldWarningPa
   }
 }
 
-function detectSlots(fieldNames: string[], modelName: string): QaGroupDetectedFields {
+function detectSuggestedFirstPair(fieldNames: string[], modelName: string): { questionField: string; answerField: string } {
   const questionFieldByIndex = new Map<number, string>();
   const answerFieldByIndex = new Map<number, string>();
 
@@ -156,40 +210,18 @@ function detectSlots(fieldNames: string[], modelName: string): QaGroupDetectedFi
     });
   }
 
-  const slots: QaGroupSlotMapping[] = [];
-  const warnings: string[] = [];
-
-  for (const index of candidateIndices) {
-    const questionField = questionFieldByIndex.get(index);
-    const answerField = answerFieldByIndex.get(index);
-    if (!questionField || !answerField) {
-      warnings.push(serializeQaGroupFieldWarning({
-        kind: questionField ? "missing-answer" : "missing-question",
-        index,
-        questionField: questionField ?? preferredSlotFieldName("question", index),
-        answerField: answerField ?? preferredSlotFieldName("answer", index),
-      }));
-      continue;
-    }
-
-    if (index !== slots.length + 1) {
-      break;
-    }
-
-    slots.push({
-      index,
-      questionField,
-      answerField,
-    });
-  }
-
-  if (slots.length === 0) {
+  const firstQuestionField = questionFieldByIndex.get(1);
+  const firstAnswerField = answerFieldByIndex.get(1);
+  if (!firstQuestionField || !firstAnswerField) {
     throw new PluginUserError("errors.noteFieldMapping.qaGroupNoCompleteSlots", {
       modelName,
     });
   }
 
-  return { slots, warnings };
+  return {
+    questionField: firstQuestionField,
+    answerField: firstAnswerField,
+  };
 }
 
 function detectIndexedField(fieldName: string, patterns: readonly RegExp[]): number | undefined {
@@ -200,7 +232,7 @@ function detectIndexedField(fieldName: string, patterns: readonly RegExp[]): num
     }
 
     const index = Number.parseInt(match[1] ?? "", 10);
-    if (Number.isInteger(index) && index > 0) {
+    if (Number.isInteger(index) && index >= 1) {
       return index;
     }
   }
@@ -212,10 +244,107 @@ function findFieldName(fieldNames: string[], preferredNames: readonly string[]):
   return fieldNames.find((fieldName) => preferredNames.some((preferredName) => preferredName.toLowerCase() === fieldName.toLowerCase()));
 }
 
-function serializeQaGroupFieldWarning(warning: QaGroupFieldWarningPayload): string {
-  return JSON.stringify(warning);
+function deriveQaGroupSlots(
+  modelName: string,
+  fieldNames: string[],
+  titleField: string | undefined,
+  firstQuestionField: string | undefined,
+  firstAnswerField: string | undefined,
+): QaGroupSlotMapping[] {
+  if (!firstQuestionField || !firstAnswerField) {
+    return [];
+  }
+
+  const usedFields = new Set<string>();
+  if (titleField) {
+    usedFields.add(titleField);
+  }
+
+  if (usedFields.has(firstQuestionField) || usedFields.has(firstAnswerField) || firstQuestionField === firstAnswerField) {
+    throw new PluginUserError("errors.noteFieldMapping.qaGroupDuplicateFields", {
+      modelName,
+    });
+  }
+
+  const questionSegment = parseLastIndexedFieldSegment(firstQuestionField);
+  const answerSegment = parseLastIndexedFieldSegment(firstAnswerField);
+
+  if (!questionSegment || !answerSegment) {
+    return [{ index: 1, questionField: firstQuestionField, answerField: firstAnswerField }];
+  }
+
+  if (questionSegment.index !== answerSegment.index) {
+    throw new PluginUserError("errors.noteFieldMapping.qaGroupFirstPairNumberMismatch", {
+      modelName,
+      questionField: firstQuestionField,
+      answerField: firstAnswerField,
+    });
+  }
+
+  if (questionSegment.index !== 1) {
+    throw new PluginUserError("errors.noteFieldMapping.qaGroupFirstPairMustStartAtOne", {
+      modelName,
+      firstIndex: questionSegment.index,
+    });
+  }
+
+  const availableFields = new Set(fieldNames);
+  const slots: QaGroupSlotMapping[] = [];
+
+  for (let index = 1; ; index += 1) {
+    const questionField = index === 1 ? firstQuestionField : formatIndexedField(questionSegment, index);
+    const answerField = index === 1 ? firstAnswerField : formatIndexedField(answerSegment, index);
+
+    if (!availableFields.has(questionField) || !availableFields.has(answerField)) {
+      break;
+    }
+
+    if (usedFields.has(questionField) || usedFields.has(answerField) || questionField === answerField) {
+      throw new PluginUserError("errors.noteFieldMapping.qaGroupDuplicateFields", {
+        modelName,
+      });
+    }
+
+    usedFields.add(questionField);
+    usedFields.add(answerField);
+    slots.push({ index, questionField, answerField });
+  }
+
+  return slots;
 }
 
-function preferredSlotFieldName(kind: "question" | "answer", index: number): string {
-  return `${kind === "question" ? "问题" : "答案"}${String(index).padStart(2, "0")}`;
+function buildQaGroupDerivation(firstQuestionField: string | undefined, firstAnswerField: string | undefined): QaGroupFieldDerivation | undefined {
+  if (!firstQuestionField && !firstAnswerField) {
+    return undefined;
+  }
+
+  return {
+    mode: "first-pair",
+    firstQuestionField,
+    firstAnswerField,
+  };
+}
+
+function normalizeOptionalFieldName(value: string | undefined): string | undefined {
+  const trimmedValue = value?.trim();
+  return trimmedValue ? trimmedValue : undefined;
+}
+
+function parseLastIndexedFieldSegment(fieldName: string): IndexedFieldSegment | undefined {
+  const matches = [...fieldName.matchAll(/\d+/g)];
+  const lastMatch = matches[matches.length - 1];
+  if (!lastMatch || lastMatch.index === undefined) {
+    return undefined;
+  }
+
+  return {
+    prefix: fieldName.slice(0, lastMatch.index),
+    digits: lastMatch[0],
+    suffix: fieldName.slice(lastMatch.index + lastMatch[0].length),
+    index: Number.parseInt(lastMatch[0], 10),
+  };
+}
+
+function formatIndexedField(segment: IndexedFieldSegment, index: number): string {
+  return `${segment.prefix}${String(index).padStart(segment.digits.length, "0")}${segment.suffix}`;
 }

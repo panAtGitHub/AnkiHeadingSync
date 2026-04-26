@@ -430,11 +430,10 @@ class FakePlugin {
     }, {});
   }
 
-  async getNoteModelDetails(modelName: string): Promise<{ fieldNames: string[]; isCloze: boolean }> {
+  async getNoteModelDetails(modelName: string): Promise<{ fieldNames: string[] }> {
     this.getNoteModelDetailsCalls += 1;
     return {
       fieldNames: this.getFieldNamesForModel(modelName),
-      isCloze: modelName.includes("Cloze"),
     };
   }
 
@@ -840,11 +839,18 @@ describe("PluginSettingTab", () => {
 
     const qaGroupTitleField = queryByDataset(tab.containerEl, "qaGroupTitleField", "qa-group");
     expect(qaGroupTitleField.value).toBe("题目");
+    expect(queryByDataset(tab.containerEl, "qaGroupFirstQuestionField", "qa-group").value).toBe("问题01");
+    expect(queryByDataset(tab.containerEl, "qaGroupFirstAnswerField", "qa-group").value).toBe("答案01");
     qaGroupTitleField.value = "标题";
     await qaGroupTitleField.trigger("change");
-    expect(queryByDataset(tab.containerEl, "qaGroupSlotSummary", "qa-group").textContent).toBe("已识别 2 组");
+    expect(queryByDataset(tab.containerEl, "qaGroupSlotSummary", "qa-group").textContent).toBe("已配置2组");
     expect(plugin.settings.noteFieldMappings[createNoteFieldMappingKey("qa-group", plugin.settings.cardTypeConfigs["qa-group"].noteType)]).toEqual(expect.objectContaining({
       titleField: "标题",
+      derivation: {
+        mode: "first-pair",
+        firstQuestionField: "问题01",
+        firstAnswerField: "答案01",
+      },
       slots: [
         { index: 1, questionField: "问题01", answerField: "答案01" },
         { index: 2, questionField: "问题02", answerField: "答案02" },
@@ -1263,9 +1269,8 @@ describe("PluginSettingTab", () => {
     expect(plugin.getNoteModelDetailsCalls).toBe(0);
   });
 
-  it("shows qa-group warnings, saves acceptance, and resets acceptance after field refresh changes warnings", async () => {
+  it("extends saved qa-group slots after field refresh only when derivation metadata exists", async () => {
     const plugin = new FakePlugin();
-    plugin.fieldNamesByModelName[QA_GROUP_USER_MODEL_NAME] = ["题目", "问题01", "答案01", "问题02"];
     plugin.settings = normalizePluginSettings({
       ...plugin.settings,
       ankiNoteTypeCache: [QA_GROUP_USER_MODEL_NAME],
@@ -1282,31 +1287,51 @@ describe("PluginSettingTab", () => {
           noteType: QA_GROUP_USER_MODEL_NAME,
         },
       },
+      noteFieldMappings: {
+        ...plugin.settings.noteFieldMappings,
+        [createNoteFieldMappingKey("qa-group", QA_GROUP_USER_MODEL_NAME)]: {
+          cardType: "qa-group",
+          modelName: QA_GROUP_USER_MODEL_NAME,
+          loadedFieldNames: ["题目", "问题01", "答案01", "问题02"],
+          titleField: "题目",
+          derivation: {
+            mode: "first-pair",
+            firstQuestionField: "问题01",
+            firstAnswerField: "答案01",
+          },
+          slots: [
+            { index: 1, questionField: "问题01", answerField: "答案01" },
+          ],
+          warnings: [],
+          loadedAt: 1,
+        },
+      },
     });
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
     tab.display();
     await expandCard(tab, "card-types");
 
-    expect(queryByDataset(tab.containerEl, "qaGroupWarning", "qa-group").textContent).toContain("第 02 组缺少答案字段");
-    const acceptWarning = queryByDataset(tab.containerEl, "qaGroupWarningAccept", "qa-group");
-    acceptWarning.checked = true;
-    await acceptWarning.trigger("change");
-
     const mappingKey = createNoteFieldMappingKey("qa-group", QA_GROUP_USER_MODEL_NAME);
-    expect(plugin.settings.noteFieldMappings[mappingKey]).toEqual(expect.objectContaining({
-      acceptedWarnings: expect.any(Array),
-    }));
+    expect(queryByDataset(tab.containerEl, "qaGroupSlotSummary", "qa-group").textContent).toBe("已配置1组");
 
-    plugin.fieldNamesByModelName[QA_GROUP_USER_MODEL_NAME] = ["题目", "问题01", "答案01", "问题02", "答案02", "问题03"];
+    plugin.fieldNamesByModelName[QA_GROUP_USER_MODEL_NAME] = ["题目", "问题01", "答案01", "问题02", "答案02", "问题03", "答案03"];
     await queryByDataset(tab.containerEl, "cardTypesRefresh", "true").trigger("click");
     await flushPromises();
 
     expect(plugin.settings.noteFieldMappings[mappingKey]).toEqual(expect.objectContaining({
-      warnings: expect.any(Array),
-      acceptedWarnings: expect.any(Array),
+      derivation: {
+        mode: "first-pair",
+        firstQuestionField: "问题01",
+        firstAnswerField: "答案01",
+      },
+      slots: [
+        { index: 1, questionField: "问题01", answerField: "答案01" },
+        { index: 2, questionField: "问题02", answerField: "答案02" },
+        { index: 3, questionField: "问题03", answerField: "答案03" },
+      ],
     }));
-    expect(queryByDataset(tab.containerEl, "qaGroupWarning", "qa-group").textContent).toContain("第 02 组缺少答案字段");
+    expect(queryByDataset(tab.containerEl, "qaGroupSlotSummary", "qa-group").textContent).toBe("已配置3组");
   });
 
   it("keeps the saved qa-group title field and slots when reading Anki fields again", async () => {
@@ -1359,7 +1384,9 @@ describe("PluginSettingTab", () => {
       loadedFieldNames: ["题目", "问题01", "答案01", "Titre", "QPerso", "APerso"],
     }));
     expect(queryByDataset(tab.containerEl, "qaGroupTitleField", "qa-group").value).toBe("Titre");
-    expect(queryByDataset(tab.containerEl, "qaGroupSlotSummary", "qa-group").textContent).toBe("已识别 1 组");
+    expect(queryByDataset(tab.containerEl, "qaGroupFirstQuestionField", "qa-group").value).toBe("QPerso");
+    expect(queryByDataset(tab.containerEl, "qaGroupFirstAnswerField", "qa-group").value).toBe("APerso");
+    expect(queryByDataset(tab.containerEl, "qaGroupSlotSummary", "qa-group").textContent).toBe("已配置1组");
   });
 
   it("renders the scope card with renamed copy and aligned folder tree rows", async () => {

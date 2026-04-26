@@ -486,6 +486,11 @@ describe("PluginSettings", () => {
       modelName: "Custom QA Group",
       loadedFieldNames: ["题目", "问题01", "答案01", "问题02", "答案02"],
       titleField: "题目",
+      derivation: {
+        mode: "first-pair",
+        firstQuestionField: "问题01",
+        firstAnswerField: "答案01",
+      },
       slots: [
         { index: 1, questionField: "问题01", answerField: "答案01" },
         { index: 2, questionField: "问题02", answerField: "答案02" },
@@ -513,6 +518,28 @@ describe("PluginSettings", () => {
         },
       });
     }, "errors.settings.noteFieldMappingsQaGroupSlotIndex");
+  });
+
+  it("rejects invalid qa-group derivation metadata in note field mappings", () => {
+    expectPluginUserError(() => {
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        noteFieldMappings: {
+          "qa-group:Custom QA Group": {
+            cardType: "qa-group",
+            modelName: "Custom QA Group",
+            loadedFieldNames: ["题目", "问题01", "答案01"],
+            titleField: "题目",
+            slots: [{ index: 1, questionField: "问题01", answerField: "答案01" }],
+            warnings: [],
+            derivation: {
+              mode: "invalid",
+            },
+            loadedAt: 1,
+          } as never,
+        },
+      });
+    }, "errors.settings.noteFieldMappingsQaGroupDerivationMode");
   });
 
   it("rejects invalid module 5 enum values", () => {

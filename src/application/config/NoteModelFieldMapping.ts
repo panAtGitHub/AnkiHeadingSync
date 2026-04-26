@@ -26,12 +26,19 @@ export interface QaGroupSlotMapping {
   answerField: string;
 }
 
+export interface QaGroupFieldDerivation {
+  mode: "first-pair";
+  firstQuestionField?: string;
+  firstAnswerField?: string;
+}
+
 export interface QaGroupFieldMapping extends BaseNoteModelFieldMapping {
   cardType: "qa-group";
   titleField?: string;
   slots: QaGroupSlotMapping[];
   warnings: string[];
   acceptedWarnings?: string[];
+  derivation?: QaGroupFieldDerivation;
 }
 
 export type NoteModelFieldMapping = BasicLikeNoteModelFieldMapping | ClozeNoteModelFieldMapping | QaGroupFieldMapping;

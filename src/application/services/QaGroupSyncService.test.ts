@@ -48,7 +48,6 @@ describe("QaGroupSyncService", () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     ankiGateway.modelDetailsByName[QA_GROUP_USER_NOTE_TYPE] = {
       fieldNames: ["题目", "标题", "问题01", "答案01", "问题02", "答案02", "问题03", "答案03"],
-      isCloze: false,
     };
     const baseSettings = createModule3Settings();
     const service = new QaGroupSyncService(ankiGateway);
@@ -80,7 +79,6 @@ describe("QaGroupSyncService", () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     ankiGateway.modelDetailsByName[QA_GROUP_USER_NOTE_TYPE] = {
       fieldNames: ["题目", "问题01", "答案01", "Titre", "QPerso", "APerso"],
-      isCloze: false,
     };
     const service = new QaGroupSyncService(ankiGateway);
     const baseSettings = createModule3Settings();
@@ -120,7 +118,6 @@ describe("QaGroupSyncService", () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     ankiGateway.modelDetailsByName[QA_GROUP_USER_NOTE_TYPE] = {
       fieldNames: ["Titre", "QuestionLibre", "ReponseLibre"],
-      isCloze: false,
     };
     const service = new QaGroupSyncService(ankiGateway);
     const baseSettings = createModule3Settings();
@@ -578,7 +575,6 @@ describe("QaGroupSyncService", () => {
         "问题05", "答案05",
         "问题06", "答案06",
       ],
-      isCloze: false,
     };
     ankiGateway.noteDetailsById.set(42, {
       noteId: 42,
@@ -711,7 +707,6 @@ describe("QaGroupSyncService", () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     ankiGateway.modelDetailsByName[QA_GROUP_USER_NOTE_TYPE] = {
       fieldNames: ["题目", "问题01"],
-      isCloze: false,
     };
     const service = new QaGroupSyncService(ankiGateway);
     const baseSettings = createModule3Settings();
@@ -743,7 +738,6 @@ describe("QaGroupSyncService", () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     ankiGateway.modelDetailsByName[QA_GROUP_USER_NOTE_TYPE] = {
       fieldNames: ["题目", "问题01", "答案01", "问题02"],
-      isCloze: false,
     };
     const service = new QaGroupSyncService(ankiGateway);
     const baseSettings = createModule3Settings();

@@ -46,7 +46,6 @@ describe("NoteFieldMappingService", () => {
       card,
       {
         fieldNames: ["Title", "Body"],
-        isCloze: false,
       },
       {
         [createNoteFieldMappingKey("basic", "Basic")]: {
@@ -76,7 +75,6 @@ describe("NoteFieldMappingService", () => {
       }),
       {
         fieldNames: ["Text", "Extra"],
-        isCloze: false,
       },
       {
         [createNoteFieldMappingKey("cloze", "Cloze")]: {
@@ -89,7 +87,7 @@ describe("NoteFieldMappingService", () => {
       },
     );
 
-    expect(fields).toEqual({ Text: "Context<br><br>{{c1::answer}}" });
+    expect(fields).toEqual({ Text: "Context<br><hr>{{c1::answer}}" });
   });
 
   it("throws when a cloze main field is missing from the saved mapping", () => {
@@ -101,7 +99,7 @@ describe("NoteFieldMappingService", () => {
           type: "cloze",
           noteModel: "Cloze",
         }),
-        { fieldNames: ["Text", "Extra"], isCloze: false },
+        { fieldNames: ["Text", "Extra"] },
         {
           [createNoteFieldMappingKey("cloze", "Cloze")]: {
             cardType: "cloze",
@@ -118,7 +116,7 @@ describe("NoteFieldMappingService", () => {
     expect(error.userMessage.params).toEqual({ modelName: "Cloze" });
   });
 
-  it("throws when a cloze main field is stale even if isCloze is false", () => {
+  it("throws when a cloze main field is stale based on saved field existence only", () => {
     const service = new NoteFieldMappingService();
 
     const error = expectPluginUserError(() =>
@@ -127,7 +125,7 @@ describe("NoteFieldMappingService", () => {
           type: "cloze",
           noteModel: "Cloze",
         }),
-        { fieldNames: ["Body", "Extra"], isCloze: false },
+        { fieldNames: ["Body", "Extra"] },
         {
           [createNoteFieldMappingKey("cloze", "Cloze")]: {
             cardType: "cloze",
@@ -151,7 +149,7 @@ describe("NoteFieldMappingService", () => {
     const service = new NoteFieldMappingService();
 
     const error = expectPluginUserError(() =>
-      service.map(createCard({}), { fieldNames: ["Front", "Back"], isCloze: false }, {}),
+      service.map(createCard({}), { fieldNames: ["Front", "Back"] }, {}),
     );
 
     expect(error.userMessage.key).toBe("errors.noteFieldMapping.missingSavedMapping.basic");
@@ -164,7 +162,7 @@ describe("NoteFieldMappingService", () => {
     const error = expectPluginUserError(() =>
       service.map(
         createCard({}),
-        { fieldNames: ["Front", "Body"], isCloze: false },
+        { fieldNames: ["Front", "Body"] },
         {
           [createNoteFieldMappingKey("basic", "Basic")]: {
             cardType: "basic",
@@ -191,7 +189,7 @@ describe("NoteFieldMappingService", () => {
     const error = expectPluginUserError(() =>
       service.map(
         createCard({}),
-        { fieldNames: ["Front", "Back"], isCloze: false },
+        { fieldNames: ["Front", "Back"] },
         {
           [createNoteFieldMappingKey("basic", "Basic")]: {
             cardType: "basic",

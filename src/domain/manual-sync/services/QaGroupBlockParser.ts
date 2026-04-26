@@ -70,14 +70,14 @@ export class QaGroupBlockParser {
         continue;
       }
 
-      const firstSecondLevelItem = findFirstSecondLevelItem(childRegion.rawLines, item.indent.length);
-      if (!firstSecondLevelItem) {
+      const answerMarkdown = renderChildAnswerMarkdown(childRegion.rawLines);
+      if (!answerMarkdown) {
         continue;
       }
 
       items.push({
         title: item.labelMarkdown,
-        answer: firstSecondLevelItem.labelMarkdown,
+        answer: answerMarkdown,
         ordinalInMarkdown: index + 1,
       });
     }
@@ -193,45 +193,33 @@ function collectChildRegion(
   };
 }
 
-function findFirstSecondLevelItem(lines: string[], parentIndentLength: number): ListItemMatch | null {
-  const candidates: ListItemMatch[] = [];
-  let fenceMarker: string | null = null;
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    const trimmed = line.trim();
-    if (isFenceLine(trimmed)) {
-      fenceMarker = fenceMarker ? null : trimmed.slice(0, 3);
-      continue;
-    }
-
-    if (fenceMarker) {
-      continue;
-    }
-
-    const match = line.match(LIST_ITEM_REGEXP);
-    if (!match) {
-      continue;
-    }
-
-    const indent = match[1];
-    if (indent.length <= parentIndentLength) {
-      continue;
-    }
-
-    candidates.push({
-      index,
-      indent,
-      labelMarkdown: match[2].trimEnd(),
-    });
+function renderChildAnswerMarkdown(lines: string[]): string {
+  const trimmedLines = trimBlankEdges(lines);
+  if (trimmedLines.length === 0) {
+    return "";
   }
 
-  if (candidates.length === 0) {
-    return null;
+  const dedentedLines = dedentLines(trimmedLines);
+  const rootItems = collectRootListItems(dedentedLines);
+  if (rootItems.length === 1 && rootItems[0]?.index === 0) {
+    return unwrapSingleRootListItem(dedentedLines, rootItems[0]);
   }
 
-  const directIndentLength = Math.min(...candidates.map((candidate) => candidate.indent.length));
-  return candidates.find((candidate) => candidate.indent.length === directIndentLength) ?? null;
+  return dedentedLines.join("\n").trimEnd();
+}
+
+function unwrapSingleRootListItem(lines: string[], rootItem: ListItemMatch): string {
+  const childRegion = collectChildRegion(lines, rootItem.index + 1, lines.length, rootItem.indent.length);
+  if (!childRegion) {
+    return rootItem.labelMarkdown;
+  }
+
+  const childLines = trimBlankEdges(childRegion.rawLines);
+  if (childLines.length === 0) {
+    return rootItem.labelMarkdown;
+  }
+
+  return [rootItem.labelMarkdown, ...dedentLines(childLines)].join("\n").trimEnd();
 }
 
 function trimBlankEdges(lines: string[]): string[] {
@@ -247,6 +235,15 @@ function trimBlankEdges(lines: string[]): string[] {
   }
 
   return lines.slice(startIndex, endIndex);
+}
+
+function dedentLines(lines: string[]): string[] {
+  const indentLengths = lines
+    .filter((line) => line.trim().length > 0)
+    .map((line) => leadingWhitespace(line).length);
+
+  const commonIndent = indentLengths.length > 0 ? Math.min(...indentLengths) : 0;
+  return lines.map((line) => line.slice(Math.min(commonIndent, line.length)));
 }
 
 function leadingWhitespace(line: string): string {

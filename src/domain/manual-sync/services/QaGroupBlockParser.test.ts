@@ -95,4 +95,81 @@ describe("QaGroupBlockParser", () => {
     expect(firstParse.rawBlockText).toContain("Remarks");
     expect(secondParse.rawBlockHash).toBe(firstParse.rawBlockHash);
   });
+
+  it("keeps a simple single nested bullet answer compatible", () => {
+    const parser = new QaGroupBlockParser();
+
+    const block = parser.parse({
+      parentHeadingText: "Concepts #anki-list",
+      marker: "#anki-list",
+      bodyStartLine: 2,
+      bodyLines: [
+        "- Alpha",
+        "  - First answer",
+      ],
+    });
+
+    expect(block.items).toEqual([
+      { title: "Alpha", answer: "First answer", ordinalInMarkdown: 1 },
+    ]);
+  });
+
+  it("preserves multiline child blocks, nested lists, and fences inside the answer", () => {
+    const parser = new QaGroupBlockParser();
+
+    const block = parser.parse({
+      parentHeadingText: "Concepts #anki-list",
+      marker: "#anki-list",
+      bodyStartLine: 2,
+      bodyLines: [
+        "- Alpha",
+        "  First line",
+        "  Second line",
+        "  - detail one",
+        "  - detail two",
+        "  ```ts",
+        "  const value = 1;",
+        "  ```",
+      ],
+    });
+
+    expect(block.items).toEqual([
+      {
+        title: "Alpha",
+        answer: [
+          "First line",
+          "Second line",
+          "- detail one",
+          "- detail two",
+          "```ts",
+          "const value = 1;",
+          "```",
+        ].join("\n"),
+        ordinalInMarkdown: 1,
+      },
+    ]);
+  });
+
+  it("keeps multiple direct child bullets as a markdown list answer", () => {
+    const parser = new QaGroupBlockParser();
+
+    const block = parser.parse({
+      parentHeadingText: "Concepts #anki-list",
+      marker: "#anki-list",
+      bodyStartLine: 2,
+      bodyLines: [
+        "- Alpha",
+        "  - First answer",
+        "  - Follow-up answer",
+      ],
+    });
+
+    expect(block.items).toEqual([
+      {
+        title: "Alpha",
+        answer: "- First answer\n- Follow-up answer",
+        ordinalInMarkdown: 1,
+      },
+    ]);
+  });
 });
