@@ -125,8 +125,7 @@ export function normalizeObsidianBacklinkLabel(value: string | null | undefined)
 export function normalizePluginSettings(settings: PluginSettings): PluginSettings {
   const cardTypeConfigs = mergeCardTypeConfigs(settings.cardTypeConfigs, settings);
   const legacySettings = deriveLegacySettings(cardTypeConfigs);
-
-  return {
+  const normalizedSettings = {
     ...settings,
     ...legacySettings,
     cardTypeConfigs,
@@ -134,6 +133,11 @@ export function normalizePluginSettings(settings: PluginSettings): PluginSetting
     ankiNoteTypeCache: normalizeAnkiNoteTypeCache(settings.ankiNoteTypeCache),
     ankiModelFieldCache: normalizeAnkiModelFieldCache(settings.ankiModelFieldCache),
     obsidianBacklinkLabel: normalizeObsidianBacklinkLabel(settings.obsidianBacklinkLabel),
+  };
+
+  return {
+    ...normalizedSettings,
+    noteFieldMappings: hydrateMissingNoteFieldMappingsFromCache(normalizedSettings),
   };
 }
 
@@ -566,6 +570,61 @@ function normalizeNoteFieldMappings(value: unknown): Record<string, NoteModelFie
   }
 
   return normalizedMappings;
+}
+
+function hydrateMissingNoteFieldMappingsFromCache(settings: PluginSettings): Record<string, NoteModelFieldMapping> {
+  const hydratedMappings = { ...settings.noteFieldMappings };
+
+  for (const configId of CARD_TYPE_CONFIG_IDS) {
+    if (configId === "qa-group") {
+      continue;
+    }
+
+    const config = settings.cardTypeConfigs[configId];
+    if (!config.enabled) {
+      continue;
+    }
+
+    const modelName = config.noteType.trim();
+    if (modelName.length === 0) {
+      continue;
+    }
+
+    const cardType = configId === "cloze" ? "cloze" : configId === "semantic-qa" ? "semantic-qa" : "basic";
+    const mappingKey = createNoteFieldMappingKey(cardType, modelName);
+    if (hydratedMappings[mappingKey]) {
+      continue;
+    }
+
+    const cacheEntry = settings.ankiModelFieldCache[modelName];
+    if (!cacheEntry || cacheEntry.fieldNames.length === 0) {
+      continue;
+    }
+
+    const fieldNames = [...cacheEntry.fieldNames];
+    hydratedMappings[mappingKey] = cardType === "cloze"
+      ? {
+          cardType,
+          modelName,
+          loadedFieldNames: fieldNames,
+          mainField: findPreferredFieldName(fieldNames, ["Text", "Body", "Content"]) ?? fieldNames[0],
+          loadedAt: cacheEntry.loadedAt,
+        }
+      : {
+          cardType,
+          modelName,
+          loadedFieldNames: fieldNames,
+          titleField: findPreferredFieldName(fieldNames, ["Front", "Title"]) ?? fieldNames[0],
+          bodyField: findPreferredFieldName(fieldNames, ["Back", "Body", "Answer"]) ?? fieldNames.find((fieldName) => fieldName !== (findPreferredFieldName(fieldNames, ["Front", "Title"]) ?? fieldNames[0])),
+          loadedAt: cacheEntry.loadedAt,
+        };
+  }
+
+  return hydratedMappings;
+}
+
+function findPreferredFieldName(fieldNames: string[], preferredNames: string[]): string | undefined {
+  return fieldNames.find((fieldName) => preferredNames.some((preferredName) => preferredName.toLowerCase() === fieldName.toLowerCase()));
 }
 
 function normalizeQaGroupFieldMapping(

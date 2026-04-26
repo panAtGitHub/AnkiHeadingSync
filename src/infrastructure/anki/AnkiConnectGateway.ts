@@ -217,19 +217,9 @@ export class AnkiConnectGateway implements AnkiGroupGateway {
   }
 
   async getModelDetails(modelName: string): Promise<NoteModelDetails> {
-    const fieldNames = await this.getModelFieldNames(modelName);
-    let isCloze = modelName.toLowerCase().includes("cloze");
-
-    try {
-      const templates = await this.getModelTemplates(modelName);
-      isCloze = isCloze || Object.keys(templates).some((templateName) => templateName.toLowerCase().includes("cloze"));
-    } catch {
-      isCloze = isCloze || fieldNames.some((fieldName) => fieldName.toLowerCase() === "text");
-    }
-
     return {
-      fieldNames,
-      isCloze,
+      fieldNames: await this.getModelFieldNames(modelName),
+      isCloze: false,
     };
   }
 

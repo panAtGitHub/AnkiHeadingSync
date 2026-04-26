@@ -428,6 +428,7 @@ export const en = {
         basic: "No saved field mapping found for basic note type \"{{modelName}}\". Open plugin settings and read fields from Anki first.",
         cloze: "No saved field mapping found for cloze note type \"{{modelName}}\". Open plugin settings and read fields from Anki first.",
         semanticQa: "No saved field mapping found for semantic QA note type \"{{modelName}}\". Open plugin settings and read fields from Anki first.",
+        qaGroup: "No saved field mapping found for QA Group note type \"{{modelName}}\". Open plugin settings, read fields from Anki, and save the mapping first.",
       },
       incompleteSavedMapping: {
         basic: "Saved field mapping for basic note type \"{{modelName}}\" is incomplete. Open plugin settings and save both title and body fields.",
@@ -440,11 +441,11 @@ export const en = {
       },
       stale: "Saved field mapping for note type \"{{modelName}}\" is stale because these fields no longer exist in Anki: {{fields}}. Open plugin settings and read fields from Anki again.",
       clozeIncompatible: "Cloze note type \"{{modelName}}\" is not cloze-compatible in Anki.",
-      qaGroupMissingTitle: "QA Group note type \"{{modelName}}\" does not expose a recognizable title field. Use one of 题目, 标题, 正面, Stem, or Title.",
-      qaGroupNoCompleteSlots: "QA Group note type \"{{modelName}}\" does not expose any complete question/answer slot pairs.",
+      qaGroupMissingTitle: "Saved field mapping for QA Group note type \"{{modelName}}\" is incomplete because the title field is missing. Save the mapping again in settings.",
+      qaGroupNoCompleteSlots: "Saved field mapping for QA Group note type \"{{modelName}}\" is incomplete because it has no saved question/answer slot pairs. Save the mapping again in settings.",
       qaGroupNonContinuousSlots: "QA Group note type \"{{modelName}}\" must start its question/answer slots at pair {{firstIndex}} = 1. Renumber the first pair to 1.",
       qaGroupWarningsUnaccepted: "QA Group note type \"{{modelName}}\" still has unconfirmed field warnings. Confirm them in settings before syncing.",
-      qaGroupSlotCapacityExceeded: "QA Group note type \"{{modelName}}\" only exposes {{capacity}} question/answer pair(s), but the current block has {{itemCount}} item(s): {{filePath}}:{{blockStartLine}}.",
+      qaGroupSlotCapacityExceeded: "Saved field mapping for QA Group note type \"{{modelName}}\" only includes {{capacity}} question/answer pair(s), but the current block has {{itemCount}} item(s): {{filePath}}:{{blockStartLine}}.",
     },
     noteTypeMigration: {
       failed: "Failed to migrate Anki note {{noteId}} from \"{{fromModel}}\" to \"{{toModel}}\"{{location}}: {{reason}}",

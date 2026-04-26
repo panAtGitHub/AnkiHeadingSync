@@ -125,29 +125,20 @@ describe("AnkiConnectGateway", () => {
     });
   });
 
-  it("loads model fields and detects cloze templates", async () => {
-    requestUrlMock
-      .mockResolvedValueOnce({
-        json: {
-          error: null,
-          result: ["Text", "Extra"],
-        },
-      })
-      .mockResolvedValueOnce({
-        json: {
-          error: null,
-          result: {
-            "Cloze Card": {},
-          },
-        },
-      });
+  it("loads model fields without inferring cloze compatibility from names", async () => {
+    requestUrlMock.mockResolvedValueOnce({
+      json: {
+        error: null,
+        result: ["Text", "Extra"],
+      },
+    });
 
     const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
     const details = await gateway.getModelDetails("My Cloze");
 
     expect(details).toEqual({
       fieldNames: ["Text", "Extra"],
-      isCloze: true,
+      isCloze: false,
     });
   });
 

@@ -76,6 +76,85 @@ describe("QaGroupSyncService", () => {
     expect(ankiGateway.addedNotes[0]?.fields).not.toHaveProperty("题目");
   });
 
+  it("uses the saved QA Group slots as sync authority instead of re-detecting field names", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    ankiGateway.modelDetailsByName[QA_GROUP_USER_NOTE_TYPE] = {
+      fieldNames: ["题目", "问题01", "答案01", "Titre", "QPerso", "APerso"],
+      isCloze: false,
+    };
+    const service = new QaGroupSyncService(ankiGateway);
+    const baseSettings = createModule3Settings();
+
+    await service.sync([
+      createIndexedGroupBlock({
+        items: [{ title: "Alpha", answer: "First answer", ordinalInMarkdown: 1 }],
+      }),
+    ], createEmptyPluginState(), {
+      ...baseSettings,
+      noteFieldMappings: {
+        ...baseSettings.noteFieldMappings,
+        [`qa-group:${QA_GROUP_USER_NOTE_TYPE}`]: {
+          cardType: "qa-group",
+          modelName: QA_GROUP_USER_NOTE_TYPE,
+          loadedFieldNames: ["题目", "问题01", "答案01", "Titre", "QPerso", "APerso"],
+          titleField: "Titre",
+          slots: [
+            { index: 1, questionField: "QPerso", answerField: "APerso" },
+          ],
+          warnings: [],
+          loadedAt: 1,
+        },
+      },
+    });
+
+    expect(ankiGateway.addedNotes[0]?.fields).toMatchObject({
+      Titre: "Concepts",
+      QPerso: "Alpha",
+    });
+    expect(ankiGateway.addedNotes[0]?.fields.APerso).toContain("First answer");
+    expect(ankiGateway.addedNotes[0]?.fields).not.toHaveProperty("题目");
+    expect(ankiGateway.addedNotes[0]?.fields).not.toHaveProperty("问题01", "Alpha");
+  });
+
+  it("syncs QA Group notes with saved arbitrary field names when the fields still exist", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    ankiGateway.modelDetailsByName[QA_GROUP_USER_NOTE_TYPE] = {
+      fieldNames: ["Titre", "QuestionLibre", "ReponseLibre"],
+      isCloze: false,
+    };
+    const service = new QaGroupSyncService(ankiGateway);
+    const baseSettings = createModule3Settings();
+
+    const result = await service.sync([
+      createIndexedGroupBlock({
+        items: [{ title: "Alpha", answer: "Premiere reponse", ordinalInMarkdown: 1 }],
+      }),
+    ], createEmptyPluginState(), {
+      ...baseSettings,
+      noteFieldMappings: {
+        ...baseSettings.noteFieldMappings,
+        [`qa-group:${QA_GROUP_USER_NOTE_TYPE}`]: {
+          cardType: "qa-group",
+          modelName: QA_GROUP_USER_NOTE_TYPE,
+          loadedFieldNames: ["Titre", "QuestionLibre", "ReponseLibre"],
+          titleField: "Titre",
+          slots: [
+            { index: 1, questionField: "QuestionLibre", answerField: "ReponseLibre" },
+          ],
+          warnings: [],
+          loadedAt: 1,
+        },
+      },
+    });
+
+    expect(result.created).toBe(1);
+    expect(ankiGateway.addedNotes[0]?.fields).toMatchObject({
+      Titre: "Concepts",
+      QuestionLibre: "Alpha",
+    });
+    expect(ankiGateway.addedNotes[0]?.fields.ReponseLibre).toContain("Premiere reponse");
+  });
+
   it("renders QA Group stem, questions, and answers as inline Markdown HTML", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     const vaultGateway = new FakeManualSyncVaultGateway();
@@ -628,10 +707,10 @@ describe("QaGroupSyncService", () => {
     });
   });
 
-  it("blocks sync when the selected QA Group template still has unconfirmed field warnings", async () => {
+  it("fails clearly when a saved QA Group field mapping points to fields that no longer exist", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     ankiGateway.modelDetailsByName[QA_GROUP_USER_NOTE_TYPE] = {
-      fieldNames: ["题目", "问题01", "答案01", "问题02"],
+      fieldNames: ["题目", "问题01"],
       isCloze: false,
     };
     const service = new QaGroupSyncService(ankiGateway);
@@ -646,6 +725,40 @@ describe("QaGroupSyncService", () => {
         [`qa-group:${QA_GROUP_USER_NOTE_TYPE}`]: {
           cardType: "qa-group",
           modelName: QA_GROUP_USER_NOTE_TYPE,
+          loadedFieldNames: ["题目", "问题01", "答案01"],
+          titleField: "题目",
+          slots: [{ index: 1, questionField: "问题01", answerField: "答案01" }],
+          warnings: [],
+          loadedAt: 1,
+        },
+      },
+    })).rejects.toMatchObject({
+      userMessage: {
+        key: "errors.noteFieldMapping.stale",
+      },
+    });
+  });
+
+  it("does not block sync when a saved QA Group mapping still carries unconfirmed auto-detection warnings", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    ankiGateway.modelDetailsByName[QA_GROUP_USER_NOTE_TYPE] = {
+      fieldNames: ["题目", "问题01", "答案01", "问题02"],
+      isCloze: false,
+    };
+    const service = new QaGroupSyncService(ankiGateway);
+    const baseSettings = createModule3Settings();
+
+    const result = await service.sync([
+      createIndexedGroupBlock({
+        items: [{ title: "Alpha", answer: "First answer", ordinalInMarkdown: 1 }],
+      }),
+    ], createEmptyPluginState(), {
+      ...baseSettings,
+      noteFieldMappings: {
+        ...baseSettings.noteFieldMappings,
+        [`qa-group:${QA_GROUP_USER_NOTE_TYPE}`]: {
+          cardType: "qa-group",
+          modelName: QA_GROUP_USER_NOTE_TYPE,
           loadedFieldNames: ["题目", "问题01", "答案01", "问题02"],
           titleField: "题目",
           slots: [{ index: 1, questionField: "问题01", answerField: "答案01" }],
@@ -653,9 +766,30 @@ describe("QaGroupSyncService", () => {
           loadedAt: 1,
         },
       },
+    });
+
+    expect(result.created).toBe(1);
+    expect(ankiGateway.addedNotes[0]?.fields).toMatchObject({
+      题目: "Concepts",
+      问题01: "Alpha",
+    });
+  });
+
+  it("fails clearly when QA Group sync starts without a saved field mapping", async () => {
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    const service = new QaGroupSyncService(ankiGateway);
+    const baseSettings = createModule3Settings();
+    const nextMappings = { ...baseSettings.noteFieldMappings };
+    delete nextMappings[`qa-group:${QA_GROUP_USER_NOTE_TYPE}`];
+
+    await expect(service.sync([
+      createIndexedGroupBlock(),
+    ], createEmptyPluginState(), {
+      ...baseSettings,
+      noteFieldMappings: nextMappings,
     })).rejects.toMatchObject({
       userMessage: {
-        key: "errors.noteFieldMapping.qaGroupWarningsUnaccepted",
+        key: "errors.noteFieldMapping.missingSavedMapping.qaGroup",
       },
     });
   });

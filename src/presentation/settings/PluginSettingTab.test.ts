@@ -1255,6 +1255,11 @@ describe("PluginSettingTab", () => {
     const basicAnswerFieldSelect = queryByDataset(tab.containerEl, "cardTypeAnswerField", "basic");
     expect(collectOptionValues(basicQuestionFieldSelect)).toEqual(["", "Front", "Back", "Extra"]);
     expect(collectOptionValues(basicAnswerFieldSelect)).toEqual(["", "Front", "Back", "Extra"]);
+    expect(plugin.settings.noteFieldMappings[createNoteFieldMappingKey("basic", "Basic")]).toEqual(expect.objectContaining({
+      titleField: "Front",
+      bodyField: "Back",
+      loadedFieldNames: ["Front", "Back", "Extra"],
+    }));
     expect(plugin.getNoteModelDetailsCalls).toBe(0);
   });
 
@@ -1299,9 +1304,62 @@ describe("PluginSettingTab", () => {
 
     expect(plugin.settings.noteFieldMappings[mappingKey]).toEqual(expect.objectContaining({
       warnings: expect.any(Array),
-      acceptedWarnings: undefined,
+      acceptedWarnings: expect.any(Array),
     }));
-    expect(queryByDataset(tab.containerEl, "qaGroupWarning", "qa-group").textContent).toContain("第 03 组缺少答案字段");
+    expect(queryByDataset(tab.containerEl, "qaGroupWarning", "qa-group").textContent).toContain("第 02 组缺少答案字段");
+  });
+
+  it("keeps the saved qa-group title field and slots when reading Anki fields again", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      ankiNoteTypeCache: [QA_GROUP_USER_MODEL_NAME],
+      ankiModelFieldCache: {
+        [QA_GROUP_USER_MODEL_NAME]: {
+          fieldNames: ["题目", "问题01", "答案01", "Titre", "QPerso", "APerso"],
+          loadedAt: 100,
+        },
+      },
+      cardTypeConfigs: {
+        ...plugin.settings.cardTypeConfigs,
+        "qa-group": {
+          ...plugin.settings.cardTypeConfigs["qa-group"],
+          noteType: QA_GROUP_USER_MODEL_NAME,
+        },
+      },
+      noteFieldMappings: {
+        ...plugin.settings.noteFieldMappings,
+        [createNoteFieldMappingKey("qa-group", QA_GROUP_USER_MODEL_NAME)]: {
+          cardType: "qa-group",
+          modelName: QA_GROUP_USER_MODEL_NAME,
+          loadedFieldNames: ["Titre", "QPerso", "APerso"],
+          titleField: "Titre",
+          slots: [
+            { index: 1, questionField: "QPerso", answerField: "APerso" },
+          ],
+          warnings: [],
+          loadedAt: 1,
+        },
+      },
+    });
+    plugin.fieldNamesByModelName[QA_GROUP_USER_MODEL_NAME] = ["题目", "问题01", "答案01", "Titre", "QPerso", "APerso"];
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await expandCard(tab, "card-types");
+    await queryByDataset(tab.containerEl, "cardTypesRefresh", "true").trigger("click");
+    await flushPromises();
+
+    const mappingKey = createNoteFieldMappingKey("qa-group", QA_GROUP_USER_MODEL_NAME);
+    expect(plugin.settings.noteFieldMappings[mappingKey]).toEqual(expect.objectContaining({
+      titleField: "Titre",
+      slots: [
+        { index: 1, questionField: "QPerso", answerField: "APerso" },
+      ],
+      loadedFieldNames: ["题目", "问题01", "答案01", "Titre", "QPerso", "APerso"],
+    }));
+    expect(queryByDataset(tab.containerEl, "qaGroupTitleField", "qa-group").value).toBe("Titre");
+    expect(queryByDataset(tab.containerEl, "qaGroupSlotSummary", "qa-group").textContent).toBe("已识别 1 组");
   });
 
   it("renders the scope card with renamed copy and aligned folder tree rows", async () => {

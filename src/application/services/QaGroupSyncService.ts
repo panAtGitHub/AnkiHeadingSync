@@ -482,16 +482,23 @@ export class QaGroupSyncService {
     }
 
     const storedMapping = settings.noteFieldMappings[createNoteFieldMappingKey("qa-group", modelName)];
+    if (!isQaGroupFieldMapping(storedMapping)) {
+      throw new PluginUserError("errors.noteFieldMapping.missingSavedMapping.qaGroup", {
+        modelName,
+      });
+    }
+
     const fieldNames = await this.ankiGateway.getModelFieldNames(modelName);
-    const mapping = this.qaGroupFieldMappingService.suggest(
+    const mapping: QaGroupFieldMapping = {
+      ...storedMapping,
       modelName,
-      fieldNames,
-      this.now(),
-      isQaGroupFieldMapping(storedMapping) ? storedMapping.acceptedWarnings : undefined,
-      isQaGroupFieldMapping(storedMapping) ? storedMapping.titleField : undefined,
-    );
+      loadedFieldNames: [...fieldNames],
+      slots: storedMapping.slots.map((slot) => ({ ...slot })),
+      warnings: [...storedMapping.warnings],
+      acceptedWarnings: storedMapping.acceptedWarnings ? [...storedMapping.acceptedWarnings] : undefined,
+      loadedAt: this.now(),
+    };
     this.qaGroupFieldMappingService.validateMapping(mapping, fieldNames);
-    this.qaGroupFieldMappingService.validateWarningsAccepted(mapping);
 
     return {
       modelName,

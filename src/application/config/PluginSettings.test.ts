@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { PluginUserError } from "@/application/errors/PluginUserError";
+import { createNoteFieldMappingKey } from "@/application/config/NoteModelFieldMapping";
 
 import {
   DEFAULT_OBSIDIAN_BACKLINK_LABEL,
@@ -172,6 +173,43 @@ describe("PluginSettings", () => {
         loadedAt: 0,
       },
     });
+  });
+
+  it("hydrates missing enabled basic and cloze field mappings from cached Anki fields", () => {
+    const settings = mergePluginSettings({
+      ankiModelFieldCache: {
+        "问答题": {
+          fieldNames: ["正面", "背面"],
+          loadedAt: 10,
+        },
+        "填空题": {
+          fieldNames: ["文字", "背面额外"],
+          loadedAt: 20,
+        },
+      },
+      cardTypeConfigs: {
+        ...DEFAULT_SETTINGS.cardTypeConfigs,
+        basic: {
+          ...DEFAULT_SETTINGS.cardTypeConfigs.basic,
+          noteType: "问答题",
+        },
+        cloze: {
+          ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+          noteType: "填空题",
+        },
+      },
+      noteFieldMappings: {},
+    });
+
+    expect(settings.noteFieldMappings[createNoteFieldMappingKey("basic", "问答题")]).toEqual(expect.objectContaining({
+      titleField: "正面",
+      bodyField: "背面",
+      loadedAt: 10,
+    }));
+    expect(settings.noteFieldMappings[createNoteFieldMappingKey("cloze", "填空题")]).toEqual(expect.objectContaining({
+      mainField: "文字",
+      loadedAt: 20,
+    }));
   });
 
   it("migrates the old default cloze recognition to H4 + #anki-cloze", () => {

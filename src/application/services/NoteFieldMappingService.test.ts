@@ -76,7 +76,7 @@ describe("NoteFieldMappingService", () => {
       }),
       {
         fieldNames: ["Text", "Extra"],
-        isCloze: true,
+        isCloze: false,
       },
       {
         [createNoteFieldMappingKey("cloze", "Cloze")]: {
@@ -90,6 +90,61 @@ describe("NoteFieldMappingService", () => {
     );
 
     expect(fields).toEqual({ Text: "Context<br><br>{{c1::answer}}" });
+  });
+
+  it("throws when a cloze main field is missing from the saved mapping", () => {
+    const service = new NoteFieldMappingService();
+
+    const error = expectPluginUserError(() =>
+      service.map(
+        createCard({
+          type: "cloze",
+          noteModel: "Cloze",
+        }),
+        { fieldNames: ["Text", "Extra"], isCloze: false },
+        {
+          [createNoteFieldMappingKey("cloze", "Cloze")]: {
+            cardType: "cloze",
+            modelName: "Cloze",
+            loadedFieldNames: ["Text", "Extra"],
+            mainField: undefined,
+            loadedAt: 1,
+          },
+        },
+      ),
+    );
+
+    expect(error.userMessage.key).toBe("errors.noteFieldMapping.incompleteSavedMapping.cloze");
+    expect(error.userMessage.params).toEqual({ modelName: "Cloze" });
+  });
+
+  it("throws when a cloze main field is stale even if isCloze is false", () => {
+    const service = new NoteFieldMappingService();
+
+    const error = expectPluginUserError(() =>
+      service.map(
+        createCard({
+          type: "cloze",
+          noteModel: "Cloze",
+        }),
+        { fieldNames: ["Body", "Extra"], isCloze: false },
+        {
+          [createNoteFieldMappingKey("cloze", "Cloze")]: {
+            cardType: "cloze",
+            modelName: "Cloze",
+            loadedFieldNames: ["Text", "Extra"],
+            mainField: "Text",
+            loadedAt: 1,
+          },
+        },
+      ),
+    );
+
+    expect(error.userMessage.key).toBe("errors.noteFieldMapping.stale");
+    expect(error.userMessage.params).toEqual({
+      modelName: "Cloze",
+      fields: ["\"Text\""],
+    });
   });
 
   it("throws when a mapping is missing", () => {

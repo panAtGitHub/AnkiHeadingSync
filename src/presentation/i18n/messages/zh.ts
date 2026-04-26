@@ -426,6 +426,7 @@ export const zh = {
         basic: "找不到基础卡笔记类型 \"{{modelName}}\" 的已保存字段映射。请打开插件设置并先从 Anki 读取字段。",
         cloze: "找不到填空题笔记类型 \"{{modelName}}\" 的已保存字段映射。请打开插件设置并先从 Anki 读取字段。",
         semanticQa: "找不到语义 QA 笔记类型 \"{{modelName}}\" 的已保存字段映射。请打开插件设置并先从 Anki 读取字段。",
+        qaGroup: "找不到问答题（多级列表）笔记模板 \"{{modelName}}\" 的已保存字段映射。请先在设置页从 Anki 读取字段并保存映射。",
       },
       incompleteSavedMapping: {
         basic: "基础卡笔记类型 \"{{modelName}}\" 的已保存字段映射不完整。请打开插件设置并保存标题字段和正文字段。",
@@ -438,11 +439,11 @@ export const zh = {
       },
       stale: "笔记类型 \"{{modelName}}\" 的已保存字段映射已过期，因为这些字段在 Anki 中已不存在：{{fields}}。请重新从 Anki 读取字段。",
       clozeIncompatible: "填空题笔记类型 \"{{modelName}}\" 在 Anki 中不是填空题兼容模型。",
-      qaGroupMissingTitle: "问答题（多级列表）笔记模板 \"{{modelName}}\" 缺少可识别的题目字段。请使用 题目、标题、正面、Stem 或 Title 之一。",
-      qaGroupNoCompleteSlots: "问答题（多级列表）笔记模板 \"{{modelName}}\" 没有可用的完整问题/答案字段组。",
+      qaGroupMissingTitle: "问答题（多级列表）笔记模板 \"{{modelName}}\" 的已保存字段映射不完整，缺少标题字段。请在设置页重新保存字段映射。",
+      qaGroupNoCompleteSlots: "问答题（多级列表）笔记模板 \"{{modelName}}\" 的已保存字段映射不完整，至少需要一组问题/答案字段。请在设置页重新保存字段映射。",
       qaGroupNonContinuousSlots: "问答题（多级列表）笔记模板 \"{{modelName}}\" 的第一组问题/答案字段不是从第 {{firstIndex}} 组开始连续编号。请从第 1 组开始。",
       qaGroupWarningsUnaccepted: "问答题（多级列表）笔记模板 \"{{modelName}}\" 仍有未确认的字段警告。请先在设置页确认后再同步。",
-      qaGroupSlotCapacityExceeded: "问答题（多级列表）笔记模板 \"{{modelName}}\" 只识别到 {{capacity}} 组问题/答案字段，但当前块有 {{itemCount}} 项：{{filePath}}:{{blockStartLine}}。",
+      qaGroupSlotCapacityExceeded: "问答题（多级列表）笔记模板 \"{{modelName}}\" 的已保存字段映射只包含 {{capacity}} 组问题/答案字段，但当前块有 {{itemCount}} 项：{{filePath}}:{{blockStartLine}}。",
     },
     noteTypeMigration: {
       failed: "无法将 Anki 笔记 {{noteId}} 从“{{fromModel}}”迁移到“{{toModel}}”{{location}}：{{reason}}",

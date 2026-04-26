@@ -38,7 +38,7 @@ export class NoteFieldMappingService {
       return this.mapBasic(card, mapping as BasicLikeNoteModelFieldMapping);
     }
 
-    return this.mapCloze(card, noteModelDetails, mapping as ClozeNoteModelFieldMapping);
+    return this.mapCloze(card, mapping as ClozeNoteModelFieldMapping);
   }
 
   suggest(cardType: NoteModelFieldMappingCardType, modelName: string, fieldNames: string[], loadedAt = Date.now()): NoteModelFieldMapping {
@@ -103,12 +103,6 @@ export class NoteFieldMappingService {
       });
     }
 
-    if (!noteModelDetails.isCloze) {
-      throw new PluginUserError("errors.noteFieldMapping.clozeIncompatible", {
-        modelName: mapping.modelName,
-      });
-    }
-
     if (!availableFields.has(mapping.mainField)) {
       throw new PluginUserError("errors.noteFieldMapping.stale", {
         modelName: mapping.modelName,
@@ -133,13 +127,7 @@ export class NoteFieldMappingService {
     };
   }
 
-  private mapCloze(card: RenderedCardInput, noteModelDetails: NoteModelDetails, mapping: ClozeNoteModelFieldMapping): Record<string, string> {
-    if (!noteModelDetails.isCloze) {
-      throw new PluginUserError("errors.noteFieldMapping.clozeIncompatible", {
-        modelName: card.noteModel,
-      });
-    }
-
+  private mapCloze(card: RenderedCardInput, mapping: ClozeNoteModelFieldMapping): Record<string, string> {
     if (!mapping.mainField) {
       throw new PluginUserError("errors.noteFieldMapping.incompleteSavedMapping.cloze", {
         modelName: card.noteModel,
