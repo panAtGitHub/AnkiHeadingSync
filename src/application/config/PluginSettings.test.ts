@@ -80,6 +80,7 @@ describe("PluginSettings", () => {
     expect(DEFAULT_SETTINGS.obsidianBacklinkPlacement).toBe("answer-last-line");
     expect(DEFAULT_SETTINGS.syncObsidianTagsToAnki).toBe(true);
     expect(DEFAULT_SETTINGS.keepPureTagLinesInCardBody).toBe(true);
+    expect(DEFAULT_SETTINGS.scopeMode).toBe("include");
     expect(DEFAULT_SETTINGS.ankiNoteTypeCache).toEqual([]);
     expect(DEFAULT_SETTINGS.ankiModelFieldCache).toEqual({});
     expect(DEFAULT_SETTINGS.cardTypeConfigs).toEqual({

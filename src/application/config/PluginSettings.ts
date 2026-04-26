@@ -91,7 +91,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   fileDeckTemplate: "obsidian::filename",
   fileDeckInsertLocation: "body",
   folderDeckMode: "folder-and-file",
-  scopeMode: "all",
+  scopeMode: "include",
   includeFolders: [],
   excludeFolders: [],
   addObsidianBacklink: true,

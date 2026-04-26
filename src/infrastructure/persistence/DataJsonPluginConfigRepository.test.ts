@@ -18,7 +18,7 @@ class InMemoryPluginDataStore implements PluginDataStore<PluginDataSnapshot> {
 }
 
 describe("DataJsonPluginConfigRepository", () => {
-  it("loads legacy settings snapshots without noteFieldMappings and defaults scopeMode to all", async () => {
+  it("loads legacy settings snapshots without noteFieldMappings and defaults scopeMode to include", async () => {
     const repository = new DataJsonPluginConfigRepository(
       new InMemoryPluginDataStore({
         settings: {
@@ -34,7 +34,7 @@ describe("DataJsonPluginConfigRepository", () => {
     expect(settings.qaNoteType).toBe("Legacy Basic");
     expect(settings.clozeNoteType).toBe("Legacy Cloze");
     expect(settings.noteFieldMappings).toEqual({});
-    expect(settings.scopeMode).toBe("all");
+    expect(settings.scopeMode).toBe("include");
     expect(settings.includeFolders).toEqual(["cards"]);
     expect(settings.fileDeckEnabled).toBe(false);
     expect(settings.fileDeckMarker).toBe("TARGET DECK");
