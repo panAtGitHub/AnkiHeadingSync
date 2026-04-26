@@ -495,8 +495,6 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private renderSyncContentCard(containerEl: HTMLElement): void {
-    containerEl.createEl("p", { text: t("settings.cards.syncContent.desc") });
-
     const bodyRangeSection = this.createSyncContentSection(containerEl, "body-range", t("settings.cards.syncContent.sections.bodyRange"));
     new Setting(bodyRangeSection)
       .setName(t("settings.cardAnswerCutoffMode.name"))

@@ -272,7 +272,7 @@ export const zh = {
         },
       },
       syncContent: {
-        title: "同步内容",
+        title: "卡片正文同步内容",
         desc: "这些选项只影响卡片渲染内容，修改后仅刷新这一张卡片。",
         sections: {
           bodyRange: "1. 确定「卡片正文」范围",

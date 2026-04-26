@@ -746,6 +746,9 @@ describe("PluginSettingTab", () => {
     tab.display();
     await expandCard(tab, "sync-content");
 
+    expect(queryByDataset(tab.containerEl, "settingsCardToggle", "sync-content").textContent).toContain("卡片正文同步内容");
+    expect(collectTexts(tab.containerEl)).not.toContain("这些选项只影响卡片渲染内容，修改后仅刷新这一张卡片。");
+
     const sectionTitles = queryAllByDataset(tab.containerEl, "syncContentSectionTitle").map((element) => element.textContent || element.text);
     expect(sectionTitles).toEqual([
       "1. 确定「卡片正文」范围",

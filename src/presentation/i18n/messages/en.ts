@@ -274,7 +274,7 @@ export const en = {
         },
       },
       syncContent: {
-        title: "Sync content",
+        title: "Card body sync content",
         desc: "These options affect rendered content only. Updating them refreshes this card only.",
         sections: {
           bodyRange: "1. Choose the card body range",
