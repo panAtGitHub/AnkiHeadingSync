@@ -1395,6 +1395,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     toggleControl.style.border = "0";
     toggleControl.style.background = "transparent";
     toggleControl.style.boxShadow = "none";
+    toggleControl.style.fontSize = "2em";
     toggleControl.style.lineHeight = "1";
     toggleControl.style.color = "var(--text-muted)";
     if (hasChildren) {

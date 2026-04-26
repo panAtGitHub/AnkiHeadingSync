@@ -1325,6 +1325,7 @@ describe("PluginSettingTab", () => {
     expect(childRow.style.marginLeft).toBe("18px");
     expect(childToggle.style.width).toBe("24px");
     expect(childToggle.style.height).toBe("24px");
+    expect(childToggle.style.fontSize).toBe("2em");
     expect(childCheckbox).toBeDefined();
     expect(childLabel.style.whiteSpace).toBe("nowrap");
     expect(childLabel.style.overflow).toBe("hidden");
