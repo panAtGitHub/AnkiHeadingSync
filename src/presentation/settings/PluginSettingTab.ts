@@ -1,5 +1,5 @@
 import { PluginSettingTab, Setting } from "obsidian";
-import type { ButtonComponent, ToggleComponent } from "obsidian";
+import type { ButtonComponent } from "obsidian";
 
 import {
   DEFAULT_OBSIDIAN_BACKLINK_LABEL,
@@ -52,7 +52,6 @@ const SETTINGS_PAGE_HEADER_MASK_SIDE = "-24px";
 const DECK_HELPER_TEXT_INDENT = "32px";
 const SETTINGS_ROOT_CLASS = "anki-heading-sync-settings";
 const THEME_ACTION_BUTTON_CLASS = "ahs-theme-action-button";
-const THEME_TOGGLE_CLASS = "ahs-theme-toggle";
 
 type SettingsCardId = (typeof SETTINGS_CARD_ORDER)[number];
 type NoteTypeCacheCheckStatus = "idle" | "checking" | "same" | "changed" | "failed";
@@ -174,23 +173,6 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
   private markThemeButtonComponent(button: ButtonComponent): void {
     this.markThemeButton(button.buttonEl);
-  }
-
-  private markThemeToggle(
-    toggle: ToggleComponent,
-    value: boolean,
-    onChange: (value: boolean) => void | Promise<void>,
-  ): void {
-    toggle.toggleEl.classList.add(THEME_TOGGLE_CLASS);
-    this.syncThemeToggleState(toggle, value);
-    toggle.setValue(value).onChange((nextValue) => {
-      this.syncThemeToggleState(toggle, nextValue);
-      return onChange(nextValue);
-    });
-  }
-
-  private syncThemeToggleState(toggle: ToggleComponent, value: boolean): void {
-    toggle.toggleEl.dataset.ahsToggleState = value ? "on" : "off";
   }
 
   private initializeCards(containerEl: HTMLElement): void {
@@ -605,7 +587,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.syncOptions.addObsidianBacklink.name"))
       .setDesc(t("settings.syncOptions.addObsidianBacklink.desc"))
       .addToggle((toggle) => {
-        this.markThemeToggle(toggle, this.plugin.settings.addObsidianBacklink, (value) => {
+        toggle.setValue(this.plugin.settings.addObsidianBacklink).onChange((value) => {
           void this.plugin.updateSettings({ addObsidianBacklink: value });
         });
       });
@@ -645,7 +627,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.syncOptions.syncObsidianTagsToAnki.name"))
       .setDesc(t("settings.syncOptions.syncObsidianTagsToAnki.desc"))
       .addToggle((toggle) => {
-        this.markThemeToggle(toggle, this.plugin.settings.syncObsidianTagsToAnki, (value) => {
+        toggle.setValue(this.plugin.settings.syncObsidianTagsToAnki).onChange((value) => {
           void this.plugin.updateSettings({ syncObsidianTagsToAnki: value });
         });
       });
@@ -654,7 +636,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.syncOptions.keepPureTagLinesInCardBody.name"))
       .setDesc(t("settings.syncOptions.keepPureTagLinesInCardBody.desc"))
       .addToggle((toggle) => {
-        this.markThemeToggle(toggle, this.plugin.settings.keepPureTagLinesInCardBody, (value) => {
+        toggle.setValue(this.plugin.settings.keepPureTagLinesInCardBody).onChange((value) => {
           void this.plugin.updateSettings({ keepPureTagLinesInCardBody: value });
         });
       });
@@ -664,7 +646,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.syncOptions.highlightsToCloze.name"))
       .setDesc(t("settings.syncOptions.highlightsToCloze.desc"))
       .addToggle((toggle) => {
-        this.markThemeToggle(toggle, this.plugin.settings.convertHighlightsToCloze, (value) => {
+        toggle.setValue(this.plugin.settings.convertHighlightsToCloze).onChange((value) => {
           void this.plugin.updateSettings({ convertHighlightsToCloze: value });
         });
       });
@@ -764,7 +746,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.deck.fileDeckEnabled.name"))
       .setDesc(t("settings.deck.fileDeckEnabled.desc"))
       .addToggle((toggle) => {
-        this.markThemeToggle(toggle, this.plugin.settings.fileDeckEnabled, async (value) => {
+        toggle.setValue(this.plugin.settings.fileDeckEnabled).onChange(async (value) => {
           await this.plugin.updateSettings({ fileDeckEnabled: value });
           this.renderCard("deck");
         });

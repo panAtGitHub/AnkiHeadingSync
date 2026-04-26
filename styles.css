@@ -28,32 +28,3 @@
   cursor: not-allowed;
   opacity: 0.72;
 }
-
-.anki-heading-sync-settings .ahs-theme-toggle {
-  background: var(--background-secondary);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 999px;
-  box-shadow: none;
-  transition:
-    background-color 140ms ease,
-    border-color 140ms ease,
-    opacity 140ms ease;
-}
-
-.anki-heading-sync-settings .ahs-theme-toggle:hover {
-  background: var(--background-modifier-hover);
-}
-
-.anki-heading-sync-settings .ahs-theme-toggle[data-ahs-toggle-state="on"] {
-  background: var(--interactive-accent);
-  border-color: var(--interactive-accent-hover);
-}
-
-.anki-heading-sync-settings .ahs-theme-toggle[data-ahs-toggle-state="on"]:hover {
-  background: var(--interactive-accent-hover);
-}
-
-.anki-heading-sync-settings .ahs-theme-toggle.is-disabled,
-.anki-heading-sync-settings .ahs-theme-toggle[aria-disabled="true"] {
-  opacity: 0.72;
-}

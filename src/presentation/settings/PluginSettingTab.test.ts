@@ -871,7 +871,7 @@ describe("PluginSettingTab", () => {
     expect(plugin.insertDeckTemplateCalls).toBe(1);
   });
 
-  it("marks every settings toggle with theme state and updates the dataset on change", async () => {
+  it("keeps settings toggles on the native Obsidian toggle styling path", async () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
@@ -889,15 +889,16 @@ describe("PluginSettingTab", () => {
 
     for (const setting of toggleSettings) {
       const toggle = getToggle(setting);
-      expect(toggle.toggleEl.classList.contains("ahs-theme-toggle")).toBe(true);
-      expect(toggle.toggleEl.dataset.ahsToggleState).toBe(toggle.value ? "on" : "off");
+      expect(toggle.toggleEl.classList.contains("ahs-theme-toggle")).toBe(false);
+      expect(toggle.toggleEl.dataset.ahsToggleState).toBeUndefined();
     }
 
     const highlightsToggle = getToggle(findSetting(tab.containerEl, "高亮转填空题"));
     const nextValue = !highlightsToggle.value;
     await highlightsToggle.triggerChange(nextValue);
 
-    expect(highlightsToggle.toggleEl.dataset.ahsToggleState).toBe(nextValue ? "on" : "off");
+    expect(plugin.settings.convertHighlightsToCloze).toBe(nextValue);
+    expect(highlightsToggle.toggleEl.dataset.ahsToggleState).toBeUndefined();
   });
 
   it("auto saves toggle, heading, note type and field mapping edits", async () => {
