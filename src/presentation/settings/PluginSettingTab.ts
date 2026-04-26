@@ -82,6 +82,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private detectedAnkiNoteTypeCache: string[] | null = null;
   private noteTypeCacheCheckToken = 0;
   private pageHeaderResizeObserver: ResizeObserver | null = null;
+  private scopeNeedsSelectedAncestorExpansion = true;
 
   constructor(plugin: AnkiHeadingSyncPlugin) {
     super(plugin.app, plugin);
@@ -101,6 +102,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     this.noteTypeCacheCheckPromise = null;
     this.detectedAnkiNoteTypeCache = null;
     this.noteTypeCacheCheckToken += 1;
+    this.scopeNeedsSelectedAncestorExpansion = true;
   }
 
   display(): void {
@@ -593,8 +595,6 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private renderScopeCard(containerEl: HTMLElement): void {
-    containerEl.createEl("p", { text: t("settings.cards.scope.desc") });
-
     new Setting(containerEl)
       .setName(t("settings.scope.name"))
       .setDesc(getScopeModeSummary(this.plugin.settings.scopeMode))
@@ -634,12 +634,15 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       return;
     }
 
-    const selectedFolders = this.plugin.settings.scopeMode === "include"
-      ? this.plugin.settings.includeFolders
-      : this.plugin.settings.excludeFolders;
+    this.expandSelectedFolderAncestorsIfNeeded(this.plugin.settings.scopeMode);
+
+    const selectedFolders = this.getSelectedFoldersForScopeMode(this.plugin.settings.scopeMode);
     const selectionTree = buildFolderTreeSelection(this.folderTree, selectedFolders);
     const treeContainer = containerEl.createDiv();
     treeContainer.dataset.scopeTree = "true";
+    treeContainer.style.display = "flex";
+    treeContainer.style.flexDirection = "column";
+    treeContainer.style.gap = "2px";
 
     for (const node of selectionTree) {
       this.renderFolderNode(treeContainer, node, this.plugin.settings.scopeMode, 0);
@@ -1329,6 +1332,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .then((folderTree) => {
         this.folderTree = folderTree;
         this.folderTreeStatus = folderTree.length > 0 ? { rawMessage: "" } : { key: "settings.scope.empty" };
+        this.requestSelectedFolderAncestorExpansion();
       })
       .catch((error) => {
         this.folderTree = [];
@@ -1350,6 +1354,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private async updateScopeMode(scopeMode: ScopeMode): Promise<void> {
     await this.plugin.updateSettings({ scopeMode });
     if (scopeMode !== "all") {
+      this.requestSelectedFolderAncestorExpansion();
       this.ensureFolderTreeLoaded();
     }
     this.renderCard("scope");
@@ -1366,14 +1371,36 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private renderFolderNode(containerEl: HTMLElement, node: FolderTreeSelectionNode, scopeMode: ScopeMode, depth: number): void {
     const row = containerEl.createDiv();
     row.dataset.folderRow = node.path;
-    row.style.paddingLeft = `${depth * 18}px`;
+    row.style.display = "grid";
+    row.style.gridTemplateColumns = "24px 24px minmax(0, 1fr)";
+    row.style.alignItems = "center";
+    row.style.columnGap = "0px";
+    row.style.minHeight = "28px";
+    row.style.marginLeft = `${depth * 18}px`;
+    row.style.width = "100%";
+    row.style.boxSizing = "border-box";
 
     const hasChildren = node.children.length > 0;
     const expanded = hasChildren && this.expandedFolderPaths.has(node.path);
     const toggleControl = row.createEl(hasChildren ? "button" : "span");
     toggleControl.dataset.folderToggle = node.path;
     toggleControl.textContent = hasChildren ? (expanded ? "▾" : "▸") : "";
+    toggleControl.style.width = "24px";
+    toggleControl.style.height = "24px";
+    toggleControl.style.display = "inline-flex";
+    toggleControl.style.alignItems = "center";
+    toggleControl.style.justifyContent = "center";
+    toggleControl.style.padding = "0";
+    toggleControl.style.margin = "0";
+    toggleControl.style.border = "0";
+    toggleControl.style.background = "transparent";
+    toggleControl.style.boxShadow = "none";
+    toggleControl.style.lineHeight = "1";
+    toggleControl.style.color = "var(--text-muted)";
     if (hasChildren) {
+      toggleControl.setAttr("aria-label", expanded ? t("settings.scope.collapseFolder", { name: node.name }) : t("settings.scope.expandFolder", { name: node.name }));
+      toggleControl.setAttr("title", expanded ? t("settings.scope.collapseFolder", { name: node.name }) : t("settings.scope.expandFolder", { name: node.name }));
+      toggleControl.style.cursor = "pointer";
       toggleControl.addEventListener("click", () => {
         if (this.expandedFolderPaths.has(node.path)) {
           this.expandedFolderPaths.delete(node.path);
@@ -1390,11 +1417,18 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     checkbox.checked = node.checked;
     checkbox.indeterminate = node.indeterminate;
     checkbox.dataset.folderPath = node.path;
+    checkbox.style.margin = "0";
+    checkbox.style.justifySelf = "center";
     checkbox.addEventListener("change", () => {
       void this.updateFolderSelection(scopeMode, node.path, checkbox.checked);
     });
 
-    row.createEl("span", { text: node.name }).dataset.folderPathLabel = node.path;
+    const labelEl = row.createEl("span", { text: node.name });
+    labelEl.dataset.folderPathLabel = node.path;
+    labelEl.style.minWidth = "0";
+    labelEl.style.overflow = "hidden";
+    labelEl.style.textOverflow = "ellipsis";
+    labelEl.style.whiteSpace = "nowrap";
 
     if (!hasChildren || !expanded) {
       return;
@@ -1402,9 +1436,33 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     const childrenContainer = containerEl.createDiv();
     childrenContainer.dataset.folderChildren = node.path;
+    childrenContainer.style.display = "flex";
+    childrenContainer.style.flexDirection = "column";
+    childrenContainer.style.gap = "2px";
     for (const child of node.children) {
       this.renderFolderNode(childrenContainer, child, scopeMode, depth + 1);
     }
+  }
+
+  private requestSelectedFolderAncestorExpansion(): void {
+    this.scopeNeedsSelectedAncestorExpansion = true;
+  }
+
+  private expandSelectedFolderAncestorsIfNeeded(scopeMode: ScopeMode): void {
+    if (!this.scopeNeedsSelectedAncestorExpansion) {
+      return;
+    }
+
+    this.scopeNeedsSelectedAncestorExpansion = false;
+    for (const folderPath of this.getSelectedFoldersForScopeMode(scopeMode)) {
+      for (const ancestorPath of getAncestorFolderPaths(folderPath)) {
+        this.expandedFolderPaths.add(ancestorPath);
+      }
+    }
+  }
+
+  private getSelectedFoldersForScopeMode(scopeMode: ScopeMode): string[] {
+    return scopeMode === "include" ? this.plugin.settings.includeFolders : this.plugin.settings.excludeFolders;
   }
 
   private createInlineControlGroup(containerEl: HTMLElement, label: string): HTMLElement {
@@ -1615,4 +1673,15 @@ function getScopeModeTreeDescription(scopeMode: ScopeMode): string {
   }
 
   return t("settings.scope.treeDescription.exclude");
+}
+
+function getAncestorFolderPaths(folderPath: string): string[] {
+  const segments = folderPath.split("/").filter((segment) => segment.length > 0);
+  const ancestorPaths: string[] = [];
+
+  for (let index = 1; index < segments.length; index += 1) {
+    ancestorPaths.push(segments.slice(0, index).join("/"));
+  }
+
+  return ancestorPaths;
 }

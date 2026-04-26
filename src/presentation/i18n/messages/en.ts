@@ -191,7 +191,7 @@ export const en = {
       priorityDesc: "Final deck priority: file-level custom deck > folder-mapped deck > default deck. Existing-card deck behavior stays aligned with the current sync implementation.",
     },
     scope: {
-      name: "Run scope",
+      name: "Plugin run scope",
       summary: {
         all: "Process Markdown files across the whole vault",
         include: "Only process Markdown files in the checked folders below",
@@ -284,7 +284,7 @@ export const en = {
         },
       },
       scope: {
-        title: "Card sync scope",
+        title: "Plugin run scope",
         desc: "Keep the existing scope modes and folder tree. The tree is loaded lazily and can be refreshed locally.",
         refreshFolders: "Refresh folder list",
       },

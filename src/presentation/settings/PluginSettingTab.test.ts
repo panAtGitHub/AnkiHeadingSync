@@ -1292,6 +1292,45 @@ describe("PluginSettingTab", () => {
     expect(queryByDataset(tab.containerEl, "qaGroupWarning", "qa-group").textContent).toContain("第 03 组缺少答案字段");
   });
 
+  it("renders the scope card with renamed copy and aligned folder tree rows", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      scopeMode: "include",
+      includeFolders: ["notes/sub"],
+    });
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    expect(queryByDataset(tab.containerEl, "settingsCardToggle", "scope").textContent).toContain("插件运行范围");
+
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
+    await flushPromises();
+
+    expect(findSetting(tab.containerEl, "插件运行范围")).toBeDefined();
+    expect(() => findSetting(tab.containerEl, "运行范围")).toThrow("Setting not found");
+    expect(collectTexts(tab.containerEl)).not.toContain("保留现有作用范围和文件夹树逻辑；文件夹树按需加载，并支持局部刷新。");
+
+    const parentRow = queryByDataset(tab.containerEl, "folderRow", "notes");
+    const parentToggle = queryByDataset(tab.containerEl, "folderToggle", "notes");
+    const childRow = queryByDataset(tab.containerEl, "folderRow", "notes/sub");
+    const childToggle = queryByDataset(tab.containerEl, "folderToggle", "notes/sub");
+    const childCheckbox = queryByDataset(tab.containerEl, "folderPath", "notes/sub");
+    const childLabel = queryByDataset(tab.containerEl, "folderPathLabel", "notes/sub");
+
+    expect(parentToggle.textContent).toBe("▾");
+    expect(parentRow.style.display).toBe("grid");
+    expect(parentRow.style.gridTemplateColumns).toBe("24px 24px minmax(0, 1fr)");
+    expect(parentRow.style.alignItems).toBe("center");
+    expect(childRow.style.marginLeft).toBe("18px");
+    expect(childToggle.style.width).toBe("24px");
+    expect(childToggle.style.height).toBe("24px");
+    expect(childCheckbox).toBeDefined();
+    expect(childLabel.style.whiteSpace).toBe("nowrap");
+    expect(childLabel.style.overflow).toBe("hidden");
+    expect(childLabel.style.textOverflow).toBe("ellipsis");
+  });
+
   it("folder tree expand and check refresh only the scope card", async () => {
     const plugin = new FakePlugin();
     plugin.settings = normalizePluginSettings({
@@ -1307,6 +1346,9 @@ describe("PluginSettingTab", () => {
     await flushPromises();
     expect(plugin.listFolderTreeCalls).toBe(1);
     expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
+    expect(queryByDataset(tab.containerEl, "folderRow", "notes")).toBeDefined();
+    expect(queryByDataset(tab.containerEl, "folderToggle", "notes")).toBeDefined();
+    expect(queryByDataset(tab.containerEl, "folderPathLabel", "notes")).toBeDefined();
 
     await queryByDataset(tab.containerEl, "folderToggle", "notes").trigger("click");
     expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);

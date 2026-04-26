@@ -189,7 +189,7 @@ export const zh = {
       priorityDesc: "最终 deck 优先级：文件级自定义牌组 > 文件夹映射 deck > 默认牌组。旧卡的 deck 行为保持与当前同步实现一致。",
     },
     scope: {
-      name: "运行范围",
+      name: "插件运行范围",
       summary: {
         all: "处理整个 vault 中的 Markdown 文件",
         include: "仅处理下方勾选文件夹中的 Markdown 文件",
@@ -282,7 +282,7 @@ export const zh = {
         },
       },
       scope: {
-        title: "卡片同步范围",
+        title: "插件运行范围",
         desc: "保留现有作用范围和文件夹树逻辑；文件夹树按需加载，并支持局部刷新。",
         refreshFolders: "刷新文件夹列表",
       },
