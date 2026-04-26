@@ -1,5 +1,4 @@
-import { PluginSettingTab, Setting } from "obsidian";
-import type { ButtonComponent } from "obsidian";
+import { ButtonComponent, PluginSettingTab, Setting } from "obsidian";
 
 import {
   DEFAULT_OBSIDIAN_BACKLINK_LABEL,
@@ -51,7 +50,6 @@ const SETTINGS_PAGE_HEADER_MASK_TOP = "-128px";
 const SETTINGS_PAGE_HEADER_MASK_SIDE = "-24px";
 const DECK_HELPER_TEXT_INDENT = "32px";
 const SETTINGS_ROOT_CLASS = "anki-heading-sync-settings";
-const THEME_ACTION_BUTTON_CLASS = "ahs-theme-action-button";
 
 type SettingsCardId = (typeof SETTINGS_CARD_ORDER)[number];
 type NoteTypeCacheCheckStatus = "idle" | "checking" | "same" | "changed" | "failed";
@@ -167,12 +165,8 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     containerEl.scrollTop = previousScrollTop;
   }
 
-  private markThemeButton(buttonEl: HTMLButtonElement): void {
-    buttonEl.classList.add(THEME_ACTION_BUTTON_CLASS);
-  }
-
-  private markThemeButtonComponent(button: ButtonComponent): void {
-    this.markThemeButton(button.buttonEl);
+  private markActionButton(button: ButtonComponent): void {
+    button.setCta();
   }
 
   private initializeCards(containerEl: HTMLElement): void {
@@ -305,16 +299,14 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     actionRow.style.flexDirection = "column";
     actionRow.style.alignItems = "flex-start";
     actionRow.style.gap = "8px";
-    const loadButton = actionRow.createEl("button", {
-      text: this.ankiConfigLoading
+    const loadButton = new ButtonComponent(actionRow)
+      .setButtonText(this.ankiConfigLoading
         ? t("settings.cards.cardTypes.loadAnki.loading")
-        : t("settings.cards.cardTypes.loadAnki.button"),
-    }) as HTMLButtonElement;
-    this.markThemeButton(loadButton);
-    loadButton.type = "button";
-    loadButton.dataset.cardTypesRefresh = "true";
-    loadButton.disabled = this.ankiConfigLoading;
-    loadButton.addEventListener("click", () => this.loadAnkiCardTypeConfig());
+        : t("settings.cards.cardTypes.loadAnki.button"))
+      .setCta()
+      .setDisabled(this.ankiConfigLoading)
+      .onClick(() => this.loadAnkiCardTypeConfig());
+    loadButton.buttonEl.dataset.cardTypesRefresh = "true";
     actionRow.createEl("span", {
       text: `${t("settings.cards.cardTypes.statusLabel")}${renderUserFacingMessage(this.getCardTypeStatusMessage())}`,
     });
@@ -691,14 +683,14 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     }
 
     const refreshRow = containerEl.createDiv();
-    const refreshButton = refreshRow.createEl("button", { text: t("settings.cards.scope.refreshFolders") }) as HTMLButtonElement;
-    this.markThemeButton(refreshButton);
-    refreshButton.type = "button";
-    refreshButton.dataset.scopeRefreshFolders = "true";
-    refreshButton.disabled = Boolean(this.folderTreeLoadPromise);
-    refreshButton.addEventListener("click", () => {
-      void this.refreshFolderTree();
-    });
+    const refreshButton = new ButtonComponent(refreshRow)
+      .setButtonText(t("settings.cards.scope.refreshFolders"))
+      .setCta()
+      .setDisabled(Boolean(this.folderTreeLoadPromise))
+      .onClick(() => {
+        void this.refreshFolderTree();
+      });
+    refreshButton.buttonEl.dataset.scopeRefreshFolders = "true";
 
     this.ensureFolderTreeLoaded();
     containerEl.createEl("p", { text: getScopeModeTreeDescription(this.plugin.settings.scopeMode) });
@@ -809,7 +801,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         .setName(t("settings.deck.insertTemplate.name"))
         .setDesc(t("settings.deck.insertTemplate.desc"))
         .addButton((button) => {
-          this.markThemeButtonComponent(button);
+          this.markActionButton(button);
           button.setButtonText(t("settings.deck.insertTemplate.button")).onClick(() => {
             void this.plugin.insertDeckTemplateToCurrentFile();
           });

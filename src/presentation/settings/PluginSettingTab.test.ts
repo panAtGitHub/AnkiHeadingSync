@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS, normalizePluginSettings } from "@/application/config/
 const QA_GROUP_USER_MODEL_NAME = "问答题（多级列表）";
 
 const {
+  FakeButtonComponent,
   FakeElement,
   FakePluginSettingTab,
   FakeSetting,
@@ -175,8 +176,12 @@ const {
 
   class HoistedFakeButtonComponent {
     public text = "";
-    public readonly buttonEl = new HoistedFakeElement(new HoistedFakeContainerEl(), "button", null);
+    public readonly buttonEl: HoistedFakeElement;
     private onClickHandler?: () => void | Promise<void>;
+
+    constructor(containerEl?: HoistedFakeElement) {
+      this.buttonEl = containerEl?.createEl("button") ?? new HoistedFakeElement(new HoistedFakeContainerEl(), "button", null);
+    }
 
     setButtonText(text: string): this {
       this.text = text;
@@ -185,8 +190,19 @@ const {
       return this;
     }
 
+    setCta(): this {
+      this.buttonEl.classList.add("mod-cta");
+      return this;
+    }
+
+    setDisabled(disabled: boolean): this {
+      this.buttonEl.disabled = disabled;
+      return this;
+    }
+
     onClick(callback: () => void | Promise<void>): this {
       this.onClickHandler = callback;
+      this.buttonEl.addEventListener("click", callback);
       return this;
     }
 
@@ -373,6 +389,7 @@ const {
 });
 
 vi.mock("obsidian", () => ({
+  ButtonComponent: FakeButtonComponent,
   getLanguage: getLanguageMock,
   PluginSettingTab: FakePluginSettingTab,
   Setting: FakeSetting,
@@ -837,7 +854,7 @@ describe("PluginSettingTab", () => {
     expect(plugin.updateCalls).toContainEqual({ convertHighlightsToCloze: false });
   });
 
-  it("applies the themed class only to settings action buttons", async () => {
+  it("uses native Obsidian CTA buttons only for settings actions", async () => {
     const plugin = new FakePlugin();
     plugin.settings = normalizePluginSettings({
       ...plugin.settings,
@@ -850,14 +867,14 @@ describe("PluginSettingTab", () => {
     await expandCard(tab, "scope");
     await flushPromises();
 
-    expect(queryByDataset(tab.containerEl, "cardTypesRefresh", "true").classList.contains("ahs-theme-action-button")).toBe(true);
-    expect(queryByDataset(tab.containerEl, "scopeRefreshFolders", "true").classList.contains("ahs-theme-action-button")).toBe(true);
+    expect(queryByDataset(tab.containerEl, "cardTypesRefresh", "true").classList.contains("mod-cta")).toBe(true);
+    expect(queryByDataset(tab.containerEl, "scopeRefreshFolders", "true").classList.contains("mod-cta")).toBe(true);
 
     const cardHeaderButton = queryByDataset(tab.containerEl, "settingsCardToggle", "card-types");
-    expect(cardHeaderButton.classList.contains("ahs-theme-action-button")).toBe(false);
+    expect(cardHeaderButton.classList.contains("mod-cta")).toBe(false);
 
     const folderToggleButton = queryByDataset(tab.containerEl, "folderToggle", "notes");
-    expect(folderToggleButton.classList.contains("ahs-theme-action-button")).toBe(false);
+    expect(folderToggleButton.classList.contains("mod-cta")).toBe(false);
 
     await expandCard(tab, "deck");
     const fileDeckSetting = findSetting(tab.containerEl, "开启文件级自定义牌组");
@@ -865,7 +882,7 @@ describe("PluginSettingTab", () => {
 
     const insertTemplateSetting = findSetting(tab.containerEl, "向当前文件插入牌组模板");
     const insertTemplateButton = getButton(insertTemplateSetting);
-    expect(insertTemplateButton.buttonEl.classList.contains("ahs-theme-action-button")).toBe(true);
+    expect(insertTemplateButton.buttonEl.classList.contains("mod-cta")).toBe(true);
 
     await insertTemplateButton.click();
     expect(plugin.insertDeckTemplateCalls).toBe(1);
