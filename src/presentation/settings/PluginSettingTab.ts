@@ -34,7 +34,7 @@ import { buildFolderTreeSelection, toggleFolderTreeSelection, type FolderTreeSel
 
 const FOLDER_TREE_STATUS_LOADING: UserFacingMessage = { key: "settings.scope.loading" };
 const TEXT_SAVE_DEBOUNCE_MS = 500;
-const SETTINGS_CARD_ORDER = ["card-types", "sync-content", "scope", "deck", "commands"] as const;
+const SETTINGS_CARD_ORDER = ["card-types", "sync-content", "deck", "scope", "commands"] as const;
 const VISIBLE_CARD_TYPE_CONFIG_IDS = ["basic", "qa-group", "cloze"] as const;
 const SETTINGS_STICKY_CARD_GAP_PX = 8;
 const SETTINGS_PAGE_HEADER_FALLBACK_HEIGHT_PX = 64;

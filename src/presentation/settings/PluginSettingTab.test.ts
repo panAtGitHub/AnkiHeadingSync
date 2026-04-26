@@ -630,7 +630,9 @@ describe("PluginSettingTab", () => {
     expect(queryByDataset(tab.containerEl, "settingsCardBody", "scope").style.display).toBe("none");
     expect(queryByDataset(tab.containerEl, "settingsCardBody", "deck").style.display).toBe("none");
 
-    for (const cardId of ["card-types", "sync-content", "scope", "deck", "commands"] as const) {
+    expect(cards.map((card) => card.dataset.settingsCard)).toEqual(["card-types", "sync-content", "deck", "scope", "commands"]);
+
+    for (const cardId of ["card-types", "sync-content", "deck", "scope", "commands"] as const) {
       expect(queryByDataset(tab.containerEl, "settingsCardToggle", cardId).textContent.startsWith("▸ ")).toBe(true);
     }
   });
@@ -683,7 +685,7 @@ describe("PluginSettingTab", () => {
     expect(getStyleProperty(tab.containerEl, "--ahs-settings-page-header-height")).toBe("64px");
     expect(getStyleProperty(tab.containerEl, "--ahs-settings-sticky-card-gap")).toBe("8px");
 
-    for (const cardId of ["card-types", "sync-content", "scope", "deck", "commands"] as const) {
+    for (const cardId of ["card-types", "sync-content", "deck", "scope", "commands"] as const) {
       const header = queryByDataset(tab.containerEl, "settingsCardToggle", cardId);
       expect(header.style.position).toBe("sticky");
       expect(header.style.top).toBe("var(--ahs-settings-page-header-height, 64px)");
