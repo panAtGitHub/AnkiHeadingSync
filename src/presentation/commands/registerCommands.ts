@@ -19,14 +19,6 @@ export function registerCommands(plugin: AnkiHeadingSyncPlugin): void {
   });
 
   plugin.addCommand({
-    id: "rebuild-card-index",
-    name: t("commands.rebuildCardIndex"),
-    callback: () => {
-      void plugin.runRebuildCardIndex();
-    },
-  });
-
-  plugin.addCommand({
     id: "clear-current-file-synced-cards",
     name: t("commands.clearCurrentFileSyncedCards"),
     callback: () => {

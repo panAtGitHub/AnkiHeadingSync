@@ -1475,4 +1475,21 @@ describe("PluginSettingTab", () => {
       "向当前文件插入牌组模板",
     ]);
   });
+
+  it("does not show the maintenance-only rebuild index command in the command guide", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "commands").trigger("click");
+
+    const commandsBody = queryByDataset(tab.containerEl, "settingsCardBody", "commands");
+    const commandCopy = collectTexts(commandsBody).join("\n");
+    expect(commandCopy).toContain("同步当前文件到 Anki");
+    expect(commandCopy).toContain("同步全库到 Anki");
+    expect(commandCopy).toContain("清空当前文件已同步卡片");
+    expect(commandCopy).toContain("清理空牌组");
+    expect(commandCopy).not.toContain("重建卡片索引");
+    expect(commandCopy).not.toContain("只重建本地卡片索引，不创建或更新远端笔记。");
+  });
 });

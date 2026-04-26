@@ -828,7 +828,6 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     for (const [name, description] of [
       [t("commands.syncCurrentFileToAnki"), t("settings.cards.commands.items.syncCurrentFile")],
       [t("commands.syncVaultToAnki"), t("settings.cards.commands.items.syncVault")],
-      [t("commands.rebuildCardIndex"), t("settings.cards.commands.items.rebuildIndex")],
       [t("commands.clearCurrentFileSyncedCards"), t("settings.cards.commands.items.clearCurrentFile")],
       [t("commands.cleanupEmptyDecks"), t("settings.cards.commands.items.cleanupDecks")],
     ]) {
