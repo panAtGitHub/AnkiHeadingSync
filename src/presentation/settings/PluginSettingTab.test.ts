@@ -36,8 +36,35 @@ const {
     }
   }
 
+  class HoistedFakeClassList {
+    private readonly values = new Set<string>();
+
+    add(...tokens: string[]): void {
+      for (const token of tokens) {
+        if (token) {
+          this.values.add(token);
+        }
+      }
+    }
+
+    remove(...tokens: string[]): void {
+      for (const token of tokens) {
+        this.values.delete(token);
+      }
+    }
+
+    contains(token: string): boolean {
+      return this.values.has(token);
+    }
+
+    toString(): string {
+      return [...this.values].join(" ");
+    }
+  }
+
   class HoistedFakeElement {
     public readonly children: HoistedFakeElement[] = [];
+    public readonly classList = new HoistedFakeClassList();
     public readonly dataset: Record<string, string> = {};
     public readonly style = new HoistedFakeStyle();
     public readonly ownedSettings: HoistedFakeSetting[] = [];
@@ -148,10 +175,13 @@ const {
 
   class HoistedFakeButtonComponent {
     public text = "";
+    public readonly buttonEl = new HoistedFakeElement(new HoistedFakeContainerEl(), "button", null);
     private onClickHandler?: () => void | Promise<void>;
 
     setButtonText(text: string): this {
       this.text = text;
+      this.buttonEl.text = text;
+      this.buttonEl.textContent = text;
       return this;
     }
 
@@ -218,6 +248,7 @@ const {
 
   class HoistedFakeToggleComponent {
     public value = false;
+    public readonly toggleEl = new HoistedFakeElement(new HoistedFakeContainerEl(), "div", null);
     private onChangeHandler?: (value: boolean) => void | Promise<void>;
 
     setValue(value: boolean): this {
@@ -351,7 +382,8 @@ import { AnkiHeadingSyncSettingTab } from "./PluginSettingTab";
 
 type FakeContainer = InstanceType<typeof FakePluginSettingTab>["containerEl"];
 type FakeSettingInstance = InstanceType<typeof FakeSetting>;
-type FakeToggleInstance = { triggerChange(value: boolean): Promise<void> };
+type FakeButtonInstance = { click(): Promise<void>; buttonEl: FakeElementInstance };
+type FakeToggleInstance = { value: boolean; triggerChange(value: boolean): Promise<void>; toggleEl: FakeElementInstance };
 type FakeElementInstance = InstanceType<typeof FakeElement>;
 type QueryRoot = FakeContainer | FakeElementInstance | HTMLElement;
 
@@ -540,6 +572,15 @@ function getToggle(setting: FakeSettingInstance): FakeToggleInstance {
   return toggle as FakeToggleInstance;
 }
 
+function getButton(setting: FakeSettingInstance): FakeButtonInstance {
+  const button = setting.controls.find((control) => typeof control === "object" && control !== null && "click" in control && "buttonEl" in control);
+  if (!button) {
+    throw new Error(`Button not found for setting: ${setting.name}`);
+  }
+
+  return button as FakeButtonInstance;
+}
+
 function collectTexts(container: QueryRoot): string[] {
   return findElements(container, () => true)
     .map((element) => element.textContent || element.text)
@@ -620,6 +661,7 @@ describe("PluginSettingTab", () => {
 
     tab.display();
 
+    expect(tab.containerEl.classList.contains("anki-heading-sync-settings")).toBe(true);
     expect(queryByDataset(tab.containerEl, "settingsPageHeader", "true")).toBeDefined();
     const cards = queryAllByDataset(tab.containerEl, "settingsCard");
     expect(cards).toHaveLength(5);
@@ -793,6 +835,69 @@ describe("PluginSettingTab", () => {
 
     expect(plugin.settings.convertHighlightsToCloze).toBe(false);
     expect(plugin.updateCalls).toContainEqual({ convertHighlightsToCloze: false });
+  });
+
+  it("applies the themed class only to settings action buttons", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      scopeMode: "include",
+    });
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await expandCard(tab, "card-types");
+    await expandCard(tab, "scope");
+    await flushPromises();
+
+    expect(queryByDataset(tab.containerEl, "cardTypesRefresh", "true").classList.contains("ahs-theme-action-button")).toBe(true);
+    expect(queryByDataset(tab.containerEl, "scopeRefreshFolders", "true").classList.contains("ahs-theme-action-button")).toBe(true);
+
+    const cardHeaderButton = queryByDataset(tab.containerEl, "settingsCardToggle", "card-types");
+    expect(cardHeaderButton.classList.contains("ahs-theme-action-button")).toBe(false);
+
+    const folderToggleButton = queryByDataset(tab.containerEl, "folderToggle", "notes");
+    expect(folderToggleButton.classList.contains("ahs-theme-action-button")).toBe(false);
+
+    await expandCard(tab, "deck");
+    const fileDeckSetting = findSetting(tab.containerEl, "开启文件级自定义牌组");
+    await getToggle(fileDeckSetting).triggerChange(true);
+
+    const insertTemplateSetting = findSetting(tab.containerEl, "向当前文件插入牌组模板");
+    const insertTemplateButton = getButton(insertTemplateSetting);
+    expect(insertTemplateButton.buttonEl.classList.contains("ahs-theme-action-button")).toBe(true);
+
+    await insertTemplateButton.click();
+    expect(plugin.insertDeckTemplateCalls).toBe(1);
+  });
+
+  it("marks every settings toggle with theme state and updates the dataset on change", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await expandCard(tab, "sync-content");
+    await expandCard(tab, "deck");
+
+    const toggleSettings = [
+      findSetting(tab.containerEl, "添加 Obsidian 回链"),
+      findSetting(tab.containerEl, "同步 Obsidian 标签到 Anki"),
+      findSetting(tab.containerEl, "在卡片正文中保留纯标签行"),
+      findSetting(tab.containerEl, "高亮转填空题"),
+      findSetting(tab.containerEl, "开启文件级自定义牌组"),
+    ];
+
+    for (const setting of toggleSettings) {
+      const toggle = getToggle(setting);
+      expect(toggle.toggleEl.classList.contains("ahs-theme-toggle")).toBe(true);
+      expect(toggle.toggleEl.dataset.ahsToggleState).toBe(toggle.value ? "on" : "off");
+    }
+
+    const highlightsToggle = getToggle(findSetting(tab.containerEl, "高亮转填空题"));
+    const nextValue = !highlightsToggle.value;
+    await highlightsToggle.triggerChange(nextValue);
+
+    expect(highlightsToggle.toggleEl.dataset.ahsToggleState).toBe(nextValue ? "on" : "off");
   });
 
   it("auto saves toggle, heading, note type and field mapping edits", async () => {

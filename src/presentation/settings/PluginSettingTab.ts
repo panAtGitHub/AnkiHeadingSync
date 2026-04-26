@@ -1,4 +1,5 @@
 import { PluginSettingTab, Setting } from "obsidian";
+import type { ButtonComponent, ToggleComponent } from "obsidian";
 
 import {
   DEFAULT_OBSIDIAN_BACKLINK_LABEL,
@@ -49,6 +50,9 @@ const SETTINGS_PAGE_HEADER_PADDING_TOP = "12px";
 const SETTINGS_PAGE_HEADER_MASK_TOP = "-128px";
 const SETTINGS_PAGE_HEADER_MASK_SIDE = "-24px";
 const DECK_HELPER_TEXT_INDENT = "32px";
+const SETTINGS_ROOT_CLASS = "anki-heading-sync-settings";
+const THEME_ACTION_BUTTON_CLASS = "ahs-theme-action-button";
+const THEME_TOGGLE_CLASS = "ahs-theme-toggle";
 
 type SettingsCardId = (typeof SETTINGS_CARD_ORDER)[number];
 type NoteTypeCacheCheckStatus = "idle" | "checking" | "same" | "changed" | "failed";
@@ -110,6 +114,8 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     const previousScrollTop = containerEl.scrollTop;
 
+    containerEl.classList.add(SETTINGS_ROOT_CLASS);
+
     if (!this.displayInitialized) {
       containerEl.style.setProperty(SETTINGS_PAGE_HEADER_HEIGHT_VARIABLE, SETTINGS_PAGE_HEADER_HEIGHT_FALLBACK);
       containerEl.style.setProperty(SETTINGS_STICKY_CARD_GAP_VARIABLE, SETTINGS_STICKY_CARD_GAP);
@@ -160,6 +166,31 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     }
 
     containerEl.scrollTop = previousScrollTop;
+  }
+
+  private markThemeButton(buttonEl: HTMLButtonElement): void {
+    buttonEl.classList.add(THEME_ACTION_BUTTON_CLASS);
+  }
+
+  private markThemeButtonComponent(button: ButtonComponent): void {
+    this.markThemeButton(button.buttonEl);
+  }
+
+  private markThemeToggle(
+    toggle: ToggleComponent,
+    value: boolean,
+    onChange: (value: boolean) => void | Promise<void>,
+  ): void {
+    toggle.toggleEl.classList.add(THEME_TOGGLE_CLASS);
+    this.syncThemeToggleState(toggle, value);
+    toggle.setValue(value).onChange((nextValue) => {
+      this.syncThemeToggleState(toggle, nextValue);
+      return onChange(nextValue);
+    });
+  }
+
+  private syncThemeToggleState(toggle: ToggleComponent, value: boolean): void {
+    toggle.toggleEl.dataset.ahsToggleState = value ? "on" : "off";
   }
 
   private initializeCards(containerEl: HTMLElement): void {
@@ -297,6 +328,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         ? t("settings.cards.cardTypes.loadAnki.loading")
         : t("settings.cards.cardTypes.loadAnki.button"),
     }) as HTMLButtonElement;
+    this.markThemeButton(loadButton);
     loadButton.type = "button";
     loadButton.dataset.cardTypesRefresh = "true";
     loadButton.disabled = this.ankiConfigLoading;
@@ -573,7 +605,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.syncOptions.addObsidianBacklink.name"))
       .setDesc(t("settings.syncOptions.addObsidianBacklink.desc"))
       .addToggle((toggle) => {
-        toggle.setValue(this.plugin.settings.addObsidianBacklink).onChange((value) => {
+        this.markThemeToggle(toggle, this.plugin.settings.addObsidianBacklink, (value) => {
           void this.plugin.updateSettings({ addObsidianBacklink: value });
         });
       });
@@ -613,7 +645,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.syncOptions.syncObsidianTagsToAnki.name"))
       .setDesc(t("settings.syncOptions.syncObsidianTagsToAnki.desc"))
       .addToggle((toggle) => {
-        toggle.setValue(this.plugin.settings.syncObsidianTagsToAnki).onChange((value) => {
+        this.markThemeToggle(toggle, this.plugin.settings.syncObsidianTagsToAnki, (value) => {
           void this.plugin.updateSettings({ syncObsidianTagsToAnki: value });
         });
       });
@@ -622,7 +654,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.syncOptions.keepPureTagLinesInCardBody.name"))
       .setDesc(t("settings.syncOptions.keepPureTagLinesInCardBody.desc"))
       .addToggle((toggle) => {
-        toggle.setValue(this.plugin.settings.keepPureTagLinesInCardBody).onChange((value) => {
+        this.markThemeToggle(toggle, this.plugin.settings.keepPureTagLinesInCardBody, (value) => {
           void this.plugin.updateSettings({ keepPureTagLinesInCardBody: value });
         });
       });
@@ -632,7 +664,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.syncOptions.highlightsToCloze.name"))
       .setDesc(t("settings.syncOptions.highlightsToCloze.desc"))
       .addToggle((toggle) => {
-        toggle.setValue(this.plugin.settings.convertHighlightsToCloze).onChange((value) => {
+        this.markThemeToggle(toggle, this.plugin.settings.convertHighlightsToCloze, (value) => {
           void this.plugin.updateSettings({ convertHighlightsToCloze: value });
         });
       });
@@ -678,6 +710,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     const refreshRow = containerEl.createDiv();
     const refreshButton = refreshRow.createEl("button", { text: t("settings.cards.scope.refreshFolders") }) as HTMLButtonElement;
+    this.markThemeButton(refreshButton);
     refreshButton.type = "button";
     refreshButton.dataset.scopeRefreshFolders = "true";
     refreshButton.disabled = Boolean(this.folderTreeLoadPromise);
@@ -731,7 +764,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.deck.fileDeckEnabled.name"))
       .setDesc(t("settings.deck.fileDeckEnabled.desc"))
       .addToggle((toggle) => {
-        toggle.setValue(this.plugin.settings.fileDeckEnabled).onChange(async (value) => {
+        this.markThemeToggle(toggle, this.plugin.settings.fileDeckEnabled, async (value) => {
           await this.plugin.updateSettings({ fileDeckEnabled: value });
           this.renderCard("deck");
         });
@@ -794,6 +827,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         .setName(t("settings.deck.insertTemplate.name"))
         .setDesc(t("settings.deck.insertTemplate.desc"))
         .addButton((button) => {
+          this.markThemeButtonComponent(button);
           button.setButtonText(t("settings.deck.insertTemplate.button")).onClick(() => {
             void this.plugin.insertDeckTemplateToCurrentFile();
           });
