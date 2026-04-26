@@ -1416,13 +1416,16 @@ describe("PluginSettingTab", () => {
     const exampleRows = queryAllByDataset(exampleBlock, "deckExampleRow");
     expect(collectTexts(exampleBlock)).toContain("示例：");
     expect(exampleRows).toHaveLength(2);
+    expect(exampleBlock.style.marginLeft).toBe("32px");
     expect(exampleRows[0]?.style.color).toBe("var(--text-muted)");
     expect(exampleRows[0]?.style.fontSize).toBe("var(--font-ui-small)");
 
     const fallbackHelper = queryByDataset(section3, "deckHelperText", "fallback");
     const priorityFooter = queryByDataset(deckBody, "deckPriorityFooter", "true");
+    expect(fallbackHelper.style.marginLeft).toBe("32px");
     expect(fallbackHelper.style.color).toBe("var(--text-muted)");
     expect(fallbackHelper.style.fontSize).toBe("var(--font-ui-small)");
+    expect(priorityFooter.style.marginLeft).toBe("32px");
     expect(priorityFooter.style.color).toBe("var(--text-muted)");
     expect(priorityFooter.style.fontSize).toBe("var(--font-ui-small)");
     expect(collectTexts(section3)).not.toContain("最终牌组优先级：文件级自定义牌组 > 文件夹映射牌组 > 默认牌组。");

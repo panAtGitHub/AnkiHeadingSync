@@ -48,6 +48,7 @@ const SETTINGS_STICKY_CARD_GAP_VALUE = `var(${SETTINGS_STICKY_CARD_GAP_VARIABLE}
 const SETTINGS_PAGE_HEADER_PADDING_TOP = "12px";
 const SETTINGS_PAGE_HEADER_MASK_TOP = "-128px";
 const SETTINGS_PAGE_HEADER_MASK_SIDE = "-24px";
+const DECK_HELPER_TEXT_INDENT = "32px";
 
 type SettingsCardId = (typeof SETTINGS_CARD_ORDER)[number];
 type NoteTypeCacheCheckStatus = "idle" | "checking" | "same" | "changed" | "failed";
@@ -772,6 +773,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     exampleBlockEl.style.flexDirection = "column";
     exampleBlockEl.style.gap = "4px";
     exampleBlockEl.style.marginTop = "2px";
+    exampleBlockEl.style.marginLeft = DECK_HELPER_TEXT_INDENT;
 
     const titleEl = exampleBlockEl.createEl("strong", { text: t("settings.deck.examplesTitle") });
     titleEl.style.fontSize = "var(--font-ui-small)";
@@ -795,6 +797,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     helperEl.style.fontSize = "var(--font-ui-small)";
     helperEl.style.lineHeight = "1.4";
     helperEl.style.marginTop = "2px";
+    helperEl.style.marginLeft = DECK_HELPER_TEXT_INDENT;
     return helperEl;
   }
 
