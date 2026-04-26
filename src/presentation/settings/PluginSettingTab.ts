@@ -650,28 +650,26 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private renderDeckCard(containerEl: HTMLElement): void {
-    containerEl.createEl("p", { text: t("settings.cards.deck.desc") });
+    const folderMappingSection = this.createDeckSection(containerEl, "folder-mapping", t("settings.cards.deck.sections.folderMapping"));
+    new Setting(folderMappingSection)
+      .setName(t("settings.deck.folderDeckMode.name"))
+      .setDesc(t("settings.deck.folderDeckMode.desc"))
+      .addDropdown((dropdown) => {
+        this.populateFolderDeckModeDropdown(dropdown, this.plugin.settings.folderDeckMode);
+        dropdown.onChange((value) => {
+          if (value !== "off" && value !== "folder" && value !== "folder-and-file") {
+            return;
+          }
 
-    new Setting(containerEl)
-      .setName(t("settings.deck.defaultDeck.name"))
-      .setDesc(t("settings.deck.defaultDeck.desc"))
-      .addText((text) => {
-        text.setValue(this.getDraftValue("default-deck", this.plugin.settings.defaultDeck)).onChange((value) => {
-          this.scheduleDebouncedTextSave("default-deck", value, async (draftValue) => {
-            const nextValue = draftValue.trim();
-            if (!nextValue) {
-              this.textDraftValues.delete("default-deck");
-              this.renderCard("deck");
-              return;
-            }
-
-            await this.plugin.updateSettings({ defaultDeck: nextValue });
-            this.textDraftValues.delete("default-deck");
-          });
+          void this.plugin.updateSettings({ folderDeckMode: value as FolderDeckMode });
         });
       });
 
-    new Setting(containerEl)
+    folderMappingSection.createEl("p", { text: t("settings.deck.folderExample") });
+    folderMappingSection.createEl("p", { text: t("settings.deck.folderAndFileExample") });
+
+    const fileDeckSection = this.createDeckSection(containerEl, "file-deck", t("settings.cards.deck.sections.fileDeck"));
+    new Setting(fileDeckSection)
       .setName(t("settings.deck.fileDeckEnabled.name"))
       .setDesc(t("settings.deck.fileDeckEnabled.desc"))
       .addToggle((toggle) => {
@@ -682,7 +680,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       });
 
     if (this.plugin.settings.fileDeckEnabled) {
-      new Setting(containerEl)
+      new Setting(fileDeckSection)
         .setName(t("settings.deck.marker.name"))
         .setDesc(t("settings.deck.marker.desc"))
         .addText((text) => {
@@ -701,7 +699,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
           });
         });
 
-      new Setting(containerEl)
+      new Setting(fileDeckSection)
         .setName(t("settings.deck.template.name"))
         .setDesc(t("settings.deck.template.desc"))
         .addText((text) => {
@@ -720,7 +718,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
           });
         });
 
-      new Setting(containerEl)
+      new Setting(fileDeckSection)
         .setName(t("settings.deck.insertLocation.name"))
         .setDesc(t("settings.deck.insertLocation.desc"))
         .addDropdown((dropdown) => {
@@ -734,7 +732,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
           });
         });
 
-      new Setting(containerEl)
+      new Setting(fileDeckSection)
         .setName(t("settings.deck.insertTemplate.name"))
         .setDesc(t("settings.deck.insertTemplate.desc"))
         .addButton((button) => {
@@ -744,23 +742,43 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         });
     }
 
-    new Setting(containerEl)
-      .setName(t("settings.deck.folderDeckMode.name"))
-      .setDesc(t("settings.deck.folderDeckMode.desc"))
-      .addDropdown((dropdown) => {
-        this.populateFolderDeckModeDropdown(dropdown, this.plugin.settings.folderDeckMode);
-        dropdown.onChange((value) => {
-          if (value !== "off" && value !== "folder" && value !== "folder-and-file") {
-            return;
-          }
+    const defaultDeckSection = this.createDeckSection(containerEl, "default-deck", t("settings.cards.deck.sections.defaultDeck"));
+    new Setting(defaultDeckSection)
+      .setName(t("settings.deck.defaultDeck.name"))
+      .setDesc(t("settings.deck.defaultDeck.desc"))
+      .addText((text) => {
+        text.setValue(this.getDraftValue("default-deck", this.plugin.settings.defaultDeck)).onChange((value) => {
+          this.scheduleDebouncedTextSave("default-deck", value, async (draftValue) => {
+            const nextValue = draftValue.trim();
+            if (!nextValue) {
+              this.textDraftValues.delete("default-deck");
+              this.renderCard("deck");
+              return;
+            }
 
-          void this.plugin.updateSettings({ folderDeckMode: value as FolderDeckMode });
+            await this.plugin.updateSettings({ defaultDeck: nextValue });
+            this.textDraftValues.delete("default-deck");
+          });
         });
       });
 
-    containerEl.createEl("p", { text: t("settings.deck.folderExample") });
-    containerEl.createEl("p", { text: t("settings.deck.folderAndFileExample") });
-    containerEl.createEl("p", { text: t("settings.deck.priorityDesc") });
+    defaultDeckSection.createEl("p", { text: t("settings.deck.fallbackDesc") });
+    defaultDeckSection.createEl("p", { text: t("settings.deck.priorityDesc") });
+  }
+
+  private createDeckSection(containerEl: HTMLElement, sectionId: string, title: string): HTMLElement {
+    const sectionEl = containerEl.createDiv();
+    sectionEl.dataset.deckSection = sectionId;
+    sectionEl.style.display = "flex";
+    sectionEl.style.flexDirection = "column";
+    sectionEl.style.gap = "8px";
+    sectionEl.style.marginTop = "16px";
+
+    const titleEl = sectionEl.createEl("h4", { text: title });
+    titleEl.dataset.deckSectionTitle = sectionId;
+    titleEl.style.margin = "0";
+
+    return sectionEl;
   }
 
   private renderCommandsCard(containerEl: HTMLElement): void {

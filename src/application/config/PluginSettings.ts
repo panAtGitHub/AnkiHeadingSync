@@ -90,7 +90,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   fileDeckMarker: "TARGET DECK",
   fileDeckTemplate: "obsidian::filename",
   fileDeckInsertLocation: "body",
-  folderDeckMode: "off",
+  folderDeckMode: "folder-and-file",
   scopeMode: "all",
   includeFolders: [],
   excludeFolders: [],

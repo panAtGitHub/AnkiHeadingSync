@@ -187,8 +187,9 @@ export const en = {
       },
       folderExample: "Folder-based mapping example: 数学/第一章/第一节.md -> 数学::第一章",
       folderAndFileExample: "Folder-and-file mapping example: 数学/第一章/第一节.md -> 数学::第一章::第一节",
+      fallbackDesc: "If neither folder-and-file mapping nor file-level custom decks are used, the default deck name is used as the Anki deck.",
       priorityTitle: "Final priority",
-      priorityDesc: "Final deck priority: file-level custom deck > folder-mapped deck > default deck. Existing-card deck behavior stays aligned with the current sync implementation.",
+      priorityDesc: "Final deck priority: file-level custom deck > folder-mapped deck > default deck.",
     },
     scope: {
       name: "Plugin run scope",
@@ -289,8 +290,13 @@ export const en = {
         refreshFolders: "Refresh folder list",
       },
       deck: {
-        title: "Deck and deck rules",
-        desc: "Keep the current deck behavior, but refresh only this card when file-level deck mode changes.",
+        title: "Card deck settings",
+        desc: "Card deck settings are grouped by recommended workflow.",
+        sections: {
+          folderMapping: "1. Recommended: use folder-and-file mapping for Anki decks",
+          fileDeck: "2. Optional: enable file-level custom decks",
+          defaultDeck: "3. Fallback: use the default deck",
+        },
       },
       commands: {
         title: "Command guide",

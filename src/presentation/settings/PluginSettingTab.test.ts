@@ -551,6 +551,16 @@ function collectSettingNames(container: QueryRoot): string[] {
   return asFakeContainer(container).settings.map((setting) => setting.name);
 }
 
+function collectOwnedSettingNames(container: FakeElementInstance): string[] {
+  return container.ownedSettings.map((setting) => setting.name);
+}
+
+function collectOwnedSettingDescs(container: FakeElementInstance): string[] {
+  return container.ownedSettings
+    .map((setting) => setting.desc)
+    .filter((desc): desc is string => typeof desc === "string");
+}
+
 function collectOptionValues(selectEl: FakeElementInstance): string[] {
   return selectEl.children
     .filter((element) => element.tag === "option")
@@ -1374,5 +1384,75 @@ describe("PluginSettingTab", () => {
 
     expect(plugin.settings.fileDeckEnabled).toBe(true);
     expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
+  });
+
+  it("renders the deck card with regrouped sections and normalized Chinese copy", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    expect(queryByDataset(tab.containerEl, "settingsCardToggle", "deck").textContent).toContain("卡片牌组设置");
+    expect(queryByDataset(tab.containerEl, "settingsCardToggle", "deck").textContent).not.toContain("Deck 与牌组规则");
+
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "deck").trigger("click");
+
+    const deckBody = queryByDataset(tab.containerEl, "settingsCardBody", "deck");
+    const sectionTitles = queryAllByDataset(deckBody, "deckSectionTitle").map((element) => element.textContent || element.text);
+    expect(sectionTitles).toEqual([
+      "1，推荐用「文件夹及文件名」作为「Anki牌组」",
+      "2，可打开「文件级自定义牌组」，作为个性化定制",
+      "3，默认牌组作为兜底",
+    ]);
+
+    const section1 = queryByDataset(deckBody, "deckSection", "folder-mapping");
+    const section2 = queryByDataset(deckBody, "deckSection", "file-deck");
+    const section3 = queryByDataset(deckBody, "deckSection", "default-deck");
+
+    expect(collectTexts(deckBody)).not.toContain("保留现有 deck 行为；切换文件级 deck 开关时只刷新这一张卡片。");
+    expect(collectTexts(deckBody)).toContain("若均不打开「文件夹及文件名」及「文件级」牌组，则以「默认牌组名称」作为 Anki 的牌组名。");
+    expect(collectTexts(deckBody)).toContain("最终牌组优先级：文件级自定义牌组 > 文件夹映射牌组 > 默认牌组。");
+
+    expect(collectOwnedSettingNames(section1)).toEqual(["文件夹映射模式"]);
+    expect(collectOwnedSettingNames(section2)).toEqual(["开启文件级自定义牌组"]);
+    expect(collectOwnedSettingNames(section3)).toEqual(["默认牌组"]);
+
+    const visibleDeckCopy = [
+      ...collectTexts(deckBody),
+      ...collectOwnedSettingNames(section1),
+      ...collectOwnedSettingNames(section2),
+      ...collectOwnedSettingNames(section3),
+      ...collectOwnedSettingDescs(section1),
+      ...collectOwnedSettingDescs(section2),
+      ...collectOwnedSettingDescs(section3),
+    ].join("\n");
+    expect(visibleDeckCopy).not.toContain("文件级 deck");
+    expect(visibleDeckCopy).not.toContain("deck 模板");
+    expect(visibleDeckCopy).not.toContain("deck 声明");
+    expect(visibleDeckCopy).not.toContain("最终 deck 优先级");
+    expect(visibleDeckCopy).not.toContain("Deck 与牌组规则");
+    expect(findSetting(tab.containerEl, "默认牌组")).toBeDefined();
+    expect(findSetting(tab.containerEl, "文件夹映射模式")).toBeDefined();
+    expect(findSetting(tab.containerEl, "开启文件级自定义牌组")).toBeDefined();
+  });
+
+  it("keeps file-level custom deck controls in section 2 when enabled", async () => {
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "deck").trigger("click");
+
+    const fileDeckSetting = findSetting(tab.containerEl, "开启文件级自定义牌组");
+    await getToggle(fileDeckSetting).triggerChange(true);
+
+    const deckBody = queryByDataset(tab.containerEl, "settingsCardBody", "deck");
+    const section2 = queryByDataset(deckBody, "deckSection", "file-deck");
+    expect(collectOwnedSettingNames(section2)).toEqual([
+      "开启文件级自定义牌组",
+      "牌组识别名",
+      "默认牌组模板",
+      "模板插入位置",
+      "向当前文件插入牌组模板",
+    ]);
   });
 });

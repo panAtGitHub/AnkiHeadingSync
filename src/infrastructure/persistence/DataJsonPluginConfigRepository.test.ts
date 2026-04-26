@@ -40,7 +40,7 @@ describe("DataJsonPluginConfigRepository", () => {
     expect(settings.fileDeckMarker).toBe("TARGET DECK");
     expect(settings.fileDeckTemplate).toBe("obsidian::filename");
     expect(settings.fileDeckInsertLocation).toBe("body");
-    expect(settings.folderDeckMode).toBe("off");
+    expect(settings.folderDeckMode).toBe("folder-and-file");
     expect(settings.qaGroupMarker).toBe("#anki-list");
     expect(settings.cardAnswerCutoffMode).toBe("heading-block");
     expect(settings.semanticQaMarker).toBe("#anki-list-qa");
@@ -48,6 +48,20 @@ describe("DataJsonPluginConfigRepository", () => {
     expect(settings.obsidianBacklinkLabel).toBe("Open in Obsidian");
     expect(settings.obsidianBacklinkPlacement).toBe("answer-last-line");
     expect(settings.ankiModelFieldCache).toEqual({});
+  });
+
+  it("preserves an explicit existing folderDeckMode value on load", async () => {
+    const repository = new DataJsonPluginConfigRepository(
+      new InMemoryPluginDataStore({
+        settings: {
+          folderDeckMode: "off",
+        },
+      }),
+    );
+
+    const settings = await repository.load();
+
+    expect(settings.folderDeckMode).toBe("off");
   });
 
   it("normalizes blank backlink labels on load and save", async () => {

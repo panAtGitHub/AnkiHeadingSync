@@ -72,7 +72,7 @@ describe("PluginSettings", () => {
     expect(DEFAULT_SETTINGS.fileDeckMarker).toBe("TARGET DECK");
     expect(DEFAULT_SETTINGS.fileDeckTemplate).toBe("obsidian::filename");
     expect(DEFAULT_SETTINGS.fileDeckInsertLocation).toBe("body");
-    expect(DEFAULT_SETTINGS.folderDeckMode).toBe("off");
+    expect(DEFAULT_SETTINGS.folderDeckMode).toBe("folder-and-file");
     expect(DEFAULT_SETTINGS.qaGroupMarker).toBe("#anki-list");
     expect(DEFAULT_SETTINGS.cardAnswerCutoffMode).toBe("heading-block");
     expect(DEFAULT_SETTINGS.obsidianBacklinkLabel).toBe(DEFAULT_OBSIDIAN_BACKLINK_LABEL);
