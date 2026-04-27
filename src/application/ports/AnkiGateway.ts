@@ -44,20 +44,6 @@ export interface DeckStat {
   noteCount?: number;
 }
 
-export interface AnkiModelTemplate {
-  name: string;
-  front: string;
-  back: string;
-}
-
-export interface CreateAnkiModelInput {
-  modelName: string;
-  fieldNames: string[];
-  templates: AnkiModelTemplate[];
-  css: string;
-  isCloze?: boolean;
-}
-
 export interface AnkiNoteDetails extends AnkiNoteSummary {
   fields: Record<string, string>;
 }
@@ -86,13 +72,6 @@ export interface AnkiGateway {
 export interface AnkiGroupGateway extends AnkiGateway {
   getModelFieldNames(modelName: string): Promise<string[]>;
   getModelFieldNamesByModelNames(modelNames: string[]): Promise<Record<string, string[]>>;
-  getModelTemplates(modelName: string): Promise<Record<string, AnkiModelTemplate>>;
-  getModelStyling(modelName: string): Promise<string>;
-  createModel(input: CreateAnkiModelInput): Promise<void>;
-  addModelField(modelName: string, fieldName: string): Promise<void>;
-  addModelTemplate(modelName: string, template: AnkiModelTemplate): Promise<void>;
-  updateModelTemplate(modelName: string, template: AnkiModelTemplate): Promise<void>;
-  updateModelStyling(modelName: string, css: string): Promise<void>;
   findNoteIds(query: string): Promise<number[]>;
   getNoteDetails(noteIds: number[]): Promise<AnkiNoteDetails[]>;
 }

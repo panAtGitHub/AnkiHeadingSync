@@ -68,7 +68,6 @@ describe("ManualSyncService", () => {
 
     expect(result.created).toBe(1);
     expect(result.rewrittenMarkers).toBe(1);
-    expect(ankiGateway.createdModels).toEqual([]);
     expect(ankiGateway.addedNotes[0]?.modelName).toBe(QA_GROUP_USER_NOTE_TYPE);
     expect(ankiGateway.addedNotes[0]?.fields).toMatchObject({
       题目: "Concepts",

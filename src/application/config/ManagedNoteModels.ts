@@ -1,1 +1,0 @@
-export const QA_GROUP_MODEL_NAME = "ObsiAnki QA Group 12";

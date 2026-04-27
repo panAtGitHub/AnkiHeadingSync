@@ -26,7 +26,6 @@ describe("QaGroupSyncService", () => {
     const result = await service.sync([createIndexedGroupBlock()], createEmptyPluginState(), createModule3Settings());
 
     expect(result.created).toBe(1);
-    expect(ankiGateway.createdModels).toEqual([]);
     expect(ankiGateway.addedNotes[0]?.modelName).toBe(QA_GROUP_USER_NOTE_TYPE);
     expect(ankiGateway.addedNotes[0]?.fields.题目).toBe("Concepts");
     expect(ankiGateway.addedNotes[0]?.fields.问题01).toBe("Alpha");
@@ -210,7 +209,6 @@ describe("QaGroupSyncService", () => {
       obsidianBacklinkPlacement: "answer-first-line",
     }));
 
-    expect(ankiGateway.createdModels).toEqual([]);
     expect(ankiGateway.addedNotes[0]?.fields.答案01).toContain('Open &lt;Vault&gt;');
     expect(ankiGateway.addedNotes[0]?.fields.答案01).toMatch(/^<p><a class="anki-heading-sync-backlink"/);
     expect(ankiGateway.addedNotes[0]?.fields).not.toHaveProperty("Src");

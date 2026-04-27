@@ -62,7 +62,7 @@ describe("QaGroupFieldMappingService", () => {
   it("supports the legacy Stem plus Sxx_Q/Sxx_A shape as a normal user template", () => {
     const service = new QaGroupFieldMappingService();
 
-    const mapping = service.suggest("ObsiAnki QA Group 12", ["Stem", "S01_Q", "S01_A", "S02_Q", "S02_A"]);
+    const mapping = service.suggest("QA Group List", ["Stem", "S01_Q", "S01_A", "S02_Q", "S02_A"]);
 
     expect(mapping.titleField).toBe("Stem");
     expect(mapping.slots).toEqual([

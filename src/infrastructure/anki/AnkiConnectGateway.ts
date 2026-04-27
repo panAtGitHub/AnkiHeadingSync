@@ -1,7 +1,7 @@
 import { requestUrl } from "obsidian";
 
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
-import type { AddAnkiNoteInput, AnkiGroupGateway, AnkiModelTemplate, AnkiNoteDetails, AnkiNoteSummary, ChangeDeckInput, CreateAnkiModelInput, DeckStat, SyncAnkiNoteTagsInput, UpdateAnkiNoteInput, UpdateAnkiNoteModelInput } from "@/application/ports/AnkiGateway";
+import type { AddAnkiNoteInput, AnkiGroupGateway, AnkiNoteDetails, AnkiNoteSummary, ChangeDeckInput, DeckStat, SyncAnkiNoteTagsInput, UpdateAnkiNoteInput, UpdateAnkiNoteModelInput } from "@/application/ports/AnkiGateway";
 import type { MediaAsset } from "@/domain/card/entities/RenderedFields";
 
 interface AnkiResponse<T> {
@@ -31,21 +31,6 @@ interface RawDeckStats {
   deck_id?: number;
   name?: string;
   total_in_deck?: number;
-}
-
-type ModelTemplates = Record<string, { Front?: string; Back?: string }>;
-
-interface ModelStylingResponse {
-  css?: string;
-}
-
-function buildModelUpdateParams(modelName: string, updates: Record<string, unknown>): Record<string, unknown> {
-  return {
-    model: {
-      name: modelName,
-      ...updates,
-    },
-  };
 }
 
 export class AnkiConnectGateway implements AnkiGroupGateway {
@@ -100,69 +85,6 @@ export class AnkiConnectGateway implements AnkiGroupGateway {
 
       return fieldNamesByModelName;
     }, {});
-  }
-
-  async getModelTemplates(modelName: string): Promise<Record<string, AnkiModelTemplate>> {
-    const templates = await this.invoke<ModelTemplates>("modelTemplates", { modelName });
-    return Object.fromEntries(Object.entries(templates).map(([templateName, template]) => [templateName, {
-      name: templateName,
-      front: template.Front ?? "",
-      back: template.Back ?? "",
-    }]));
-  }
-
-  async getModelStyling(modelName: string): Promise<string> {
-    const styling = await this.invoke<ModelStylingResponse | string>("modelStyling", { modelName });
-    if (typeof styling === "string") {
-      return styling;
-    }
-
-    return styling.css ?? "";
-  }
-
-  async createModel(input: CreateAnkiModelInput): Promise<void> {
-    await this.invoke("createModel", {
-      modelName: input.modelName,
-      inOrderFields: input.fieldNames,
-      css: input.css,
-      isCloze: Boolean(input.isCloze),
-      cardTemplates: input.templates.map((template) => ({
-        Name: template.name,
-        Front: template.front,
-        Back: template.back,
-      })),
-    });
-  }
-
-  async addModelField(modelName: string, fieldName: string): Promise<void> {
-    await this.invoke("modelFieldAdd", {
-      modelName,
-      fieldName,
-    });
-  }
-
-  async addModelTemplate(modelName: string, template: AnkiModelTemplate): Promise<void> {
-    await this.invoke("modelTemplateAdd", {
-      modelName,
-      templateName: template.name,
-      Front: template.front,
-      Back: template.back,
-    });
-  }
-
-  async updateModelTemplate(modelName: string, template: AnkiModelTemplate): Promise<void> {
-    await this.invoke("updateModelTemplates", buildModelUpdateParams(modelName, {
-      templates: {
-        [template.name]: {
-          Front: template.front,
-          Back: template.back,
-        },
-      },
-    }));
-  }
-
-  async updateModelStyling(modelName: string, css: string): Promise<void> {
-    await this.invoke("updateModelStyling", buildModelUpdateParams(modelName, { css }));
   }
 
   async findNoteIds(query: string): Promise<number[]> {
