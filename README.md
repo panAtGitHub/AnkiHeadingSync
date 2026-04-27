@@ -6,7 +6,7 @@ Anki Heading Sync is an Obsidian desktop plugin for syncing Markdown heading blo
 
 - Sync basic Q&A cards from heading blocks
 - Sync cloze cards from heading blocks with cloze-specific recognition
-- Sync QA Group list blocks into managed group notes
+- Sync QA Group list blocks into multi-level list QA notes
 - Sync the current file or all in-scope files in the vault
 - Write Anki IDs and GI markers back into Markdown after sync
 - Support deck routing, Obsidian backlinks, tag sync, and current-file reset

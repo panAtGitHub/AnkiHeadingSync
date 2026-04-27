@@ -62,6 +62,10 @@ export function migratePluginState(pluginState?: PluginState | LegacyPluginState
     }
 
     const nextCard = migrateCardState(rawCard, noteId);
+    if (!nextCard) {
+      continue;
+    }
+
     const noteKey = toNoteIdKey(noteId);
     const existingCard = cards[noteKey];
     if (!existingCard || existingCard.lastSyncedAt <= nextCard.lastSyncedAt) {
@@ -99,11 +103,16 @@ export function migratePluginState(pluginState?: PluginState | LegacyPluginState
     files,
     cards,
     groupBlocks,
-    pendingWriteBack: [],
+    pendingWriteBack: migratePendingWriteBack(pluginState.pendingWriteBack),
   };
 }
 
-function migrateCardState(rawCard: LegacyCardState, noteId: number): CardState {
+function migrateCardState(rawCard: LegacyCardState, noteId: number): CardState | null {
+  const cardType = sanitizeCardType(rawCard.cardType);
+  if (!cardType) {
+    return null;
+  }
+
   return {
     noteId,
     filePath: typeof rawCard.filePath === "string" ? rawCard.filePath : "",
@@ -113,7 +122,7 @@ function migrateCardState(rawCard: LegacyCardState, noteId: number): CardState {
       : (typeof rawCard.heading === "string" ? rawCard.heading : ""),
     headingLevel: typeof rawCard.headingLevel === "number" ? rawCard.headingLevel : 1,
     bodyMarkdown: typeof rawCard.bodyMarkdown === "string" ? rawCard.bodyMarkdown : "",
-    cardType: sanitizeCardType(rawCard.cardType),
+    cardType,
     blockStartOffset: typeof rawCard.blockStartOffset === "number" ? rawCard.blockStartOffset : 0,
     blockEndOffset: typeof rawCard.blockEndOffset === "number" ? rawCard.blockEndOffset : 0,
     blockStartLine: typeof rawCard.blockStartLine === "number" ? rawCard.blockStartLine : 1,
@@ -134,12 +143,12 @@ function migrateCardState(rawCard: LegacyCardState, noteId: number): CardState {
   };
 }
 
-function sanitizeCardType(value: unknown): CardState["cardType"] {
-  if (value === "cloze") {
+function sanitizeCardType(value: unknown): CardState["cardType"] | undefined {
+  if (value === "basic" || value === "cloze") {
     return value;
   }
 
-  return "basic";
+  return undefined;
 }
 
 function migrateGroupBlockState(rawGroupBlock: LegacyGroupBlockState, groupId: string): GroupBlockState | null {
@@ -230,6 +239,53 @@ function collectMigratedFileNoteIds(
   return Array.from(noteIds);
 }
 
+function migratePendingWriteBack(pendingWriteBack: LegacyPendingWriteBackState[] | undefined): PendingWriteBackState[] {
+  if (!Array.isArray(pendingWriteBack)) {
+    return [];
+  }
+
+  return pendingWriteBack.flatMap((rawPending) => {
+    const nextPending = migratePendingWriteBackState(rawPending);
+    return nextPending ? [nextPending] : [];
+  });
+}
+
+function migratePendingWriteBackState(rawPending: LegacyPendingWriteBackState): PendingWriteBackState | null {
+  const filePath = sanitizeNonEmptyString(rawPending.filePath);
+  const blockStartLine = sanitizePositiveInteger(rawPending.blockStartLine);
+  const expectedFileHash = sanitizeNonEmptyString(rawPending.expectedFileHash);
+  const targetMarker = sanitizeNonEmptyString(rawPending.targetMarker);
+  const rawBlockHash = sanitizeNonEmptyString(rawPending.rawBlockHash);
+  const targetNoteId = sanitizeNoteId(rawPending.targetNoteId);
+
+  if (!filePath || !blockStartLine || !expectedFileHash || !targetMarker || !rawBlockHash || !targetNoteId) {
+    return null;
+  }
+
+  const markerKind = sanitizeMarkerKind(rawPending.markerKind);
+  if (rawPending.markerKind !== undefined && !markerKind) {
+    return null;
+  }
+
+  const targetGroupId = rawPending.targetGroupId === undefined
+    ? undefined
+    : sanitizeNonEmptyString(rawPending.targetGroupId);
+  if (rawPending.targetGroupId !== undefined && !targetGroupId) {
+    return null;
+  }
+
+  return {
+    filePath,
+    blockStartLine,
+    expectedFileHash,
+    targetMarker,
+    rawBlockHash,
+    targetNoteId,
+    markerKind,
+    targetGroupId,
+  };
+}
+
 function collectMigratedFileGroupIds(
   rawFile: LegacyFileState,
   rawGroupBlocks: Record<string, LegacyGroupBlockState>,
@@ -243,4 +299,16 @@ function collectMigratedFileGroupIds(
 
 function sanitizeNoteId(value: unknown): number | undefined {
   return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function sanitizePositiveInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function sanitizeNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function sanitizeMarkerKind(value: unknown): PendingWriteBackState["markerKind"] | undefined {
+  return value === "card-id" || value === "group-gi" ? value : undefined;
 }

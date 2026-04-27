@@ -33,14 +33,14 @@ export const en = {
       },
     },
     qaGroup: {
-      title: "QA Group 12",
+      title: "QA Group list notes",
       marker: {
         name: "QA Group marker",
-        desc: "When a QA heading ends with this hashtag marker, the whole heading block syncs as one ObsiAnki QA Group 12 note.",
+        desc: "When a QA heading ends with this hashtag marker, the whole heading block syncs as one QA Group list note.",
         placeholder: "#anki-list",
       },
-      managedNoteType: "Managed note type: {{modelName}}. QA Group sync writes Stem / GroupId / Src / S01..S12 directly. The same note type can also appear in the field mapping panels below if you want to reuse it for other routes.",
-      managedModelContract: "Managed model contract: {{fieldCount}} fields and {{templateCount}} templates are checked automatically during sync.",
+      managedNoteType: "Current note type: {{modelName}}. This route syncs QA Group list notes using the field mapping shown below.",
+      managedModelContract: "Current note type summary: {{fieldCount}} fields and {{templateCount}} templates are available for this route.",
     },
     syncOptions: {
       addObsidianBacklink: {
@@ -204,9 +204,9 @@ export const en = {
         advancedHint: "Advanced: keep AnkiConnect URL here without promoting it to a separate status card.",
         markerPlaceholder: "/",
         fieldsUnavailable: "-- Read fields first --",
-        autoManagedField: "Managed automatically",
+        autoManagedField: "Written automatically",
         autoComposedAnswer: "Auto composed",
-        qaGroupManagedNoteType: "{{modelName}} (managed automatically)",
+        qaGroupManagedNoteType: "{{modelName}} (for QA Group list notes)",
         statusLabel: "Status: ",
         cacheEmpty: "There are no cached Anki note templates yet. Read the Anki template config manually.",
         cacheSummary: "Currently using {{noteTypeCount}} cached note templates with {{configuredCount}} selected card modes configured.",

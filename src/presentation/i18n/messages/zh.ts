@@ -31,14 +31,14 @@ export const zh = {
       },
     },
     qaGroup: {
-      title: "QA Group 12",
+      title: "问答题（多级列表形式）",
       marker: {
         name: "QA Group 标记",
-        desc: "当 QA 标题以这个 hashtag 标记结尾时，整个标题块会作为一张 ObsiAnki QA Group 12 笔记同步。",
+        desc: "当 QA 标题以这个 hashtag 标记结尾时，整个标题块会同步为一条多级列表问答笔记。",
         placeholder: "#anki-list",
       },
-      managedNoteType: "托管笔记类型：{{modelName}}。QA Group 同步会直接写入 Stem / GroupId / Src / S01..S12。如果你想在其他同步路径里复用它，它也会出现在下面的字段映射面板中。",
-      managedModelContract: "托管模型约束：同步时会自动检查 {{fieldCount}} 个字段和 {{templateCount}} 个模板。",
+      managedNoteType: "当前笔记类型：{{modelName}}。这条路线会按下方字段映射同步多级列表问答内容。",
+      managedModelContract: "当前笔记类型摘要：这条路线可用 {{fieldCount}} 个字段和 {{templateCount}} 个模板。",
     },
     syncOptions: {
       addObsidianBacklink: {
@@ -202,9 +202,9 @@ export const zh = {
         advancedHint: "高级项：将 AnkiConnect URL 保留在这里，不单独做连接状态卡片。",
         markerPlaceholder: "/",
         fieldsUnavailable: "-- 请先读取字段 --",
-        autoManagedField: "自动维护",
+        autoManagedField: "自动写入",
         autoComposedAnswer: "自动拼接",
-        qaGroupManagedNoteType: "{{modelName}}（自动维护）",
+        qaGroupManagedNoteType: "{{modelName}}（用于多级列表问答）",
         statusLabel: "状态：",
         cacheEmpty: "当前没有已缓存的 Anki 笔记模板。请手动读取 Anki 里的模板配置。",
         cacheSummary: "当前使用缓存的 {{noteTypeCount}} 个笔记模板，已选择并配置 {{configuredCount}} 个卡片模式。",
