@@ -293,6 +293,9 @@ describe("CardIndexingService", () => {
           "#### Cloze #anki-cloze",
           "{{c1::Answer}}",
           "",
+          "#### Cloze All #anki-cloze-all",
+          "{Answer}",
+          "",
           "#### Concepts #anki-list",
           "- Alpha",
           "  - First answer",
@@ -306,7 +309,11 @@ describe("CardIndexingService", () => {
       },
     );
 
-    expect(indexedFile.cards.map((card) => card.cardType)).toEqual(["basic", "cloze"]);
+    expect(indexedFile.cards.map((card) => ({ cardType: card.cardType, clozeMode: card.clozeMode }))).toEqual([
+      { cardType: "basic", clozeMode: undefined },
+      { cardType: "cloze", clozeMode: "sequential" },
+      { cardType: "cloze", clozeMode: "all" },
+    ]);
     expect(indexedFile.groupBlocks?.[0]).toMatchObject({
       headingText: "Concepts #anki-list",
       headingLevel: 4,
@@ -333,6 +340,43 @@ describe("CardIndexingService", () => {
           },
           cloze: {
             ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+            enabled: false,
+          },
+        },
+        fileStamp: "1:1",
+        knownCards: [],
+        pendingWriteBack: [],
+      },
+    );
+
+    expect(indexedFile.cards).toHaveLength(0);
+    expect(indexedFile.groupBlocks ?? []).toHaveLength(0);
+  });
+
+  it("does not produce cloze-all cards when the cloze-all config is disabled", () => {
+    const service = new CardIndexingService();
+    const indexedFile = service.index(
+      {
+        path: "notes/example.md",
+        basename: "example",
+        content: [
+          "#### Cloze All #anki-cloze-all",
+          "{Answer}",
+        ].join("\n"),
+      },
+      {
+        cardTypeConfigs: {
+          ...DEFAULT_SETTINGS.cardTypeConfigs,
+          basic: {
+            ...DEFAULT_SETTINGS.cardTypeConfigs.basic,
+            enabled: false,
+          },
+          cloze: {
+            ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+            enabled: false,
+          },
+          "cloze-all": {
+            ...DEFAULT_SETTINGS.cardTypeConfigs["cloze-all"],
             enabled: false,
           },
         },

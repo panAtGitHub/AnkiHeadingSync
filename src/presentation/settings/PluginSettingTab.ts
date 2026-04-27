@@ -36,7 +36,7 @@ import { buildFolderTreeSelection, toggleFolderTreeSelection, type FolderTreeSel
 const FOLDER_TREE_STATUS_LOADING: UserFacingMessage = { key: "settings.scope.loading" };
 const TEXT_SAVE_DEBOUNCE_MS = 500;
 const SETTINGS_CARD_ORDER = ["card-types", "sync-content", "deck", "scope", "commands"] as const;
-const VISIBLE_CARD_TYPE_CONFIG_IDS = ["basic", "qa-group", "cloze"] as const;
+const VISIBLE_CARD_TYPE_CONFIG_IDS = ["basic", "qa-group", "cloze", "cloze-all"] as const;
 const SETTINGS_STICKY_CARD_GAP_PX = 8;
 const SETTINGS_PAGE_HEADER_FALLBACK_HEIGHT_PX = 64;
 const SETTINGS_PAGE_HEADER_BACKGROUND = "var(--modal-background, var(--background-primary))";
@@ -384,6 +384,16 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         }
       });
     });
+
+    if (configId === "cloze-all") {
+      const sharedHintEl = blockEl.createEl("p", {
+        text: t("settings.cards.cardTypes.sharedClozeMappingHint"),
+      });
+      sharedHintEl.dataset.cardTypeSharedHint = configId;
+      sharedHintEl.style.margin = "0";
+      sharedHintEl.style.color = "var(--text-muted)";
+      return;
+    }
 
     const ankiRow = blockEl.createDiv();
     ankiRow.style.display = "grid";
@@ -1168,7 +1178,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     ankiModelFieldCache: AnkiHeadingSyncPlugin["settings"]["ankiModelFieldCache"] = this.plugin.settings.ankiModelFieldCache,
   ): Promise<void> {
     for (const configId of VISIBLE_CARD_TYPE_CONFIG_IDS) {
-      if (configId === "qa-group") {
+      if (configId === "qa-group" || configId === "cloze-all") {
         continue;
       }
 
@@ -1646,7 +1656,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       return "qa-group";
     }
 
-    return configId === "cloze" ? "cloze" : "basic";
+    return configId === "cloze" || configId === "cloze-all" ? "cloze" : "basic";
   }
 
   private ensureFolderTreeLoaded(forceReload = false): void {
@@ -1960,6 +1970,10 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     if (configId === "cloze") {
       return t("settings.cards.cardTypes.rows.cloze");
+    }
+
+    if (configId === "cloze-all") {
+      return t("settings.cards.cardTypes.rows.clozeAll");
     }
 
     return t("settings.cards.cardTypes.rows.qaGroup");

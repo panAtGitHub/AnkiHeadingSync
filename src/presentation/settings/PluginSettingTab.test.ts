@@ -774,7 +774,7 @@ describe("PluginSettingTab", () => {
     expect(resizeObserver?.disconnected).toBe(true);
   });
 
-  it("renders card 1 as three readable card type blocks", async () => {
+  it("renders card 1 as four readable card type blocks", async () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
@@ -786,12 +786,17 @@ describe("PluginSettingTab", () => {
     expect(() => findSetting(tab.containerEl, "AnkiConnect URL")).toThrow("Setting not found");
 
     const rowLabels = findElements(tab.containerEl, (element) => element.dataset.cardTypeConfig !== undefined)
-      .map((row) => collectTexts(row).find((text) => text.includes("题")));
+      .map((row) => collectTexts(row).find((text) => text.includes("（")));
     expect(rowLabels).toEqual([
       "问答题（常规段落形式）",
       "问答题（多级列表形式）",
-      "填空题",
+      "填空题（逐个挖空）",
+      "填空题（全部挖空）",
     ]);
+
+    expect(queryByDataset(tab.containerEl, "cardTypeSharedHint", "cloze-all").textContent).toContain("复用“填空题（逐个挖空）”当前选择的 Anki 笔记模板和主字段");
+    expect(() => queryByDataset(tab.containerEl, "cardTypeNoteType", "cloze-all")).toThrow();
+    expect(() => queryByDataset(tab.containerEl, "cardTypeQuestionField", "cloze-all")).toThrow();
   });
 
   it("does not render the legacy card-types description copy", async () => {
@@ -1084,7 +1089,7 @@ describe("PluginSettingTab", () => {
     expect(plugin.getModelFieldNamesByModelNamesCalls).toBe(1);
     expect(plugin.getNoteModelDetailsCalls).toBe(0);
     expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
-    expect(collectTexts(tab.containerEl).some((text) => text.includes("已获取 5 个笔记模板，已选择并配置 2 个卡片模式。"))).toBe(true);
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("已获取 5 个笔记模板，已选择并配置 3 个卡片模式。"))).toBe(true);
   });
 
   it("persists loaded Anki note types and uses the cache before the next manual refresh", async () => {
@@ -1265,7 +1270,7 @@ describe("PluginSettingTab", () => {
 
     expect(plugin.listNoteModelsCalls).toBe(2);
     expect(plugin.getModelFieldNamesByModelNamesCalls).toBe(1);
-    expect(collectTexts(tab.containerEl).some((text) => text.includes("已获取 3 个笔记模板，已选择并配置 2 个卡片模式。"))).toBe(true);
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("已获取 3 个笔记模板，已选择并配置 3 个卡片模式。"))).toBe(true);
     expect(collectTexts(tab.containerEl).some((text) => text.includes("和本页缓存的 2 个模板不一致"))).toBe(false);
   });
 
@@ -1314,13 +1319,13 @@ describe("PluginSettingTab", () => {
     await expandCard(tab, "card-types");
     await flushPromises();
 
-    expect(collectTexts(tab.containerEl).some((text) => text.includes("当前使用缓存的 3 个笔记模板，已选择并配置 2 个卡片模式。"))).toBe(true);
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("当前使用缓存的 3 个笔记模板，已选择并配置 3 个卡片模式。"))).toBe(true);
 
     const clozeToggle = queryByDataset(tab.containerEl, "cardTypeEnabled", "cloze");
     clozeToggle.checked = true;
     await clozeToggle.trigger("change");
 
-    expect(collectTexts(tab.containerEl).some((text) => text.includes("当前使用缓存的 3 个笔记模板，已选择并配置 3 个卡片模式。"))).toBe(true);
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("当前使用缓存的 3 个笔记模板，已选择并配置 4 个卡片模式。"))).toBe(true);
   });
 
   it("excludes enabled card types without cached fields from the configured count", async () => {

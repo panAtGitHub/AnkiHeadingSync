@@ -44,7 +44,7 @@ export interface CardIndexingContext {
 }
 
 const HEADING_REGEXP = /^(#{1,6})\s+(.*?)\s*$/;
-const CARD_TYPE_MATCH_ORDER: CardTypeConfigId[] = ["qa-group", "cloze", "basic"];
+const CARD_TYPE_MATCH_ORDER: CardTypeConfigId[] = ["qa-group", "cloze-all", "cloze", "basic"];
 
 export class CardIndexingService {
   constructor(
@@ -144,7 +144,11 @@ export class CardIndexingService {
         continue;
       }
 
-      const cardType = matchedConfig.configId === "cloze" ? "cloze" : "basic";
+      const isClozeCard = matchedConfig.configId === "cloze" || matchedConfig.configId === "cloze-all";
+      const cardType = isClozeCard ? "cloze" : "basic";
+      const clozeMode = matchedConfig.configId === "cloze-all"
+        ? "all"
+        : (matchedConfig.configId === "cloze" ? "sequential" : undefined);
 
       const boundary = resolveAnswerBoundary({
         lines: bodyLines,
@@ -178,6 +182,7 @@ export class CardIndexingService {
         noteIdSource: resolvedIdentity.noteIdSource,
         filePath: sourceFile.path,
         cardType,
+        clozeMode,
         heading: heading.text,
         backlinkHeadingText: heading.text,
         headingLevel: heading.level,
@@ -329,6 +334,10 @@ function resolveCardTypeConfigs(context: CardIndexingContext): CardTypeConfigs {
     cloze: {
       ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
       headingLevel: context.clozeHeadingLevel ?? DEFAULT_SETTINGS.cardTypeConfigs.cloze.headingLevel,
+    },
+    "cloze-all": {
+      ...DEFAULT_SETTINGS.cardTypeConfigs["cloze-all"],
+      headingLevel: context.clozeHeadingLevel ?? DEFAULT_SETTINGS.cardTypeConfigs["cloze-all"].headingLevel,
     },
   };
 }

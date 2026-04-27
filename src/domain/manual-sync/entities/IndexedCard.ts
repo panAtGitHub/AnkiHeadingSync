@@ -2,6 +2,8 @@ import type { CardType } from "@/domain/card/entities/RenderedFields";
 import type { IdMarkerState, NoteIdSource } from "@/domain/manual-sync/entities/IdMarker";
 import type { DeckResolutionWarning, DeckResolutionSource } from "@/domain/manual-sync/value-objects/DeckResolution";
 
+export type ClozeMode = "sequential" | "all";
+
 export interface IndexedCard {
   noteId?: number;
   syncKey: string;
@@ -9,6 +11,7 @@ export interface IndexedCard {
   noteIdSource?: NoteIdSource;
   filePath: string;
   cardType: CardType;
+  clozeMode?: ClozeMode;
   heading: string;
   backlinkHeadingText: string;
   headingLevel: number;

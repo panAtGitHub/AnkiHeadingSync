@@ -114,7 +114,9 @@ export class ManualCardRenderer {
 
     if (cloze) {
       transformed = transformed.replace(CLOZE_PATTERN, (_match, explicitIndex: string | undefined, content: string) => {
-        const clozeIndex = explicitIndex ? Number(explicitIndex) : nextClozeIndex++;
+        const clozeIndex = explicitIndex
+          ? Number(explicitIndex)
+          : (plannedCard.card.clozeMode === "all" ? 1 : nextClozeIndex++);
         return `{{c${clozeIndex}::${content}}}`;
       });
     }

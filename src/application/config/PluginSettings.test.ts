@@ -102,6 +102,12 @@ describe("PluginSettings", () => {
         extraMarker: "#anki-cloze",
         noteType: "",
       },
+      "cloze-all": {
+        enabled: true,
+        headingLevel: 4,
+        extraMarker: "#anki-cloze-all",
+        noteType: "",
+      },
     });
   });
 
@@ -270,6 +276,26 @@ describe("PluginSettings", () => {
     }));
   });
 
+  it("backfills cloze-all and mirrors the shared cloze note type", () => {
+    const settings = mergePluginSettings({
+      cardTypeConfigs: {
+        basic: DEFAULT_SETTINGS.cardTypeConfigs.basic,
+        "qa-group": DEFAULT_SETTINGS.cardTypeConfigs["qa-group"],
+        cloze: {
+          ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
+          noteType: "Custom Cloze",
+        },
+      } as never,
+    });
+
+    expect(settings.cardTypeConfigs["cloze-all"]).toEqual({
+      enabled: true,
+      headingLevel: 4,
+      extraMarker: "#anki-cloze-all",
+      noteType: "Custom Cloze",
+    });
+  });
+
   it("rejects invalid cached Anki note type lists", () => {
     expectPluginUserError(() => {
       validatePluginSettings({
@@ -365,6 +391,12 @@ describe("PluginSettings", () => {
         enabled: true,
         headingLevel: 4,
         extraMarker: "#anki-cloze",
+        noteType: "Legacy Cloze",
+      },
+      "cloze-all": {
+        enabled: true,
+        headingLevel: 4,
+        extraMarker: "#anki-cloze-all",
         noteType: "Legacy Cloze",
       },
     });

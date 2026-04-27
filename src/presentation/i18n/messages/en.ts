@@ -256,10 +256,12 @@ export const en = {
             missingQuestion: "Slot {{index}} is missing its question field, so {{questionField}} / {{answerField}} was ignored.",
           },
         },
+        sharedClozeMappingHint: "Reuse the current Anki note type and main field from the sequential cloze row. No separate setup is needed.",
         rows: {
           basic: "Q&A (regular paragraph)",
           qaGroup: "Q&A (nested list)",
-          cloze: "Cloze",
+          cloze: "Cloze (sequential deletions)",
+          clozeAll: "Cloze (all deletions)",
         },
       },
       syncContent: {

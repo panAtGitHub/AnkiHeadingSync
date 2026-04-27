@@ -8,7 +8,7 @@ export type FileDeckInsertLocation = "yaml" | "body";
 export type FolderDeckMode = "off" | "folder" | "folder-and-file";
 export type CardAnswerCutoffMode = "heading-block" | "double-blank-lines";
 export type ObsidianBacklinkPlacement = "question-last-line" | "answer-first-line" | "answer-last-line";
-export const CARD_TYPE_CONFIG_IDS = ["basic", "qa-group", "cloze"] as const;
+export const CARD_TYPE_CONFIG_IDS = ["basic", "qa-group", "cloze", "cloze-all"] as const;
 export type CardTypeConfigId = (typeof CARD_TYPE_CONFIG_IDS)[number];
 
 export interface CardTypeConfig {
@@ -36,6 +36,7 @@ const DEFAULT_BASIC_NOTE_TYPE = "";
 const DEFAULT_CLOZE_NOTE_TYPE = "";
 const LEGACY_DEFAULT_CLOZE_MARKER = "";
 const DEFAULT_CLOZE_MARKER = "#anki-cloze";
+const DEFAULT_CLOZE_ALL_MARKER = "#anki-cloze-all";
 const DEFAULT_QA_GROUP_MARKER = "#anki-list";
 const qaGroupFieldMappingService = new QaGroupFieldMappingService();
 
@@ -397,6 +398,12 @@ function createDefaultCardTypeConfigs(): CardTypeConfigs {
       extraMarker: DEFAULT_CLOZE_MARKER,
       noteType: DEFAULT_CLOZE_NOTE_TYPE,
     },
+    "cloze-all": {
+      enabled: true,
+      headingLevel: DEFAULT_CLOZE_HEADING_LEVEL,
+      extraMarker: DEFAULT_CLOZE_ALL_MARKER,
+      noteType: DEFAULT_CLOZE_NOTE_TYPE,
+    },
   };
 }
 
@@ -419,6 +426,11 @@ function createLegacyBackfilledCardTypeConfigs(settings: Partial<PluginSettings>
       ...defaults.cloze,
       headingLevel: sanitizeHeadingLevel(settings.clozeHeadingLevel, defaults.cloze.headingLevel),
       noteType: sanitizeNoteType(settings.clozeNoteType, defaults.cloze.noteType),
+    },
+    "cloze-all": {
+      ...defaults["cloze-all"],
+      headingLevel: sanitizeHeadingLevel(settings.clozeHeadingLevel, defaults["cloze-all"].headingLevel),
+      noteType: sanitizeNoteType(settings.clozeNoteType, defaults["cloze-all"].noteType),
     },
   };
 }
@@ -448,6 +460,11 @@ function mergeCardTypeConfigs(
       ? migrateLegacyDefaultClozeConfig(normalizedConfig, rawConfig, legacySettings)
       : normalizedConfig;
   }
+
+  nextConfigs["cloze-all"] = {
+    ...nextConfigs["cloze-all"],
+    noteType: nextConfigs.cloze.noteType,
+  };
 
   return nextConfigs;
 }
@@ -588,7 +605,7 @@ function hydrateMissingNoteFieldMappingsFromCache(settings: PluginSettings): Rec
       continue;
     }
 
-    const cardType = configId === "cloze" ? "cloze" : "basic";
+    const cardType = configId === "cloze" || configId === "cloze-all" ? "cloze" : "basic";
     const mappingKey = createNoteFieldMappingKey(cardType, modelName);
     if (hydratedMappings[mappingKey]) {
       continue;

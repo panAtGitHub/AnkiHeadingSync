@@ -128,6 +128,38 @@ describe("ManualCardRenderer", () => {
     expect(rendered.renderedFields.body).not.toContain('anki-heading-sync-backlink');
   });
 
+  it("numbers unnumbered clozes sequentially for the sequential variant", () => {
+    const rendered = renderer.render(createPlannedCard({
+      cardType: "cloze",
+      clozeMode: "sequential",
+      bodyMarkdown: "{甲} {乙} {丙}",
+    }), baseContext);
+
+    expect(rendered.renderedFields.body).toContain("{{c1::甲}} {{c2::乙}} {{c3::丙}}");
+  });
+
+  it("numbers unnumbered clozes as c1 for the all-cloze variant", () => {
+    const rendered = renderer.render(createPlannedCard({
+      cardType: "cloze",
+      clozeMode: "all",
+      bodyMarkdown: "{甲} {乙} {丙}",
+    }), baseContext);
+
+    expect(rendered.renderedFields.body).toContain("{{c1::甲}} {{c1::乙}} {{c1::丙}}");
+  });
+
+  it("preserves handwritten and native cloze numbers while auto-filling the remaining clozes", () => {
+    const rendered = renderer.render(createPlannedCard({
+      cardType: "cloze",
+      clozeMode: "all",
+      bodyMarkdown: "{c2:手写} {自动} {{c3::原生}}",
+    }), baseContext);
+
+    expect(rendered.renderedFields.body).toContain("{{c2::手写}}");
+    expect(rendered.renderedFields.body).toContain("{{c1::自动}}");
+    expect(rendered.renderedFields.body).toContain("{{c3::原生}}");
+  });
+
   it("does not render backlinks when the toggle is disabled", () => {
     const rendered = renderer.render(createPlannedCard(), {
       ...baseContext,
@@ -150,6 +182,7 @@ function createPlannedCard(overrides: Partial<IndexedCard> = {}): PlannedCard {
       noteIdSource: overrides.noteIdSource,
       filePath: overrides.filePath ?? "notes/example.md",
       cardType: overrides.cardType ?? "basic",
+      clozeMode: overrides.clozeMode,
       heading: overrides.heading ?? "标题",
       backlinkHeadingText: overrides.backlinkHeadingText ?? overrides.heading ?? "标题",
       headingLevel: overrides.headingLevel ?? 2,

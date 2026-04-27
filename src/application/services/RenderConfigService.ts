@@ -24,9 +24,13 @@ export class RenderConfigService {
     const deckResolution = this.deckResolutionService.resolve(card, settings.defaultDeck, settings.folderDeckMode);
     const deck = deckResolution.resolvedDeck.value;
     const mapping = settings.noteFieldMappings[createNoteFieldMappingKey(card.cardType, noteModel)] ?? null;
+    const clozeMode = card.cardType === "cloze" && card.clozeMode === "all"
+      ? "all"
+      : undefined;
     const renderConfigPayload = {
       version: MANUAL_RENDER_CONFIG_VERSION,
       cardType: card.cardType,
+      clozeMode,
       noteModel,
       mapping,
       addObsidianBacklink: settings.addObsidianBacklink,

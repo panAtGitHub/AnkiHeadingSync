@@ -254,10 +254,12 @@ export const zh = {
             missingQuestion: "第 {{index}} 组缺少问题字段，已忽略 {{questionField}} / {{answerField}}。",
           },
         },
+        sharedClozeMappingHint: "复用“填空题（逐个挖空）”当前选择的 Anki 笔记模板和主字段，无需单独设置。",
         rows: {
           basic: "问答题（常规段落形式）",
           qaGroup: "问答题（多级列表形式）",
-          cloze: "填空题",
+          cloze: "填空题（逐个挖空）",
+          clozeAll: "填空题（全部挖空）",
         },
       },
       syncContent: {

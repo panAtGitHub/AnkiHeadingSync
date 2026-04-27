@@ -258,6 +258,47 @@ describe("DiffPlannerService", () => {
 
     expect(plan.toUpdate).toHaveLength(1);
   });
+
+  it("schedules an update when only the cloze mode changes", () => {
+    const service = new DiffPlannerService();
+    const settings = createModule3Settings();
+    const sequentialCard = createIndexedCard({
+      noteId: 42,
+      cardType: "cloze",
+      clozeMode: "sequential",
+      rawBlockHash: "same-hash",
+      idMarkerState: "present-valid",
+      noteIdSource: "marker",
+    });
+    const oldRenderPlan = new RenderConfigService().resolve(sequentialCard, settings);
+    const state = {
+      files: {},
+      cards: {
+        "42": createCardState({
+          noteId: 42,
+          cardType: "cloze",
+          rawBlockHash: "same-hash",
+          renderConfigHash: oldRenderPlan.renderConfigHash,
+          deck: oldRenderPlan.deck,
+        }),
+      },
+      pendingWriteBack: [],
+    };
+
+    const plan = service.plan([
+      createIndexedCard({
+        noteId: 42,
+        cardType: "cloze",
+        clozeMode: "all",
+        rawBlockHash: "same-hash",
+        idMarkerState: "present-valid",
+        noteIdSource: "marker",
+      }),
+    ], state, ["notes/example.md"], settings);
+
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toChangeDeck).toHaveLength(0);
+  });
 });
 
 function createIndexedCard(overrides: Partial<IndexedCard> = {}): IndexedCard {
@@ -270,6 +311,7 @@ function createIndexedCard(overrides: Partial<IndexedCard> = {}): IndexedCard {
     noteIdSource: overrides.noteIdSource,
     filePath: overrides.filePath ?? "notes/example.md",
     cardType: overrides.cardType ?? "basic",
+    clozeMode: overrides.clozeMode,
     heading: overrides.heading ?? "Prompt",
     backlinkHeadingText: overrides.backlinkHeadingText ?? (overrides.heading ?? "Prompt"),
     headingLevel: overrides.headingLevel ?? 4,
