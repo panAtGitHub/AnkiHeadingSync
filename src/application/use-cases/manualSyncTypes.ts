@@ -4,6 +4,7 @@ export interface ManualSyncResult {
   scannedFiles: number;
   scannedCards: number;
   created: number;
+  rebuilt: number;
   updated: number;
   migratedNoteTypes: number;
   migratedDecks: number;

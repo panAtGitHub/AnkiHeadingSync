@@ -20,6 +20,7 @@ describe("DiffPlannerService", () => {
     );
 
     expect(plan.toCreate).toHaveLength(1);
+    expect(plan.toRebuild).toHaveLength(0);
     expect(plan.toChangeDeck).toHaveLength(0);
   });
 
@@ -43,6 +44,7 @@ describe("DiffPlannerService", () => {
     const plan = service.plan([card], state, ["notes/example.md"], settings);
 
     expect(plan.toCreate).toHaveLength(0);
+    expect(plan.toRebuild).toHaveLength(0);
     expect(plan.toUpdate).toHaveLength(0);
     expect(plan.toChangeDeck).toHaveLength(0);
     expect(plan.toRewriteMarker.map((plannedCard) => plannedCard.noteId)).toEqual([42]);
@@ -82,6 +84,7 @@ describe("DiffPlannerService", () => {
       createModule3Settings(),
     );
 
+    expect(plan.toRebuild).toHaveLength(0);
     expect(plan.toUpdate).toHaveLength(1);
     expect(plan.toChangeDeck).toHaveLength(1);
     expect(plan.toRewriteMarker).toHaveLength(1);
@@ -123,6 +126,7 @@ describe("DiffPlannerService", () => {
     const plan = service.plan([card], state, ["example.md"], settings);
 
     expect(plan.toUpdate).toHaveLength(0);
+    expect(plan.toRebuild).toHaveLength(0);
     expect(plan.toChangeDeck).toHaveLength(1);
     expect(plan.unchangedCards).toBe(0);
   });
@@ -157,6 +161,7 @@ describe("DiffPlannerService", () => {
     const plan = service.plan([card], state, ["example.md"], settings);
 
     expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toRebuild).toHaveLength(0);
     expect(plan.toChangeDeck).toHaveLength(0);
   });
 
@@ -181,6 +186,7 @@ describe("DiffPlannerService", () => {
     const plan = service.plan([card], state, ["notes/example.md"], settings);
 
     expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toRebuild).toHaveLength(0);
     expect(plan.toChangeDeck).toHaveLength(0);
   });
 
@@ -208,6 +214,7 @@ describe("DiffPlannerService", () => {
     const plan = service.plan([card], state, ["notes/example.md"], newSettings);
 
     expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toRebuild).toHaveLength(0);
     expect(plan.toChangeDeck).toHaveLength(0);
   });
 
@@ -257,15 +264,18 @@ describe("DiffPlannerService", () => {
     const plan = service.plan([card], state, ["notes/example.md"], newSettings);
 
     expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toRebuild).toHaveLength(0);
   });
 
-  it("schedules an update when only the cloze mode changes", () => {
+  it("moves sequential-to-all cloze shrink into toRebuild", () => {
     const service = new DiffPlannerService();
     const settings = createModule3Settings();
     const sequentialCard = createIndexedCard({
       noteId: 42,
       cardType: "cloze",
       clozeMode: "sequential",
+      bodyMarkdown: "{A} {B} {C}",
+      rawBlockText: ["#### Cloze #anki-cloze", "{A} {B} {C}"].join("\n"),
       rawBlockHash: "same-hash",
       idMarkerState: "present-valid",
       noteIdSource: "marker",
@@ -277,6 +287,9 @@ describe("DiffPlannerService", () => {
         "42": createCardState({
           noteId: 42,
           cardType: "cloze",
+          clozeMode: "sequential",
+          bodyMarkdown: "{A} {B} {C}",
+          rawBlockText: ["#### Cloze #anki-cloze", "{A} {B} {C}"].join("\n"),
           rawBlockHash: "same-hash",
           renderConfigHash: oldRenderPlan.renderConfigHash,
           deck: oldRenderPlan.deck,
@@ -290,14 +303,160 @@ describe("DiffPlannerService", () => {
         noteId: 42,
         cardType: "cloze",
         clozeMode: "all",
+        bodyMarkdown: "{A} {B} {C}",
+        rawBlockText: ["#### Cloze #anki-cloze-all", "{A} {B} {C}"].join("\n"),
         rawBlockHash: "same-hash",
         idMarkerState: "present-valid",
         noteIdSource: "marker",
       }),
     ], state, ["notes/example.md"], settings);
 
-    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toRebuild).toHaveLength(1);
+    expect(plan.toUpdate).toHaveLength(0);
     expect(plan.toChangeDeck).toHaveLength(0);
+    expect(plan.toRewriteMarker).toHaveLength(0);
+  });
+
+  it("keeps sequential-to-all on the update path when the final cloze set does not shrink", () => {
+    const service = new DiffPlannerService();
+    const settings = createModule3Settings();
+    const oldCard = createIndexedCard({
+      noteId: 42,
+      cardType: "cloze",
+      clozeMode: "sequential",
+      bodyMarkdown: "{A} {c2:B}",
+      rawBlockText: ["#### Cloze #anki-cloze", "{A} {c2:B}"].join("\n"),
+      rawBlockHash: "same-hash",
+      idMarkerState: "present-valid",
+      noteIdSource: "marker",
+    });
+    const oldRenderPlan = new RenderConfigService().resolve(oldCard, settings);
+    const state = {
+      files: {},
+      cards: {
+        "42": createCardState({
+          noteId: 42,
+          cardType: "cloze",
+          clozeMode: "sequential",
+          bodyMarkdown: "{A} {c2:B}",
+          rawBlockText: ["#### Cloze #anki-cloze", "{A} {c2:B}"].join("\n"),
+          rawBlockHash: "same-hash",
+          renderConfigHash: oldRenderPlan.renderConfigHash,
+          deck: oldRenderPlan.deck,
+        }),
+      },
+      pendingWriteBack: [],
+    };
+
+    const plan = service.plan([
+      createIndexedCard({
+        noteId: 42,
+        cardType: "cloze",
+        clozeMode: "all",
+        bodyMarkdown: "{A} {c2:B}",
+        rawBlockText: ["#### Cloze #anki-cloze-all", "{A} {c2:B}"].join("\n"),
+        rawBlockHash: "same-hash",
+        idMarkerState: "present-valid",
+        noteIdSource: "marker",
+      }),
+    ], state, ["notes/example.md"], settings);
+
+    expect(plan.toRebuild).toHaveLength(0);
+    expect(plan.toUpdate).toHaveLength(1);
+  });
+
+  it("treats legacy missing clozeMode in stored state as sequential for rebuild detection", () => {
+    const service = new DiffPlannerService();
+    const settings = createModule3Settings();
+    const oldCard = createIndexedCard({
+      noteId: 42,
+      cardType: "cloze",
+      clozeMode: "sequential",
+      bodyMarkdown: "{A} {B}",
+      rawBlockText: ["#### Cloze #anki-cloze", "{A} {B}"].join("\n"),
+      rawBlockHash: "same-hash",
+      idMarkerState: "present-valid",
+      noteIdSource: "marker",
+    });
+    const oldRenderPlan = new RenderConfigService().resolve(oldCard, settings);
+    const state = {
+      files: {},
+      cards: {
+        "42": createCardState({
+          noteId: 42,
+          cardType: "cloze",
+          bodyMarkdown: "{A} {B}",
+          rawBlockText: ["#### Cloze #anki-cloze", "{A} {B}"].join("\n"),
+          rawBlockHash: "same-hash",
+          renderConfigHash: oldRenderPlan.renderConfigHash,
+          deck: oldRenderPlan.deck,
+        }),
+      },
+      pendingWriteBack: [],
+    };
+
+    const plan = service.plan([
+      createIndexedCard({
+        noteId: 42,
+        cardType: "cloze",
+        clozeMode: "all",
+        bodyMarkdown: "{A} {B}",
+        rawBlockText: ["#### Cloze #anki-cloze-all", "{A} {B}"].join("\n"),
+        rawBlockHash: "same-hash",
+        idMarkerState: "present-valid",
+        noteIdSource: "marker",
+      }),
+    ], state, ["notes/example.md"], settings);
+
+    expect(plan.toRebuild).toHaveLength(1);
+  });
+
+  it("does not rebuild when cloze mode expands from all back to sequential", () => {
+    const service = new DiffPlannerService();
+    const settings = createModule3Settings();
+    const oldCard = createIndexedCard({
+      noteId: 42,
+      cardType: "cloze",
+      clozeMode: "all",
+      bodyMarkdown: "{A} {B}",
+      rawBlockText: ["#### Cloze #anki-cloze-all", "{A} {B}"].join("\n"),
+      rawBlockHash: "same-hash",
+      idMarkerState: "present-valid",
+      noteIdSource: "marker",
+    });
+    const oldRenderPlan = new RenderConfigService().resolve(oldCard, settings);
+    const state = {
+      files: {},
+      cards: {
+        "42": createCardState({
+          noteId: 42,
+          cardType: "cloze",
+          clozeMode: "all",
+          bodyMarkdown: "{A} {B}",
+          rawBlockText: ["#### Cloze #anki-cloze-all", "{A} {B}"].join("\n"),
+          rawBlockHash: "same-hash",
+          renderConfigHash: oldRenderPlan.renderConfigHash,
+          deck: oldRenderPlan.deck,
+        }),
+      },
+      pendingWriteBack: [],
+    };
+
+    const plan = service.plan([
+      createIndexedCard({
+        noteId: 42,
+        cardType: "cloze",
+        clozeMode: "sequential",
+        bodyMarkdown: "{A} {B}",
+        rawBlockText: ["#### Cloze #anki-cloze", "{A} {B}"].join("\n"),
+        rawBlockHash: "same-hash",
+        idMarkerState: "present-valid",
+        noteIdSource: "marker",
+      }),
+    ], state, ["notes/example.md"], settings);
+
+    expect(plan.toRebuild).toHaveLength(0);
+    expect(plan.toUpdate).toHaveLength(1);
   });
 });
 
@@ -354,6 +513,7 @@ function createCardState(overrides: Partial<CardState> & Pick<CardState, "noteId
     rawBlockHash: overrides.rawBlockHash ?? "hash-card",
     renderConfigHash: overrides.renderConfigHash ?? "render-hash",
     deck: overrides.deck ?? "Obsidian",
+    clozeMode: overrides.clozeMode,
     deckHint: overrides.deckHint,
     deckHintSource: overrides.deckHintSource,
     deckWarnings: overrides.deckWarnings ?? [],

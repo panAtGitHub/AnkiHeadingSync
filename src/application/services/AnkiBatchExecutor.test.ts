@@ -35,9 +35,10 @@ describe("AnkiBatchExecutor", () => {
       [createTwo.card.syncKey, createRenderedSyncCard(createTwo)],
       [updateOne.card.syncKey, createRenderedSyncCard(updateOne)],
     ]);
-    const plan: ManualSyncPlan = {
+      const plan: ManualSyncPlan = {
       toCreate: [createOne, createTwo],
-      toUpdate: [updateOne],
+        toRebuild: [],
+        toUpdate: [updateOne],
       toVerifyDeck: [updateOne],
       toChangeDeck: [],
       toRewriteMarker: [],
@@ -79,6 +80,7 @@ describe("AnkiBatchExecutor", () => {
     const result = await executor.execute(
       {
         toCreate: [createCard],
+        toRebuild: [],
         toUpdate: [updateCard],
         toVerifyDeck: [updateCard, changeDeckCard],
         toChangeDeck: [changeDeckCard],
@@ -108,6 +110,7 @@ describe("AnkiBatchExecutor", () => {
     await executor.execute(
       {
         toCreate: [createCard],
+        toRebuild: [],
         toUpdate: [],
         toVerifyDeck: [],
         toChangeDeck: [],
@@ -140,6 +143,7 @@ describe("AnkiBatchExecutor", () => {
     await executor.execute(
       {
         toCreate: [],
+        toRebuild: [],
         toUpdate: [updateCard],
         toVerifyDeck: [updateCard],
         toChangeDeck: [],
@@ -162,6 +166,118 @@ describe("AnkiBatchExecutor", () => {
     ]);
   });
 
+  it("rebuilds a cloze note by adding the replacement before deleting the old note", async () => {
+    const ankiGateway = new CountingAnkiGateway();
+    ankiGateway.noteSummariesById.set(300, {
+      noteId: 300,
+      modelName: "Cloze",
+      cardIds: [700],
+      deckNames: ["Obsidian"],
+    });
+
+    const executor = new AnkiBatchExecutor(ankiGateway);
+    const rebuildCard = createPlannedCard("sync-rebuild", 300, "Obsidian", "Cloze", "cloze");
+    rebuildCard.card.clozeMode = "all";
+
+    const result = await executor.execute(
+      {
+        toCreate: [],
+        toRebuild: [rebuildCard],
+        toUpdate: [],
+        toVerifyDeck: [],
+        toChangeDeck: [],
+        toRewriteMarker: [],
+        toOrphan: [],
+        unchangedCards: 0,
+        warnings: [],
+      },
+      new Map([[rebuildCard.card.syncKey, createRenderedSyncCard(rebuildCard)]]),
+      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      createModule3Settings().noteFieldMappings,
+    );
+
+    expect(result.created).toBe(0);
+    expect(result.rebuilt).toBe(1);
+    expect(ankiGateway.operationLog).toEqual(["ensureDecks", "addNotes", "deleteNotes"]);
+    expect(ankiGateway.addedNotes).toHaveLength(1);
+    expect(ankiGateway.deletedNotes).toEqual([[300]]);
+    expect(result.resolvedNoteIds.get(rebuildCard.card.syncKey)).toBe(9001);
+    expect(result.markerWrites).toEqual([
+      expect.objectContaining({
+        noteId: 9001,
+      }),
+    ]);
+  });
+
+  it("falls back to the normal create path when a rebuild candidate note is missing in Anki", async () => {
+    const ankiGateway = new CountingAnkiGateway();
+    const executor = new AnkiBatchExecutor(ankiGateway);
+    const rebuildCard = createPlannedCard("sync-rebuild-missing", 300, "Obsidian", "Cloze", "cloze");
+    rebuildCard.card.clozeMode = "all";
+
+    const result = await executor.execute(
+      {
+        toCreate: [],
+        toRebuild: [rebuildCard],
+        toUpdate: [],
+        toVerifyDeck: [],
+        toChangeDeck: [],
+        toRewriteMarker: [],
+        toOrphan: [],
+        unchangedCards: 0,
+        warnings: [],
+      },
+      new Map([[rebuildCard.card.syncKey, createRenderedSyncCard(rebuildCard)]]),
+      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      createModule3Settings().noteFieldMappings,
+    );
+
+    expect(result.created).toBe(1);
+    expect(result.rebuilt).toBe(0);
+    expect(ankiGateway.addedNotes).toHaveLength(1);
+    expect(ankiGateway.deletedNotes).toEqual([]);
+    expect(result.markerWrites).toEqual([
+      expect.objectContaining({
+        noteId: 9001,
+      }),
+    ]);
+  });
+
+  it("best-effort deletes the newly created note when deleting the old rebuild target fails", async () => {
+    const ankiGateway = new CountingAnkiGateway();
+    ankiGateway.noteSummariesById.set(300, {
+      noteId: 300,
+      modelName: "Cloze",
+      cardIds: [700],
+      deckNames: ["Obsidian"],
+    });
+    ankiGateway.deleteNotesErrorQueue.push(new Error("delete old failed"));
+
+    const executor = new AnkiBatchExecutor(ankiGateway);
+    const rebuildCard = createPlannedCard("sync-rebuild-error", 300, "Obsidian", "Cloze", "cloze");
+    rebuildCard.card.clozeMode = "all";
+
+    await expect(executor.execute(
+      {
+        toCreate: [],
+        toRebuild: [rebuildCard],
+        toUpdate: [],
+        toVerifyDeck: [],
+        toChangeDeck: [],
+        toRewriteMarker: [],
+        toOrphan: [],
+        unchangedCards: 0,
+        warnings: [],
+      },
+      new Map([[rebuildCard.card.syncKey, createRenderedSyncCard(rebuildCard)]]),
+      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      createModule3Settings().noteFieldMappings,
+    )).rejects.toThrow("delete old failed");
+
+    expect(ankiGateway.addedNotes).toHaveLength(1);
+    expect(ankiGateway.deletedNotes).toEqual([[300], [9001]]);
+  });
+
   it("does not sync note tags when the current and target tag sets already match", async () => {
     const ankiGateway = new CountingAnkiGateway();
     ankiGateway.noteSummariesById.set(300, {
@@ -178,6 +294,7 @@ describe("AnkiBatchExecutor", () => {
     await executor.execute(
       {
         toCreate: [],
+        toRebuild: [],
         toUpdate: [updateCard],
         toVerifyDeck: [updateCard],
         toChangeDeck: [],
@@ -209,6 +326,7 @@ describe("AnkiBatchExecutor", () => {
     const result = await executor.execute(
       {
         toCreate: [],
+        toRebuild: [],
         toUpdate: [updateCard],
         toVerifyDeck: [updateCard],
         toChangeDeck: [],
@@ -262,6 +380,7 @@ describe("AnkiBatchExecutor", () => {
     const result = await executor.execute(
       {
         toCreate: [],
+        toRebuild: [],
         toUpdate: [updateCard],
         toVerifyDeck: [updateCard],
         toChangeDeck: [],
@@ -310,6 +429,7 @@ describe("AnkiBatchExecutor", () => {
     const result = await executor.execute(
       {
         toCreate: [],
+        toRebuild: [],
         toUpdate: [updateCard],
         toVerifyDeck: [updateCard],
         toChangeDeck: [],
@@ -343,6 +463,7 @@ describe("AnkiBatchExecutor", () => {
     await expect(executor.execute(
       {
         toCreate: [],
+        toRebuild: [],
         toUpdate: [updateCard],
         toVerifyDeck: [updateCard],
         toChangeDeck: [],

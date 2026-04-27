@@ -36,6 +36,7 @@ function createManualSyncResult(overrides: Partial<ManualSyncResult> = {}): Manu
     scannedFiles: 3,
     scannedCards: 8,
     created: 2,
+    rebuilt: 1,
     updated: 1,
     migratedNoteTypes: 1,
     migratedDecks: 1,
@@ -94,7 +95,7 @@ describe("NoticeService", () => {
     }));
 
     expect(noticeRecords.map((entry) => entry.message)).toEqual([
-      "Current file sync completed: files 3, cards 8, created 2, updated 1, migrated note types 1, migrated decks 1, orphaned 0, media 4, skipped 5. Marker write conflicts: notes/a.md, notes/b.md. Warnings: 2.",
+      "Current file sync completed: files 3, cards 8, created 2, rebuilt 1, updated 1, migrated note types 1, migrated decks 1, orphaned 0, media 4, skipped 5. Marker write conflicts: notes/a.md, notes/b.md. Warnings: 2.",
       "Conflicting TARGET DECK declarations were found in YAML and body. This sync used the YAML value.",
       "No explicit deck was found and a folder-based deck could not be generated, so the default deck was used.",
     ]);

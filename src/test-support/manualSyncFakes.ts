@@ -138,6 +138,7 @@ export class FakeManualSyncVaultGateway implements ManualSyncVaultGateway {
 }
 
 export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
+  public operationLog: string[] = [];
   public ensuredDecks: string[][] = [];
   public addedNotes: AddAnkiNoteInput[] = [];
   public deletedNotes: number[][] = [];
@@ -159,6 +160,8 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
       fieldNames: ["题目", "问题01", "答案01", "问题02", "答案02", "问题03", "答案03"],
     },
   };
+  public addNotesErrorQueue: Error[] = [];
+  public deleteNotesErrorQueue: Error[] = [];
   public updateNoteModelError: Error | null = null;
 
   private nextNoteId = 9000;
@@ -168,6 +171,7 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
   }
 
   async ensureDecks(deckNames: string[]): Promise<void> {
+    this.operationLog.push("ensureDecks");
     this.ensuredDecks.push(deckNames);
   }
 
@@ -228,14 +232,47 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
 
   async addNotes(inputs: AddAnkiNoteInput[]): Promise<number[]> {
     return inputs.map((input) => {
+      this.operationLog.push("addNotes");
+      const pendingError = this.addNotesErrorQueue.shift();
+      if (pendingError) {
+        throw pendingError;
+      }
+
       this.addedNotes.push(input);
       this.nextNoteId += 1;
-      return this.nextNoteId;
+      const noteId = this.nextNoteId;
+      this.noteSummariesById.set(noteId, {
+        noteId,
+        modelName: input.modelName,
+        cardIds: [],
+        deckNames: [input.deckName],
+        tags: [...input.tags],
+      });
+      this.noteDetailsById.set(noteId, {
+        noteId,
+        modelName: input.modelName,
+        cardIds: [],
+        deckNames: [input.deckName],
+        tags: [...input.tags],
+        fields: { ...input.fields },
+      });
+      return noteId;
     });
   }
 
   async deleteNotes(noteIds: number[]): Promise<void> {
+    this.operationLog.push("deleteNotes");
     this.deletedNotes.push(noteIds);
+
+    for (const noteId of noteIds) {
+      this.noteSummariesById.delete(noteId);
+      this.noteDetailsById.delete(noteId);
+    }
+
+    const pendingError = this.deleteNotesErrorQueue.shift();
+    if (pendingError) {
+      throw pendingError;
+    }
   }
 
   async updateNote(input: UpdateAnkiNoteInput): Promise<void> {

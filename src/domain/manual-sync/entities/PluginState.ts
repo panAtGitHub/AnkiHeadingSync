@@ -1,4 +1,5 @@
 import type { CardType } from "@/domain/card/entities/RenderedFields";
+import type { ClozeMode } from "@/domain/manual-sync/entities/IndexedCard";
 import type { GroupItem } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
 import type { DeckResolutionWarning, DeckResolutionSource } from "@/domain/manual-sync/value-objects/DeckResolution";
 
@@ -20,6 +21,7 @@ export interface CardState {
   headingLevel: number;
   bodyMarkdown: string;
   cardType: CardType;
+  clozeMode?: ClozeMode;
   blockStartOffset: number;
   blockEndOffset: number;
   blockStartLine: number;

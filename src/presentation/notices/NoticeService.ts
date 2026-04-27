@@ -22,6 +22,7 @@ export class NoticeService {
       scannedFiles: result.scannedFiles,
       scannedCards: result.scannedCards,
       created: result.created,
+      rebuilt: result.rebuilt,
       updated: result.updated,
       migratedNoteTypes: result.migratedNoteTypes,
       migratedDecks: result.migratedDecks,

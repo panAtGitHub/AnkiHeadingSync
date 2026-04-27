@@ -275,6 +275,7 @@ describe("DataJsonPluginStateRepository", () => {
   it("keeps supported basic and cloze card states while filtering dangling file noteIds", async () => {
     const basicRawBlockText = ["#### Prompt", "Answer"].join("\n");
     const clozeRawBlockText = ["##### Cloze", "{{c1::Body}}"].join("\n");
+    const clozeAllRawBlockText = ["#### Cloze All #anki-cloze-all", "{A} {B}"] .join("\n");
     const repository = new DataJsonPluginStateRepository(new InMemoryPluginDataStore({
       pluginState: {
         files: {
@@ -283,7 +284,7 @@ describe("DataJsonPluginStateRepository", () => {
             fileHash: "hash",
             fileStamp: "1:1",
             lastIndexedAt: 1,
-            noteIds: [41, 42, 99],
+            noteIds: [41, 42, 43, 99],
           },
         },
         cards: {
@@ -333,6 +334,30 @@ describe("DataJsonPluginStateRepository", () => {
             lastSyncedAt: 1,
             orphan: false,
           },
+          "43": {
+            noteId: 43,
+            filePath: "notes/example.md",
+            heading: "Cloze All #anki-cloze-all",
+            backlinkHeadingText: "Cloze All #anki-cloze-all",
+            headingLevel: 4,
+            bodyMarkdown: "{A} {B}",
+            cardType: "cloze",
+            clozeMode: "all",
+            blockStartOffset: 0,
+            blockEndOffset: clozeAllRawBlockText.length,
+            blockStartLine: 7,
+            bodyStartLine: 8,
+            blockEndLine: 8,
+            contentEndLine: 8,
+            rawBlockText: clozeAllRawBlockText,
+            rawBlockHash: hashString(clozeAllRawBlockText),
+            renderConfigHash: "render-cloze-all",
+            deck: "notes",
+            deckWarnings: [],
+            tagsHint: [],
+            lastSyncedAt: 1,
+            orphan: false,
+          },
         },
         pendingWriteBack: [],
       },
@@ -340,10 +365,13 @@ describe("DataJsonPluginStateRepository", () => {
 
     const loaded = await repository.load();
 
-    expect(Object.keys(loaded.cards)).toEqual(["41", "42"]);
+    expect(Object.keys(loaded.cards)).toEqual(["41", "42", "43"]);
     expect(loaded.cards["41"]?.cardType).toBe("basic");
     expect(loaded.cards["42"]?.cardType).toBe("cloze");
-    expect(loaded.files["notes/example.md"]?.noteIds).toEqual([41, 42]);
+    expect(loaded.cards["41"]?.clozeMode).toBeUndefined();
+    expect(loaded.cards["42"]?.clozeMode).toBe("sequential");
+    expect(loaded.cards["43"]?.clozeMode).toBe("all");
+    expect(loaded.files["notes/example.md"]?.noteIds).toEqual([41, 42, 43]);
   });
 });
 

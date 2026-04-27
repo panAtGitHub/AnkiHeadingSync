@@ -332,8 +332,8 @@ export const zh = {
     cleanupEmptyDecksCancelled: "已取消空牌组清理。",
     cleanupEmptyDecksFailed: "清理空牌组失败。",
     summary: {
-      currentFileSync: "当前文件同步完成：文件 {{scannedFiles}}，卡片 {{scannedCards}}，新建 {{created}}，更新 {{updated}}，迁移模板 {{migratedNoteTypes}}，迁移牌组 {{migratedDecks}}，孤儿 {{orphaned}}，媒体 {{uploadedMedia}}，跳过 {{skippedUnchangedCards}}。",
-      vaultSync: "全库同步完成：文件 {{scannedFiles}}，卡片 {{scannedCards}}，新建 {{created}}，更新 {{updated}}，迁移模板 {{migratedNoteTypes}}，迁移牌组 {{migratedDecks}}，孤儿 {{orphaned}}，媒体 {{uploadedMedia}}，跳过 {{skippedUnchangedCards}}。",
+      currentFileSync: "当前文件同步完成：文件 {{scannedFiles}}，卡片 {{scannedCards}}，新建 {{created}}，重建 {{rebuilt}}，更新 {{updated}}，迁移模板 {{migratedNoteTypes}}，迁移牌组 {{migratedDecks}}，孤儿 {{orphaned}}，媒体 {{uploadedMedia}}，跳过 {{skippedUnchangedCards}}。",
+      vaultSync: "全库同步完成：文件 {{scannedFiles}}，卡片 {{scannedCards}}，新建 {{created}}，重建 {{rebuilt}}，更新 {{updated}}，迁移模板 {{migratedNoteTypes}}，迁移牌组 {{migratedDecks}}，孤儿 {{orphaned}}，媒体 {{uploadedMedia}}，跳过 {{skippedUnchangedCards}}。",
       clearCurrentFile: "当前文件已同步卡片清空完成：已跟踪卡片 {{trackedCards}}，已跟踪分组 {{trackedGroups}}，删除笔记 {{deletedNotes}}，移除标记 {{removedMarkers}}，移除 ID 标记 {{removedCardMarkers}}，移除 GI 标记 {{removedGroupMarkers}}，删除本地记录 {{deletedLocalRecords}}。",
       cleanupEmptyDecks: "空牌组清理完成：候选 {{candidateCount}}，已选 {{selectedCount}}，已删 {{deletedCount}}，跳过 {{skippedCount}}。",
       markerWriteConflicts: "标记写回冲突：{{files}}。",

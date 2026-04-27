@@ -1,6 +1,7 @@
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import { RenderConfigService } from "@/application/services/RenderConfigService";
-import type { IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
+import { collectClozeNumbers } from "@/domain/manual-sync/services/collectClozeNumbers";
+import { normalizeStoredClozeMode, type IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
 import { createPendingWriteBackKey, toNoteIdKey, type PluginState } from "@/domain/manual-sync/entities/PluginState";
 import { getDeckResolutionWarningKey, type DeckResolutionWarning } from "@/domain/manual-sync/value-objects/DeckResolution";
 import type { ManualSyncPlan, PlannedCard } from "@/domain/manual-sync/value-objects/ManualSyncPlan";
@@ -17,6 +18,7 @@ export class DiffPlannerService {
       .map((pending) => createPendingWriteBackKey(pending.filePath, pending.blockStartLine, pending.rawBlockHash)));
     const seenNoteKeys = new Set<string>();
     const toCreate: PlannedCard[] = [];
+    const toRebuild: PlannedCard[] = [];
     const toUpdate: PlannedCard[] = [];
     const toVerifyDeck: PlannedCard[] = [];
     const toChangeDeck: PlannedCard[] = [];
@@ -62,6 +64,11 @@ export class DiffPlannerService {
         continue;
       }
 
+      if (shouldRebuildClozeCard(existingState, card, settings)) {
+        toRebuild.push(plannedCard);
+        continue;
+      }
+
       toVerifyDeck.push(plannedCard);
 
       if (card.idMarkerState !== "present-valid" || card.noteIdSource !== "marker" || pendingByBlockKey.has(blockKey)) {
@@ -98,6 +105,7 @@ export class DiffPlannerService {
 
     return {
       toCreate,
+      toRebuild,
       toUpdate,
       toVerifyDeck,
       toChangeDeck,
@@ -107,4 +115,28 @@ export class DiffPlannerService {
       warnings: Array.from(warningMap.values()),
     };
   }
+}
+
+function shouldRebuildClozeCard(existingState: PluginState["cards"][string] | undefined, card: IndexedCard, settings: PluginSettings): boolean {
+  if (!existingState || existingState.cardType !== "cloze" || card.cardType !== "cloze") {
+    return false;
+  }
+
+  const oldMode = normalizeStoredClozeMode(existingState.cardType, existingState.clozeMode);
+  if (oldMode !== "sequential" || card.clozeMode !== "all") {
+    return false;
+  }
+
+  const oldClozeNumbers = collectClozeNumbers({
+    bodyMarkdown: existingState.bodyMarkdown,
+    clozeMode: oldMode,
+    convertHighlightsToCloze: settings.convertHighlightsToCloze,
+  });
+  const newClozeNumbers = collectClozeNumbers({
+    bodyMarkdown: card.bodyMarkdown,
+    clozeMode: card.clozeMode,
+    convertHighlightsToCloze: settings.convertHighlightsToCloze,
+  });
+
+  return oldClozeNumbers.size > newClozeNumbers.size;
 }

@@ -1,5 +1,6 @@
 import type { PluginStateRepository } from "@/application/ports/PluginStateRepository";
 import type { PluginDataStore } from "@/application/ports/PluginDataStore";
+import { normalizeStoredClozeMode, type ClozeMode } from "@/domain/manual-sync/entities/IndexedCard";
 import { createEmptyPluginState, toNoteIdKey, type CardState, type FileState, type GroupBlockState, type PendingWriteBackState, type PluginState } from "@/domain/manual-sync/entities/PluginState";
 
 import type { PluginDataSnapshot } from "./DataJsonPluginConfigRepository";
@@ -123,6 +124,7 @@ function migrateCardState(rawCard: LegacyCardState, noteId: number): CardState |
     headingLevel: typeof rawCard.headingLevel === "number" ? rawCard.headingLevel : 1,
     bodyMarkdown: typeof rawCard.bodyMarkdown === "string" ? rawCard.bodyMarkdown : "",
     cardType,
+    clozeMode: normalizeStoredClozeMode(cardType, sanitizeClozeMode(rawCard.clozeMode)),
     blockStartOffset: typeof rawCard.blockStartOffset === "number" ? rawCard.blockStartOffset : 0,
     blockEndOffset: typeof rawCard.blockEndOffset === "number" ? rawCard.blockEndOffset : 0,
     blockStartLine: typeof rawCard.blockStartLine === "number" ? rawCard.blockStartLine : 1,
@@ -145,6 +147,14 @@ function migrateCardState(rawCard: LegacyCardState, noteId: number): CardState |
 
 function sanitizeCardType(value: unknown): CardState["cardType"] | undefined {
   if (value === "basic" || value === "cloze") {
+    return value;
+  }
+
+  return undefined;
+}
+
+function sanitizeClozeMode(value: unknown): ClozeMode | undefined {
+  if (value === "sequential" || value === "all") {
     return value;
   }
 

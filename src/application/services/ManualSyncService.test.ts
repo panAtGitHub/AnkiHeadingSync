@@ -21,6 +21,7 @@ describe("ManualSyncService", () => {
     const result = await service.syncFile("notes/example.md", createSettingsForSyncPath("notes/example.md"));
 
     expect(result.created).toBe(1);
+    expect(result.rebuilt).toBe(0);
     expect(result.updated).toBe(0);
     expect(result.migratedNoteTypes).toBe(0);
     expect(result.migratedDecks).toBe(0);
@@ -136,6 +137,54 @@ describe("ManualSyncService", () => {
     expect(vaultGateway.getFileContent("notes/example.md")).not.toContain("<!--ID: 42-->");
     expect(stateRepository.savedState?.cards["42"]?.orphan).toBe(true);
     expect(stateRepository.savedState?.cards["9001"]?.orphan).toBe(false);
+  });
+
+  it("rebuilds a synced cloze note when switching from sequential to all shrinks the final cloze number set", async () => {
+    const settings = createSettingsForSyncPath("notes/example.md");
+    const currentRawBlockText = ["#### Cloze #anki-cloze-all", "{A} {B} {C}"].join("\n");
+    const vaultGateway = new FakeManualSyncVaultGateway({
+      "notes/example.md": ["#### Cloze #anki-cloze-all", "{A} {B} {C}", "<!--ID: 42-->"] .join("\n"),
+    });
+    const stateRepository = new InMemoryPluginStateRepository({
+      files: {},
+      cards: {
+        "42": createStoredSyncedCard(settings, {
+          noteId: 42,
+          heading: "Cloze #anki-cloze",
+          backlinkHeadingText: "Cloze #anki-cloze",
+          bodyMarkdown: "{A} {B} {C}",
+          cardType: "cloze",
+          clozeMode: "sequential",
+          rawBlockText: ["#### Cloze #anki-cloze", "{A} {B} {C}"].join("\n"),
+          rawBlockHash: hashString(["#### Cloze #anki-cloze", "{A} {B} {C}"].join("\n")),
+        }),
+      },
+      pendingWriteBack: [],
+    });
+    const ankiGateway = new FakeManualSyncAnkiGateway();
+    ankiGateway.noteSummariesById.set(42, {
+      noteId: 42,
+      modelName: "Cloze",
+      cardIds: [7001, 7002, 7003],
+      deckNames: ["notes"],
+    });
+    const service = new ManualSyncService(vaultGateway, stateRepository, ankiGateway, undefined, undefined, undefined, undefined, undefined, undefined, () => 1234);
+
+    const result = await service.syncFile("notes/example.md", settings);
+
+    expect(result.created).toBe(0);
+    expect(result.rebuilt).toBe(1);
+    expect(result.updated).toBe(0);
+    expect(result.rewrittenMarkers).toBe(1);
+    expect(ankiGateway.addedNotes).toHaveLength(1);
+    expect(ankiGateway.addedNotes[0]?.modelName).toBe("Cloze");
+    expect(ankiGateway.deletedNotes).toEqual([[42]]);
+    expect(vaultGateway.getFileContent("notes/example.md")).toContain("<!--ID: 9001-->");
+    expect(vaultGateway.getFileContent("notes/example.md")).not.toContain("<!--ID: 42-->");
+    expect(stateRepository.savedState?.cards["42"]).toBeUndefined();
+    expect(stateRepository.savedState?.cards["9001"]?.clozeMode).toBe("all");
+    expect(stateRepository.savedState?.cards["9001"]?.rawBlockText).toBe(currentRawBlockText);
+    expect(stateRepository.savedState?.files["notes/example.md"]?.noteIds).toEqual([9001]);
   });
 
   it("uses YAML deck, emits conflict warning, and continues syncing when YAML and body deck declarations differ", async () => {
@@ -564,6 +613,7 @@ function createStoredSyncedCard(settings: PluginSettings, overrides: Partial<Car
     noteIdSource: "marker" as const,
     filePath: overrides.filePath ?? "notes/example.md",
     cardType: overrides.cardType ?? "basic",
+    clozeMode: overrides.clozeMode,
     heading,
     backlinkHeadingText: overrides.backlinkHeadingText ?? heading,
     headingLevel: overrides.headingLevel ?? 4,
@@ -592,6 +642,7 @@ function createStoredSyncedCard(settings: PluginSettings, overrides: Partial<Car
     headingLevel: indexedCard.headingLevel,
     bodyMarkdown: indexedCard.bodyMarkdown,
     cardType: indexedCard.cardType,
+    clozeMode: indexedCard.clozeMode,
     blockStartOffset: indexedCard.blockStartOffset,
     blockEndOffset: indexedCard.blockEndOffset,
     blockStartLine: indexedCard.blockStartLine,

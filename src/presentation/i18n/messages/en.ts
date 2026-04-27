@@ -334,8 +334,8 @@ export const en = {
     cleanupEmptyDecksCancelled: "Empty-deck cleanup was cancelled.",
     cleanupEmptyDecksFailed: "Cleanup empty decks failed.",
     summary: {
-      currentFileSync: "Current file sync completed: files {{scannedFiles}}, cards {{scannedCards}}, created {{created}}, updated {{updated}}, migrated note types {{migratedNoteTypes}}, migrated decks {{migratedDecks}}, orphaned {{orphaned}}, media {{uploadedMedia}}, skipped {{skippedUnchangedCards}}.",
-      vaultSync: "Vault sync completed: files {{scannedFiles}}, cards {{scannedCards}}, created {{created}}, updated {{updated}}, migrated note types {{migratedNoteTypes}}, migrated decks {{migratedDecks}}, orphaned {{orphaned}}, media {{uploadedMedia}}, skipped {{skippedUnchangedCards}}.",
+      currentFileSync: "Current file sync completed: files {{scannedFiles}}, cards {{scannedCards}}, created {{created}}, rebuilt {{rebuilt}}, updated {{updated}}, migrated note types {{migratedNoteTypes}}, migrated decks {{migratedDecks}}, orphaned {{orphaned}}, media {{uploadedMedia}}, skipped {{skippedUnchangedCards}}.",
+      vaultSync: "Vault sync completed: files {{scannedFiles}}, cards {{scannedCards}}, created {{created}}, rebuilt {{rebuilt}}, updated {{updated}}, migrated note types {{migratedNoteTypes}}, migrated decks {{migratedDecks}}, orphaned {{orphaned}}, media {{uploadedMedia}}, skipped {{skippedUnchangedCards}}.",
       clearCurrentFile: "Current file synced cards cleared: tracked cards {{trackedCards}}, tracked groups {{trackedGroups}}, deleted notes {{deletedNotes}}, removed markers {{removedMarkers}}, removed ID markers {{removedCardMarkers}}, removed GI markers {{removedGroupMarkers}}, deleted local records {{deletedLocalRecords}}.",
       cleanupEmptyDecks: "Empty-deck cleanup completed: candidates {{candidateCount}}, selected {{selectedCount}}, deleted {{deletedCount}}, skipped {{skippedCount}}.",
       markerWriteConflicts: "Marker write conflicts: {{files}}.",

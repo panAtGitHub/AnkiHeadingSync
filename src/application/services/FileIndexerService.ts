@@ -1,7 +1,7 @@
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
 import { ScanScopeService } from "@/application/services/ScanScopeService";
-import { createIndexedCardSyncKey, type IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
+import { createIndexedCardSyncKey, normalizeStoredClozeMode, type IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
 import { buildGroupSrc, createIndexedGroupSyncKey, type IndexedGroupCardBlock } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
 import type { IndexedFile } from "@/domain/manual-sync/entities/IndexedFile";
 import { toNoteIdKey, type CardState, type GroupBlockState, type PendingWriteBackState, type PluginState } from "@/domain/manual-sync/entities/PluginState";
@@ -212,6 +212,7 @@ function restoreIndexedCard(card: CardState): IndexedCard {
     noteIdSource: "marker",
     filePath: card.filePath,
     cardType: card.cardType,
+    clozeMode: normalizeStoredClozeMode(card.cardType, card.clozeMode),
     heading: card.heading,
     backlinkHeadingText: card.backlinkHeadingText,
     headingLevel: card.headingLevel,

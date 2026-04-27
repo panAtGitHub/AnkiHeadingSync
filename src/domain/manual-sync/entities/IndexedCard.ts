@@ -4,6 +4,14 @@ import type { DeckResolutionWarning, DeckResolutionSource } from "@/domain/manua
 
 export type ClozeMode = "sequential" | "all";
 
+export function normalizeStoredClozeMode(cardType: CardType, clozeMode: ClozeMode | undefined): ClozeMode | undefined {
+  if (cardType !== "cloze") {
+    return undefined;
+  }
+
+  return clozeMode === "all" ? "all" : "sequential";
+}
+
 export interface IndexedCard {
   noteId?: number;
   syncKey: string;

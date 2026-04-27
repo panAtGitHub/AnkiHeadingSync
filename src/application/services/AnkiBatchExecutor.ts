@@ -10,6 +10,7 @@ import type { PlannedCard, ManualSyncPlan } from "@/domain/manual-sync/value-obj
 
 export interface AnkiBatchExecutionResult {
   created: number;
+  rebuilt: number;
   updated: number;
   migratedNoteTypes: number;
   migratedDecks: number;
@@ -37,11 +38,13 @@ export class AnkiBatchExecutor {
     const touchedSyncKeys = new Set<string>();
     const markerWriteMap = new Map<string, PlannedCard>();
     let created = 0;
+    let rebuilt = 0;
     let updated = 0;
     let migratedNoteTypes = 0;
     let migratedDecks = 0;
 
     const summaryIds = Array.from(new Set([
+      ...plan.toRebuild,
       ...plan.toUpdate,
       ...plan.toVerifyDeck,
       ...plan.toRewriteMarker,
@@ -51,6 +54,7 @@ export class AnkiBatchExecutor {
     const noteSummariesById = new Map(noteSummaries.map((summary) => [summary.noteId, summary]));
 
     const addQueue: RenderedSyncCard[] = [];
+  const rebuildQueue: Array<{ plannedCard: PlannedCard; renderedCard: RenderedSyncCard }> = [];
     const updateQueue: Array<{ plannedCard: PlannedCard; renderedCard: RenderedSyncCard }> = [];
     const modelMigrationQueue: Array<{
       plannedCard: PlannedCard;
@@ -62,6 +66,19 @@ export class AnkiBatchExecutor {
 
     for (const plannedCard of plan.toCreate) {
       addQueue.push(await this.requireRenderedCard(plannedCard, renderedCards, renderOnDemand));
+    }
+
+    for (const plannedCard of plan.toRebuild) {
+      if (plannedCard.noteId && noteSummariesById.has(plannedCard.noteId)) {
+        rebuildQueue.push({
+          plannedCard,
+          renderedCard: await this.requireRenderedCard(plannedCard, renderedCards, renderOnDemand),
+        });
+        continue;
+      }
+
+      addQueue.push(await this.requireRenderedCard(plannedCard, renderedCards, renderOnDemand));
+      markerWriteMap.set(plannedCard.card.syncKey, plannedCard);
     }
 
     for (const plannedCard of plan.toUpdate) {
@@ -117,6 +134,7 @@ export class AnkiBatchExecutor {
     await this.batchScheduler.runVoidBatches(
       Array.from(new Set([
         ...addQueue.map((card) => card.deck),
+        ...rebuildQueue.map((entry) => entry.renderedCard.deck),
         ...changeDeckQueue.map((plannedCard) => plannedCard.deck),
       ])),
       50,
@@ -126,6 +144,7 @@ export class AnkiBatchExecutor {
 
     const uploadedMedia = await this.uploadMedia([
       ...addQueue,
+      ...rebuildQueue.map((entry) => entry.renderedCard),
       ...updateQueue.map((entry) => entry.renderedCard),
       ...modelMigrationQueue.map((entry) => entry.renderedCard),
     ]);
@@ -156,6 +175,38 @@ export class AnkiBatchExecutor {
           noteModel: renderedCard.noteModel,
           renderConfigHash: renderedCard.renderConfigHash,
         }),
+        noteId,
+      });
+    }
+
+    for (const { plannedCard, renderedCard } of rebuildQueue) {
+      const fields = await this.mapFields(renderedCard, noteFieldMappings, modelDetailsCache);
+      const [noteId] = await this.ankiGateway.addNotes([{
+        deckName: renderedCard.deck,
+        modelName: renderedCard.noteModel,
+        fields,
+        tags: renderedCard.card.tagsHint,
+      }]);
+
+      try {
+        await this.ankiGateway.deleteNotes([plannedCard.noteId ?? 0]);
+      } catch (error) {
+        try {
+          await this.ankiGateway.deleteNotes([noteId]);
+        } catch (cleanupError) {
+          const deleteError = toError(error);
+          const rollbackError = toError(cleanupError);
+          throw new Error(`Failed to rebuild note ${plannedCard.noteId}: ${deleteError.message}; rollback failed: ${rollbackError.message}`);
+        }
+
+        throw error;
+      }
+
+      rebuilt += 1;
+      touchedSyncKeys.add(renderedCard.card.syncKey);
+      resolvedNoteIds.set(renderedCard.card.syncKey, noteId);
+      markerWriteMap.set(renderedCard.card.syncKey, {
+        ...plannedCard,
         noteId,
       });
     }
@@ -261,6 +312,7 @@ export class AnkiBatchExecutor {
 
     return {
       created,
+      rebuilt,
       updated,
       migratedNoteTypes,
       migratedDecks,
@@ -336,6 +388,10 @@ export class AnkiBatchExecutor {
     await this.batchScheduler.runVoidBatches(Array.from(uniqueMedia.values()), 10, 3, (batch) => this.ankiGateway.storeMediaFiles(batch));
     return uniqueMedia.size;
   }
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 function shouldChangeDeck(summary: Awaited<ReturnType<AnkiGateway["getNoteSummaries"]>>[number], targetDeck: string, explicitlyPlanned: boolean): boolean {

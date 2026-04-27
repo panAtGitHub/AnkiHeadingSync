@@ -117,7 +117,7 @@ export class ManualSyncService {
     };
     const renderedCards = new Map<string, RenderedSyncCard>();
 
-    for (const plannedCard of [...plan.toCreate, ...plan.toUpdate]) {
+    for (const plannedCard of [...plan.toCreate, ...plan.toRebuild, ...plan.toUpdate]) {
       if (!renderedCards.has(plannedCard.card.syncKey)) {
         renderedCards.set(plannedCard.card.syncKey, this.renderer.render(plannedCard, renderContext));
       }
@@ -163,6 +163,7 @@ export class ManualSyncService {
       scannedFiles: indexResult.scannedFiles,
       scannedCards: indexResult.cards.length + indexResult.groupBlocks.length,
       created: executionResult.created + qaGroupExecution.created,
+      rebuilt: executionResult.rebuilt,
       updated: executionResult.updated + qaGroupExecution.updated,
       migratedNoteTypes: executionResult.migratedNoteTypes + qaGroupExecution.migratedNoteTypes,
       migratedDecks: executionResult.migratedDecks + qaGroupExecution.migratedDecks,
@@ -269,6 +270,7 @@ export class ManualSyncService {
         headingLevel: card.headingLevel,
         bodyMarkdown: card.bodyMarkdown,
         cardType: card.cardType,
+        clozeMode: card.clozeMode,
         blockStartOffset: card.blockStartOffset,
         blockEndOffset: card.blockEndOffset,
         blockStartLine: card.blockStartLine,

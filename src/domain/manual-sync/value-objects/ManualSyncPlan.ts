@@ -12,6 +12,7 @@ export interface PlannedCard {
 
 export interface ManualSyncPlan {
   toCreate: PlannedCard[];
+  toRebuild: PlannedCard[];
   toUpdate: PlannedCard[];
   toVerifyDeck: PlannedCard[];
   toChangeDeck: PlannedCard[];

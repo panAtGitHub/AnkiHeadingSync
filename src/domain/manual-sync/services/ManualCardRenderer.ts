@@ -6,6 +6,13 @@ import type { MediaAsset } from "@/domain/card/entities/RenderedFields";
 import type { RenderedSyncCard } from "@/domain/manual-sync/entities/RenderedSyncCard";
 import { applyObsidianBacklinkPlacement, renderObsidianBacklinkAnchor } from "@/domain/shared/renderObsidianBacklink";
 
+import {
+  BRACE_CLOZE_PATTERN,
+  FENCED_CODE_PATTERN,
+  HIGHLIGHT_PATTERN,
+  INLINE_CODE_PATTERN,
+  protectSegments,
+} from "./collectClozeNumbers";
 import { preprocessCardBodyMarkdown } from "./preprocessCardBodyMarkdown";
 import { renderObsidianTagChipsInHtml } from "./renderObsidianTagChips";
 
@@ -15,13 +22,9 @@ const markdown = new MarkdownIt({
   linkify: true,
 });
 
-const INLINE_CODE_PATTERN = /`[^`\n]+`/g;
-const FENCED_CODE_PATTERN = /```[\s\S]*?```|~~~[\s\S]*?~~~/g;
 const DISPLAY_MATH_PATTERN = /(?<!\\)\$\$([\s\S]+?)(?<!\\)\$\$/g;
 const INLINE_MATH_PATTERN = /(?<!\\)\$(?!\s)([^$\n]+?)(?<!\s)\$/g;
 const ANKI_MATH_PATTERN = /(\\\[[\s\S]*?\\\])|(\\\([\s\S]*?\\\))/g;
-const HIGHLIGHT_PATTERN = /==(.+?)==/g;
-const CLOZE_PATTERN = /(?:(?<!{){(?:c?(\d+)[:|])?(?!{))((?:[^\n][\n]?)+?)(?:(?<!})}(?!}))/g;
 const EMBED_PATTERN = /!\[\[([^\]]+)\]\]/g;
 const WIKILINK_PATTERN = /(?<!!)\[\[([^\]]+)\]\]/g;
 
@@ -113,7 +116,7 @@ export class ManualCardRenderer {
     }
 
     if (cloze) {
-      transformed = transformed.replace(CLOZE_PATTERN, (_match, explicitIndex: string | undefined, content: string) => {
+      transformed = transformed.replace(BRACE_CLOZE_PATTERN, (_match, explicitIndex: string | undefined, content: string) => {
         const clozeIndex = explicitIndex
           ? Number(explicitIndex)
           : (plannedCard.card.clozeMode === "all" ? 1 : nextClozeIndex++);
@@ -166,25 +169,6 @@ export class ManualCardRenderer {
       media,
     };
   }
-}
-
-function protectSegments(
-  text: string,
-  pattern: RegExp,
-  prefix: string,
-): { text: string; restore: (value: string, formatter?: (segment: string) => string) => string } {
-  const matches: string[] = [];
-  const nextText = text.replace(pattern, (segment) => {
-    const token = `@@${prefix}_${matches.length}@@`;
-    matches.push(segment);
-    return token;
-  });
-
-  return {
-    text: nextText,
-    restore: (value: string, formatter = (segment: string) => segment) =>
-      matches.reduce((current, segment, index) => current.split(`@@${prefix}_${index}@@`).join(formatter(segment)), value),
-  };
 }
 
 function dedupeMedia(media: MediaAsset[]): MediaAsset[] {
