@@ -35,7 +35,7 @@ describe("FileIndexerService", () => {
           filePath: "notes/one.md",
           fileHash: "hash-a",
           fileStamp: `1:${["#### One", "Body"].join("\n").length}`,
-          deckRulesFingerprint: createDeckRulesFingerprint(createModule3Settings()),
+          deckRulesFingerprint: createDeckRulesFingerprint(createIndexSettingsForPath("notes/one.md")),
           lastIndexedAt: 1,
           noteIds: [10],
         },
@@ -68,7 +68,7 @@ describe("FileIndexerService", () => {
       pendingWriteBack: [],
     };
 
-    const result = await service.indexVault(createModule3Settings(), state);
+    const result = await service.indexVault(createIndexSettingsForPath("notes/one.md"), state);
 
     expect(result.skippedUnchangedFiles).toBe(1);
     expect(result.skippedUnchangedCards).toBe(1);
@@ -88,7 +88,7 @@ describe("FileIndexerService", () => {
           filePath: "notes/one.md",
           fileHash: "hash-a",
           fileStamp: `1:${content.length}`,
-          deckRulesFingerprint: createDeckRulesFingerprint(createModule3Settings({ defaultDeck: "Old::Deck" })),
+          deckRulesFingerprint: createDeckRulesFingerprint(createIndexSettingsForPath("notes/one.md", { defaultDeck: "Old::Deck" })),
           lastIndexedAt: 1,
           noteIds: [10],
         },
@@ -121,7 +121,7 @@ describe("FileIndexerService", () => {
       pendingWriteBack: [],
     };
 
-    const result = await service.indexVault(createModule3Settings({ defaultDeck: "New::Deck" }), state);
+    const result = await service.indexVault(createIndexSettingsForPath("notes/one.md", { defaultDeck: "New::Deck" }), state);
 
     expect(result.skippedUnchangedFiles).toBe(0);
     expect(vaultGateway.readCalls).toEqual(["notes/one.md"]);
@@ -129,8 +129,8 @@ describe("FileIndexerService", () => {
 
   it("changes the fingerprint and forces re-read when card answer cutoff mode changed", async () => {
     const content = ["#### One", "Body"].join("\n");
-    const oldSettings = createModule3Settings({ cardAnswerCutoffMode: "heading-block" });
-    const newSettings = createModule3Settings({ cardAnswerCutoffMode: "double-blank-lines" });
+    const oldSettings = createIndexSettingsForPath("notes/one.md", { cardAnswerCutoffMode: "heading-block" });
+    const newSettings = createIndexSettingsForPath("notes/one.md", { cardAnswerCutoffMode: "double-blank-lines" });
     const vaultGateway = new FakeManualSyncVaultGateway({
       "notes/one.md": content,
     });
@@ -184,8 +184,8 @@ describe("FileIndexerService", () => {
 
   it("changes the fingerprint and forces re-read when pure tag line cleanup setting changed", async () => {
     const content = ["#### One", "#项目A #重点/案例", "", "Body"].join("\n");
-    const oldSettings = createModule3Settings({ keepPureTagLinesInCardBody: true });
-    const newSettings = createModule3Settings({ keepPureTagLinesInCardBody: false });
+    const oldSettings = createIndexSettingsForPath("notes/one.md", { keepPureTagLinesInCardBody: true });
+    const newSettings = createIndexSettingsForPath("notes/one.md", { keepPureTagLinesInCardBody: false });
     const vaultGateway = new FakeManualSyncVaultGateway({
       "notes/one.md": content,
     });
@@ -237,3 +237,19 @@ describe("FileIndexerService", () => {
     expect(vaultGateway.readCalls).toEqual(["notes/one.md"]);
   });
 });
+
+function createIndexSettingsForPath(filePath: string, overrides: Parameters<typeof createModule3Settings>[0] = {}) {
+  const firstSlashIndex = filePath.indexOf("/");
+  if (firstSlashIndex === -1) {
+    return createModule3Settings({
+      scopeMode: "all",
+      ...overrides,
+    });
+  }
+
+  return createModule3Settings({
+    scopeMode: "include",
+    includeFolders: [filePath.slice(0, firstSlashIndex)],
+    ...overrides,
+  });
+}

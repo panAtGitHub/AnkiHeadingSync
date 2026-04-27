@@ -2,6 +2,7 @@ import { ButtonComponent, PluginSettingTab, Setting } from "obsidian";
 
 import {
   DEFAULT_OBSIDIAN_BACKLINK_LABEL,
+  isRunScopeConfigured,
   normalizePluginSettings,
   type CardAnswerCutoffMode,
   type CardTypeConfigId,
@@ -60,13 +61,18 @@ interface SettingsCardShell {
   bodyEl: HTMLElement;
 }
 
+interface PendingTextSave {
+  timer: ReturnType<typeof setTimeout>;
+  saveAction: (draftValue: string) => Promise<void>;
+}
+
 export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private readonly noteFieldMappingService = new NoteFieldMappingService();
   private readonly qaGroupFieldMappingService = new QaGroupFieldMappingService();
   private readonly availableNoteModels: string[] = [];
   private readonly draftMappings: Record<string, NoteModelFieldMapping> = {};
   private readonly loadedModelDetails: Record<string, NoteModelDetails> = {};
-  private readonly debouncedTextSaves = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly debouncedTextSaves = new Map<string, PendingTextSave>();
   private readonly textDraftValues = new Map<string, string>();
   private readonly cardShells = new Map<SettingsCardId, SettingsCardShell>();
   private readonly expandedCardIds = new Set<SettingsCardId>();
@@ -98,7 +104,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     super.hide();
     this.displayInitialized = false;
     this.cardShells.clear();
-    this.clearDebouncedTextSaves();
+    void this.flushDebouncedTextSaves();
     this.cardTypeStatusOverride = null;
     this.noteTypeCacheCheckStatus = "idle";
     this.noteTypeCacheCheckPromise = null;
@@ -677,6 +683,13 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
             void this.updateScopeMode(value);
           });
       });
+
+    if (!isRunScopeConfigured(this.plugin.settings.scopeMode, this.plugin.settings.includeFolders)) {
+      const warningEl = containerEl.createEl("p", { text: t("settings.scope.unconfiguredWarning") });
+      warningEl.dataset.scopeWarning = "unconfigured";
+      warningEl.style.color = "var(--text-warning)";
+      warningEl.style.fontWeight = "600";
+    }
 
     if (this.plugin.settings.scopeMode === "all") {
       return;
@@ -1633,7 +1646,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       return "qa-group";
     }
 
-    return configId === "cloze" ? "cloze" : configId === "semantic-qa" ? "semantic-qa" : "basic";
+    return configId === "cloze" ? "cloze" : "basic";
   }
 
   private ensureFolderTreeLoaded(forceReload = false): void {
@@ -1837,24 +1850,30 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     const pendingTimer = this.debouncedTextSaves.get(key);
     if (pendingTimer) {
-      globalThis.clearTimeout(pendingTimer);
+      globalThis.clearTimeout(pendingTimer.timer);
     }
 
     const timer = globalThis.setTimeout(() => {
-      void saveAction(this.textDraftValues.get(key) ?? value).finally(() => {
-        this.debouncedTextSaves.delete(key);
-      });
+      void this.flushDebouncedTextSave(key);
     }, TEXT_SAVE_DEBOUNCE_MS);
 
-    this.debouncedTextSaves.set(key, timer);
+    this.debouncedTextSaves.set(key, { timer, saveAction });
   }
 
-  private clearDebouncedTextSaves(): void {
-    for (const timer of this.debouncedTextSaves.values()) {
-      globalThis.clearTimeout(timer);
+  private async flushDebouncedTextSave(key: string): Promise<void> {
+    const pendingSave = this.debouncedTextSaves.get(key);
+    if (!pendingSave) {
+      return;
     }
 
-    this.debouncedTextSaves.clear();
+    globalThis.clearTimeout(pendingSave.timer);
+    this.debouncedTextSaves.delete(key);
+    await pendingSave.saveAction(this.textDraftValues.get(key) ?? "");
+  }
+
+  private async flushDebouncedTextSaves(): Promise<void> {
+    const keys = [...this.debouncedTextSaves.keys()];
+    await Promise.allSettled(keys.map((key) => this.flushDebouncedTextSave(key)));
   }
 
   private getDraftValue(key: string, persistedValue: string): string {
@@ -1943,7 +1962,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       return t("settings.cards.cardTypes.rows.cloze");
     }
 
-    return t("settings.cards.cardTypes.rows.semanticQa");
+    return t("settings.cards.cardTypes.rows.qaGroup");
   }
 }
 

@@ -135,7 +135,7 @@ function migrateCardState(rawCard: LegacyCardState, noteId: number): CardState {
 }
 
 function sanitizeCardType(value: unknown): CardState["cardType"] {
-  if (value === "cloze" || value === "semantic-qa") {
+  if (value === "cloze") {
     return value;
   }
 

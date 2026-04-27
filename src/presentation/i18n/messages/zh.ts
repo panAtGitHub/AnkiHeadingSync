@@ -4,7 +4,6 @@ export const zh = {
   commands: {
     syncCurrentFileToAnki: "同步当前文件到 Anki",
     syncVaultToAnki: "同步全库到 Anki",
-    rebuildCardIndex: "重建卡片索引",
     clearCurrentFileSyncedCards: "清空当前文件已同步卡片",
     cleanupEmptyDecks: "清理空牌组",
   },
@@ -40,19 +39,6 @@ export const zh = {
       },
       managedNoteType: "托管笔记类型：{{modelName}}。QA Group 同步会直接写入 Stem / GroupId / Src / S01..S12。如果你想在其他同步路径里复用它，它也会出现在下面的字段映射面板中。",
       managedModelContract: "托管模型约束：同步时会自动检查 {{fieldCount}} 个字段和 {{templateCount}} 个模板。",
-    },
-    semanticQa: {
-      title: "语义 QA",
-      marker: {
-        name: "语义 QA 标记",
-        desc: "当 QA 标题以这个 hashtag 标记结尾时，带缩进子内容的一级列表项会拆分成独立卡片。",
-        placeholder: "#anki-list-qa",
-      },
-      previewTitle: "语义 QA 预览",
-      triggerHeadingExample: "触发标题示例：{{heading}}",
-      previewUnavailable: "当前无法生成预览。请使用类似 #anki-list-qa 的尾随 hashtag 标记。",
-      questionPreview: "问题预览：{{question}}",
-      answerPreview: "答案预览：{{answer}}",
     },
     syncOptions: {
       addObsidianBacklink: {
@@ -115,10 +101,6 @@ export const zh = {
         cloze: {
           title: "填空题",
           description: "选择填空题笔记类型，从 Anki 读取字段，然后确认主字段映射。",
-        },
-        semanticQa: {
-          title: "语义 QA",
-          description: "选择语义 QA 笔记类型，从 Anki 读取字段，然后确认子卡片的标题/正文映射。",
         },
       },
       noteTypeLabel: "{{title}} 笔记类型",
@@ -197,6 +179,7 @@ export const zh = {
         include: "仅处理下方勾选文件夹中的 Markdown 文件",
         exclude: "处理整个 vault，但跳过下方勾选文件夹中的 Markdown 文件",
       },
+      unconfiguredWarning: "运行范围尚未配置。当前是 include 模式，至少选择一个文件夹后才能同步。",
       option: {
         all: "全部文件",
         include: "仅在指定文件夹",
@@ -275,7 +258,6 @@ export const zh = {
           basic: "问答题（常规段落形式）",
           qaGroup: "问答题（多级列表形式）",
           cloze: "填空题",
-          semanticQa: "语义问答题",
         },
       },
       syncContent: {
@@ -308,7 +290,6 @@ export const zh = {
         items: {
           syncCurrentFile: "只把当前活动 Markdown 文件同步到 Anki。",
           syncVault: "把全库中所有处于作用范围内的 Markdown 文件同步到 Anki。",
-          rebuildIndex: "只重建本地卡片索引，不创建或更新远端笔记。",
           clearCurrentFile: "清空当前文件的已同步标记和本地跟踪状态。",
           cleanupDecks: "从 Anki 删除所选空牌组。",
         },
@@ -334,7 +315,6 @@ export const zh = {
     syncUseCaseNotInitialized: "同步用例尚未初始化。",
     currentFileSyncFailed: "当前文件同步失败。",
     vaultSyncFailed: "全库同步失败。",
-    rebuildFailed: "卡片索引重建失败。",
     noActiveMarkdownForDeckTemplateInsertion: "当前没有可用于插入牌组模板的活动 Markdown 文件。",
     vaultGatewayNotInitialized: "Vault 网关尚未初始化。",
     markdownFileNotFound: "未找到 Markdown 文件：{{filePath}}",
@@ -352,7 +332,6 @@ export const zh = {
     summary: {
       currentFileSync: "当前文件同步完成：文件 {{scannedFiles}}，卡片 {{scannedCards}}，新建 {{created}}，更新 {{updated}}，迁移模板 {{migratedNoteTypes}}，迁移牌组 {{migratedDecks}}，孤儿 {{orphaned}}，媒体 {{uploadedMedia}}，跳过 {{skippedUnchangedCards}}。",
       vaultSync: "全库同步完成：文件 {{scannedFiles}}，卡片 {{scannedCards}}，新建 {{created}}，更新 {{updated}}，迁移模板 {{migratedNoteTypes}}，迁移牌组 {{migratedDecks}}，孤儿 {{orphaned}}，媒体 {{uploadedMedia}}，跳过 {{skippedUnchangedCards}}。",
-      rebuild: "卡片索引重建完成：文件 {{scannedFiles}}，卡片 {{scannedCards}}，迁移牌组 {{migratedDecks}}，孤儿 {{orphaned}}，重写标记 {{rewrittenMarkers}}，跳过 {{skippedUnchangedCards}}。",
       clearCurrentFile: "当前文件已同步卡片清空完成：已跟踪卡片 {{trackedCards}}，已跟踪分组 {{trackedGroups}}，删除笔记 {{deletedNotes}}，移除标记 {{removedMarkers}}，移除 ID 标记 {{removedCardMarkers}}，移除 GI 标记 {{removedGroupMarkers}}，删除本地记录 {{deletedLocalRecords}}。",
       cleanupEmptyDecks: "空牌组清理完成：候选 {{candidateCount}}，已选 {{selectedCount}}，已删 {{deletedCount}}，跳过 {{skippedCount}}。",
       markerWriteConflicts: "标记写回冲突：{{files}}。",
@@ -363,6 +342,7 @@ export const zh = {
     },
   },
   errors: {
+    runScopeNotConfigured: "运行范围尚未配置。当前是 include 模式，请至少选择一个文件夹后再同步。",
     currentFileOutOfScope: "当前文件不在插件作用范围内：{{filePath}}",
     deck: {
       emptyName: "牌组不能为空，请检查文件级牌组声明或默认牌组设置。",
@@ -379,10 +359,6 @@ export const zh = {
       qaGroupMarkerRequired: "QA Group 标记不能为空。",
       qaGroupMarkerInvalid: "QA Group 标记必须是类似 #anki-list 的 hashtag 样式 token。",
       clozeNoteTypeRequired: "填空题笔记类型不能为空。",
-      semanticQaMarkerRequired: "语义 QA 标记不能为空。",
-      semanticQaMarkerInvalid: "语义 QA 标记必须是类似 #anki-list-qa 的 hashtag 样式 token。",
-      qaGroupMarkerConflict: "QA Group 标记必须和语义 QA 标记不同。",
-      semanticQaNoteTypeRequired: "语义 QA 笔记类型不能为空。",
       defaultDeckRequired: "默认牌组不能为空。",
       fileDeckEnabledBoolean: "文件级牌组开关必须是布尔值。",
       syncObsidianTagsToAnkiBoolean: "同步 Obsidian 标签到 Anki 开关必须是布尔值。",
@@ -428,23 +404,19 @@ export const zh = {
       noteTypeNotSelected: {
         basic: "基础卡尚未选择 Anki 笔记模板。请先在设置页选择模板后再同步。",
         cloze: "填空题尚未选择 Anki 笔记模板。请先在设置页选择模板后再同步。",
-        semanticQa: "语义 QA 尚未选择 Anki 笔记模板。请先在设置页选择模板后再同步。",
         qaGroup: "问答题（多级列表）尚未选择 Anki 笔记模板。请先在设置页选择模板后再同步。",
       },
       missingSavedMapping: {
         basic: "找不到基础卡笔记类型 \"{{modelName}}\" 的已保存字段映射。请打开插件设置并先从 Anki 读取字段。",
         cloze: "找不到填空题笔记类型 \"{{modelName}}\" 的已保存字段映射。请打开插件设置并先从 Anki 读取字段。",
-        semanticQa: "找不到语义 QA 笔记类型 \"{{modelName}}\" 的已保存字段映射。请打开插件设置并先从 Anki 读取字段。",
         qaGroup: "找不到问答题（多级列表）笔记模板 \"{{modelName}}\" 的已保存字段映射。请先在设置页从 Anki 读取字段并保存映射。",
       },
       incompleteSavedMapping: {
         basic: "基础卡笔记类型 \"{{modelName}}\" 的已保存字段映射不完整。请打开插件设置并保存标题字段和正文字段。",
-        semanticQa: "语义 QA 笔记类型 \"{{modelName}}\" 的已保存字段映射不完整。请打开插件设置并保存标题字段和正文字段。",
         cloze: "填空题笔记类型 \"{{modelName}}\" 的已保存字段映射不完整。请打开插件设置并保存主字段。",
       },
       titleBodyMustDiffer: {
         basic: "基础卡笔记类型 \"{{modelName}}\" 的标题字段和正文字段必须不同。",
-        semanticQa: "语义 QA 笔记类型 \"{{modelName}}\" 的标题字段和正文字段必须不同。",
       },
       stale: "笔记类型 \"{{modelName}}\" 的已保存字段映射已过期，因为这些字段在 Anki 中已不存在：{{fields}}。请重新从 Anki 读取字段。",
       qaGroupMissingTitle: "问答题（多级列表）笔记模板 \"{{modelName}}\" 的已保存字段映射不完整，缺少标题字段。请在设置页重新保存字段映射。",

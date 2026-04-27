@@ -81,7 +81,7 @@ export class NoteFieldMappingService {
       }
 
       if (mapping.titleField === mapping.bodyField) {
-        throw new PluginUserError(getTitleBodyMustDifferKey(mapping.cardType), {
+        throw new PluginUserError(getTitleBodyMustDifferKey(), {
           modelName: mapping.modelName,
         });
       }
@@ -155,34 +155,28 @@ export class NoteFieldMappingService {
   }
 }
 
-function isBasicLikeMappingCardType(cardType: NoteModelFieldMappingCardType): cardType is Extract<NoteModelFieldMappingCardType, "basic" | "semantic-qa"> {
-  return cardType === "basic" || cardType === "semantic-qa";
+function isBasicLikeMappingCardType(cardType: NoteModelFieldMappingCardType): cardType is Extract<NoteModelFieldMappingCardType, "basic"> {
+  return cardType === "basic";
 }
 
-function getMissingSavedMappingKey(cardType: CardType): "errors.noteFieldMapping.missingSavedMapping.basic" | "errors.noteFieldMapping.missingSavedMapping.cloze" | "errors.noteFieldMapping.missingSavedMapping.semanticQa" {
+function getMissingSavedMappingKey(cardType: CardType): "errors.noteFieldMapping.missingSavedMapping.basic" | "errors.noteFieldMapping.missingSavedMapping.cloze" {
   if (cardType === "cloze") {
     return "errors.noteFieldMapping.missingSavedMapping.cloze";
   }
 
-  return cardType === "semantic-qa"
-    ? "errors.noteFieldMapping.missingSavedMapping.semanticQa"
-    : "errors.noteFieldMapping.missingSavedMapping.basic";
+  return "errors.noteFieldMapping.missingSavedMapping.basic";
 }
 
-function getIncompleteSavedMappingKey(cardType: NoteModelFieldMappingCardType): "errors.noteFieldMapping.incompleteSavedMapping.basic" | "errors.noteFieldMapping.incompleteSavedMapping.cloze" | "errors.noteFieldMapping.incompleteSavedMapping.semanticQa" {
+function getIncompleteSavedMappingKey(cardType: NoteModelFieldMappingCardType): "errors.noteFieldMapping.incompleteSavedMapping.basic" | "errors.noteFieldMapping.incompleteSavedMapping.cloze" {
   if (cardType === "cloze") {
     return "errors.noteFieldMapping.incompleteSavedMapping.cloze";
   }
 
-  return cardType === "semantic-qa"
-    ? "errors.noteFieldMapping.incompleteSavedMapping.semanticQa"
-    : "errors.noteFieldMapping.incompleteSavedMapping.basic";
+  return "errors.noteFieldMapping.incompleteSavedMapping.basic";
 }
 
-function getTitleBodyMustDifferKey(cardType: Extract<NoteModelFieldMappingCardType, "basic" | "semantic-qa">): "errors.noteFieldMapping.titleBodyMustDiffer.basic" | "errors.noteFieldMapping.titleBodyMustDiffer.semanticQa" {
-  return cardType === "semantic-qa"
-    ? "errors.noteFieldMapping.titleBodyMustDiffer.semanticQa"
-    : "errors.noteFieldMapping.titleBodyMustDiffer.basic";
+function getTitleBodyMustDifferKey(): "errors.noteFieldMapping.titleBodyMustDiffer.basic" {
+  return "errors.noteFieldMapping.titleBodyMustDiffer.basic";
 }
 
 function findFieldName(fieldNames: string[], preferredNames: string[]): string | undefined {

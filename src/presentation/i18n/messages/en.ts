@@ -6,7 +6,6 @@ export const en = {
   commands: {
     syncCurrentFileToAnki: "Sync current file to Anki",
     syncVaultToAnki: "Sync vault to Anki",
-    rebuildCardIndex: "Rebuild card index",
     clearCurrentFileSyncedCards: "Clear synced cards in current file",
     cleanupEmptyDecks: "Clean up empty decks",
   },
@@ -42,19 +41,6 @@ export const en = {
       },
       managedNoteType: "Managed note type: {{modelName}}. QA Group sync writes Stem / GroupId / Src / S01..S12 directly. The same note type can also appear in the field mapping panels below if you want to reuse it for other routes.",
       managedModelContract: "Managed model contract: {{fieldCount}} fields and {{templateCount}} templates are checked automatically during sync.",
-    },
-    semanticQa: {
-      title: "Semantic QA",
-      marker: {
-        name: "Semantic QA marker",
-        desc: "When a QA heading ends with this hashtag marker, first-level list items with indented child content become separate cards.",
-        placeholder: "#anki-list-qa",
-      },
-      previewTitle: "Semantic QA preview",
-      triggerHeadingExample: "Trigger heading example: {{heading}}",
-      previewUnavailable: "Preview unavailable. Use a trailing hashtag marker such as #anki-list-qa.",
-      questionPreview: "Question preview: {{question}}",
-      answerPreview: "Answer preview: {{answer}}",
     },
     syncOptions: {
       addObsidianBacklink: {
@@ -117,10 +103,6 @@ export const en = {
         cloze: {
           title: "Cloze",
           description: "Choose the cloze note type, read its fields from Anki, then confirm the main field mapping.",
-        },
-        semanticQa: {
-          title: "Semantic QA",
-          description: "Choose the semantic QA note type, read its fields from Anki, then confirm the title/body mapping for child cards.",
         },
       },
       noteTypeLabel: "{{title}} note type",
@@ -199,6 +181,7 @@ export const en = {
         include: "Only process Markdown files in the checked folders below",
         exclude: "Process the whole vault, but skip Markdown files in the checked folders below",
       },
+      unconfiguredWarning: "Run scope is not configured yet. Include mode requires at least one selected folder before sync can run.",
       option: {
         all: "All files",
         include: "Only in selected folders",
@@ -277,7 +260,6 @@ export const en = {
           basic: "Q&A (regular paragraph)",
           qaGroup: "Q&A (nested list)",
           cloze: "Cloze",
-          semanticQa: "Semantic Q&A",
         },
       },
       syncContent: {
@@ -310,7 +292,6 @@ export const en = {
         items: {
           syncCurrentFile: "Sync only the active Markdown file to Anki.",
           syncVault: "Sync all in-scope Markdown files in the vault to Anki.",
-          rebuildIndex: "Rebuild the local card index without creating or updating notes.",
           clearCurrentFile: "Clear synced card markers and tracked sync state for the active file.",
           cleanupDecks: "Delete selected empty decks from Anki.",
         },
@@ -336,7 +317,6 @@ export const en = {
     syncUseCaseNotInitialized: "Sync use case is not initialized.",
     currentFileSyncFailed: "Current file sync failed.",
     vaultSyncFailed: "Vault sync failed.",
-    rebuildFailed: "Card index rebuild failed.",
     noActiveMarkdownForDeckTemplateInsertion: "No active Markdown file is available for deck template insertion.",
     vaultGatewayNotInitialized: "Vault gateway is not initialized.",
     markdownFileNotFound: "Markdown file not found: {{filePath}}",
@@ -354,7 +334,6 @@ export const en = {
     summary: {
       currentFileSync: "Current file sync completed: files {{scannedFiles}}, cards {{scannedCards}}, created {{created}}, updated {{updated}}, migrated note types {{migratedNoteTypes}}, migrated decks {{migratedDecks}}, orphaned {{orphaned}}, media {{uploadedMedia}}, skipped {{skippedUnchangedCards}}.",
       vaultSync: "Vault sync completed: files {{scannedFiles}}, cards {{scannedCards}}, created {{created}}, updated {{updated}}, migrated note types {{migratedNoteTypes}}, migrated decks {{migratedDecks}}, orphaned {{orphaned}}, media {{uploadedMedia}}, skipped {{skippedUnchangedCards}}.",
-      rebuild: "Card index rebuild completed: files {{scannedFiles}}, cards {{scannedCards}}, migrated decks {{migratedDecks}}, orphaned {{orphaned}}, rewritten markers {{rewrittenMarkers}}, skipped {{skippedUnchangedCards}}.",
       clearCurrentFile: "Current file synced cards cleared: tracked cards {{trackedCards}}, tracked groups {{trackedGroups}}, deleted notes {{deletedNotes}}, removed markers {{removedMarkers}}, removed ID markers {{removedCardMarkers}}, removed GI markers {{removedGroupMarkers}}, deleted local records {{deletedLocalRecords}}.",
       cleanupEmptyDecks: "Empty-deck cleanup completed: candidates {{candidateCount}}, selected {{selectedCount}}, deleted {{deletedCount}}, skipped {{skippedCount}}.",
       markerWriteConflicts: "Marker write conflicts: {{files}}.",
@@ -365,6 +344,7 @@ export const en = {
     },
   },
   errors: {
+    runScopeNotConfigured: "Run scope is not configured. In include mode, select at least one folder before syncing.",
     currentFileOutOfScope: "The current file is outside the plugin scope: {{filePath}}",
     deck: {
       emptyName: "Deck name cannot be empty. Check the file-level deck declaration or default deck setting.",
@@ -381,10 +361,6 @@ export const en = {
       qaGroupMarkerRequired: "QA Group marker is required.",
       qaGroupMarkerInvalid: "QA Group marker must be a hashtag-style token like #anki-list.",
       clozeNoteTypeRequired: "Cloze note type is required.",
-      semanticQaMarkerRequired: "Semantic QA marker is required.",
-      semanticQaMarkerInvalid: "Semantic QA marker must be a hashtag-style token like #anki-list-qa.",
-      qaGroupMarkerConflict: "QA Group marker must be different from Semantic QA marker.",
-      semanticQaNoteTypeRequired: "Semantic QA note type is required.",
       defaultDeckRequired: "Default deck is required.",
       fileDeckEnabledBoolean: "File deck enabled must be a boolean.",
       syncObsidianTagsToAnkiBoolean: "Sync Obsidian tags to Anki must be a boolean.",
@@ -430,23 +406,19 @@ export const en = {
       noteTypeNotSelected: {
         basic: "No Anki note type is selected for basic cards. Choose one in settings before syncing.",
         cloze: "No Anki note type is selected for cloze cards. Choose one in settings before syncing.",
-        semanticQa: "No Anki note type is selected for semantic QA cards. Choose one in settings before syncing.",
         qaGroup: "No Anki note type is selected for QA Group cards. Choose one in settings before syncing.",
       },
       missingSavedMapping: {
         basic: "No saved field mapping found for basic note type \"{{modelName}}\". Open plugin settings and read fields from Anki first.",
         cloze: "No saved field mapping found for cloze note type \"{{modelName}}\". Open plugin settings and read fields from Anki first.",
-        semanticQa: "No saved field mapping found for semantic QA note type \"{{modelName}}\". Open plugin settings and read fields from Anki first.",
         qaGroup: "No saved field mapping found for QA Group note type \"{{modelName}}\". Open plugin settings, read fields from Anki, and save the mapping first.",
       },
       incompleteSavedMapping: {
         basic: "Saved field mapping for basic note type \"{{modelName}}\" is incomplete. Open plugin settings and save both title and body fields.",
-        semanticQa: "Saved field mapping for semantic QA note type \"{{modelName}}\" is incomplete. Open plugin settings and save both title and body fields.",
         cloze: "Saved field mapping for cloze note type \"{{modelName}}\" is incomplete. Open plugin settings and save the main field.",
       },
       titleBodyMustDiffer: {
         basic: "Basic note type \"{{modelName}}\" must use different title and body fields.",
-        semanticQa: "Semantic QA note type \"{{modelName}}\" must use different title and body fields.",
       },
       stale: "Saved field mapping for note type \"{{modelName}}\" is stale because these fields no longer exist in Anki: {{fields}}. Open plugin settings and read fields from Anki again.",
       qaGroupMissingTitle: "Saved field mapping for QA Group note type \"{{modelName}}\" is incomplete because the title field is missing. Save the mapping again in settings.",

@@ -24,6 +24,18 @@ describe("PluginUserError", () => {
     expect(renderUserMessage(error)).toBe("当前文件不在插件作用范围内：notes/example.md");
   });
 
+  it("renders scope-not-configured errors in English and Chinese", () => {
+    vi.spyOn(obsidian, "getLanguage").mockReturnValue("en");
+    expect(renderUserMessage(new PluginUserError("errors.runScopeNotConfigured"))).toBe(
+      "Run scope is not configured. In include mode, select at least one folder before syncing.",
+    );
+
+    vi.spyOn(obsidian, "getLanguage").mockReturnValue("zh");
+    expect(renderUserMessage(new PluginUserError("errors.runScopeNotConfigured"))).toBe(
+      "运行范围尚未配置。当前是 include 模式，请至少选择一个文件夹后再同步。",
+    );
+  });
+
   it("renders write-back failure summaries with localized detail lines", () => {
     vi.spyOn(obsidian, "getLanguage").mockReturnValue("zh");
 

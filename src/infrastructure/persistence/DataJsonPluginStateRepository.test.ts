@@ -115,7 +115,7 @@ describe("DataJsonPluginStateRepository", () => {
     expect(loaded.pendingWriteBack).toEqual([]);
   });
 
-  it("preserves semantic QA card type when loading modern plugin state", async () => {
+  it("normalizes removed semantic QA card types to basic when loading modern plugin state", async () => {
     const rawBlockText = ["semantic-qa:核心产品::1", "城市更新", "核心产品", "百人会"].join("\n");
     const repository = new DataJsonPluginStateRepository(new InMemoryPluginDataStore({
       pluginState: {
@@ -136,7 +136,7 @@ describe("DataJsonPluginStateRepository", () => {
             backlinkHeadingText: "城市更新 #anki-list-qa",
             headingLevel: 4,
             bodyMarkdown: "百人会",
-            cardType: "semantic-qa",
+            cardType: "semantic-qa" as never,
             blockStartOffset: 0,
             blockEndOffset: rawBlockText.length,
             blockStartLine: 2,
@@ -159,7 +159,7 @@ describe("DataJsonPluginStateRepository", () => {
 
     const loaded = await repository.load();
 
-    expect(loaded.cards["52"]?.cardType).toBe("semantic-qa");
+    expect(loaded.cards["52"]?.cardType).toBe("basic");
     expect(loaded.cards["52"]?.backlinkHeadingText).toBe("城市更新 #anki-list-qa");
   });
 });

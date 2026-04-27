@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { TFile, TFolder } from "obsidian";
 
+import { MarkdownFileNotFoundError, MarkdownWriteConflictError } from "@/application/ports/VaultGateway";
+
 import { ObsidianVaultGateway } from "./ObsidianVaultGateway";
 import { normalizeObsidianTags } from "./normalizeObsidianTags";
 
@@ -85,6 +87,53 @@ describe("ObsidianVaultGateway", () => {
         children: [],
       },
     ]);
+  });
+
+  it("writes markdown files through vault.process when the expected content still matches", async () => {
+    const FileCtor = TFile as unknown as new (path: string) => TFile;
+    const file = new FileCtor("notes/example.md");
+    let processedFile: TFile | undefined;
+    let writtenContent: string | undefined;
+    const gateway = new ObsidianVaultGateway({
+      vault: {
+        getAbstractFileByPath: () => file,
+        process: async (targetFile: TFile, updater: (data: string) => string) => {
+          processedFile = targetFile;
+          writtenContent = updater("# Title\nBody");
+          return writtenContent;
+        },
+      },
+    } as never);
+
+    await gateway.replaceMarkdownFile("notes/example.md", "# Title\nBody", "# Title\nUpdated");
+
+    expect(processedFile).toBe(file);
+    expect(writtenContent).toBe("# Title\nUpdated");
+  });
+
+  it("throws a write conflict when vault.process sees changed content", async () => {
+    const FileCtor = TFile as unknown as new (path: string) => TFile;
+    const file = new FileCtor("notes/example.md");
+    const gateway = new ObsidianVaultGateway({
+      vault: {
+        getAbstractFileByPath: () => file,
+        process: async (_targetFile: TFile, updater: (data: string) => string) => updater("# Title\nChanged"),
+      },
+    } as never);
+
+    await expect(gateway.replaceMarkdownFile("notes/example.md", "# Title\nBody", "# Title\nUpdated"))
+      .rejects.toBeInstanceOf(MarkdownWriteConflictError);
+  });
+
+  it("throws when replacing a markdown file that does not exist", async () => {
+    const gateway = new ObsidianVaultGateway({
+      vault: {
+        getAbstractFileByPath: () => null,
+      },
+    } as never);
+
+    await expect(gateway.replaceMarkdownFile("notes/missing.md", "before", "after"))
+      .rejects.toBeInstanceOf(MarkdownFileNotFoundError);
   });
 
   it("normalizes trailing heading tags when creating backlinks", () => {

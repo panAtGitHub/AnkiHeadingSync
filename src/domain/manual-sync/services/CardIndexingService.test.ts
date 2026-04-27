@@ -346,51 +346,6 @@ describe("CardIndexingService", () => {
     expect(indexedFile.groupBlocks ?? []).toHaveLength(0);
   });
 
-  it("splits a tagged QA heading into semantic QA child cards with distinct titles and backlink anchors", () => {
-    const service = new CardIndexingService();
-    const indexedFile = service.index(
-      {
-        path: "notes/example.md",
-        basename: "example",
-        content: [
-          "#### Concepts #anki-list-qa",
-          "- Alpha",
-          "  First answer",
-          "  <!--ID: 42-->",
-          "- Beta",
-          "  Second answer",
-        ].join("\n"),
-      },
-      {
-        qaHeadingLevel: 4,
-        clozeHeadingLevel: 5,
-        semanticQaMarker: "#anki-list-qa",
-        fileStamp: "1:1",
-        knownCards: [],
-        pendingWriteBack: [],
-      },
-    );
-
-    expect(indexedFile.cards).toHaveLength(2);
-    expect(indexedFile.cards[0]).toMatchObject({
-      noteId: 42,
-      noteIdSource: "marker",
-      cardType: "semantic-qa",
-      heading: "Concepts<br>Alpha",
-      backlinkHeadingText: "Concepts #anki-list-qa",
-      bodyMarkdown: "First answer",
-      markerLine: 4,
-      markerIndent: "  ",
-    });
-    expect(indexedFile.cards[1]).toMatchObject({
-      noteId: undefined,
-      cardType: "semantic-qa",
-      heading: "Concepts<br>Beta",
-      backlinkHeadingText: "Concepts #anki-list-qa",
-      bodyMarkdown: "Second answer",
-    });
-  });
-
   it("indexes a #anki-list heading as one QA Group block and parses its GI marker", () => {
     const service = new CardIndexingService();
     const indexedFile = service.index(
@@ -553,7 +508,7 @@ describe("CardIndexingService", () => {
     });
   });
 
-  it("writes file-level tags into basic, cloze, and semantic QA cards", () => {
+  it("writes file-level tags into basic and cloze cards", () => {
     const service = new CardIndexingService();
     const indexedFile = service.index(
       {
@@ -565,10 +520,6 @@ describe("CardIndexingService", () => {
           "",
           "##### Cloze",
           "{{c1::Body}}",
-          "",
-          "#### Concepts #anki-list-qa",
-          "- Alpha",
-          "  First answer",
         ].join("\n"),
         tags: ["📖::一人公司", "3地区"],
       },
@@ -581,7 +532,6 @@ describe("CardIndexingService", () => {
             extraMarker: "",
           },
         },
-        semanticQaMarker: "#anki-list-qa",
         syncObsidianTagsToAnki: true,
         fileStamp: "1:1",
         knownCards: [],
@@ -590,7 +540,6 @@ describe("CardIndexingService", () => {
     );
 
     expect(indexedFile.cards.map((card) => card.tagsHint)).toEqual([
-      ["📖::一人公司", "3地区"],
       ["📖::一人公司", "3地区"],
       ["📖::一人公司", "3地区"],
     ]);

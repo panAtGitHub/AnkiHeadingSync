@@ -43,8 +43,6 @@ describe("DataJsonPluginConfigRepository", () => {
     expect(settings.folderDeckMode).toBe("folder-and-file");
     expect(settings.qaGroupMarker).toBe("#anki-list");
     expect(settings.cardAnswerCutoffMode).toBe("heading-block");
-    expect(settings.semanticQaMarker).toBe("#anki-list-qa");
-    expect(settings.semanticQaNoteType).toBe("Semantic QA");
     expect(settings.obsidianBacklinkLabel).toBe("Open in Obsidian");
     expect(settings.obsidianBacklinkPlacement).toBe("answer-last-line");
     expect(settings.ankiModelFieldCache).toEqual({});
@@ -150,49 +148,29 @@ describe("DataJsonPluginConfigRepository", () => {
     });
   });
 
-  it("persists semantic QA settings and mappings across save and reload", async () => {
-    const store = new InMemoryPluginDataStore();
-    const repository = new DataJsonPluginConfigRepository(store);
-
-    await repository.save({
-      ...DEFAULT_SETTINGS,
-      cardAnswerCutoffMode: "double-blank-lines",
-      semanticQaMarker: "#semantic-qa",
-      semanticQaNoteType: "Semantic QA",
-      cardTypeConfigs: {
-        ...DEFAULT_SETTINGS.cardTypeConfigs,
-        "semantic-qa": {
-          ...DEFAULT_SETTINGS.cardTypeConfigs["semantic-qa"],
-          extraMarker: "#semantic-qa",
-          noteType: "Semantic QA",
+  it("drops removed semantic QA config fields and mappings during load normalization", async () => {
+    const repository = new DataJsonPluginConfigRepository(new InMemoryPluginDataStore({
+      settings: {
+        cardAnswerCutoffMode: "double-blank-lines",
+        semanticQaMarker: "#semantic-qa",
+        semanticQaNoteType: "Semantic QA",
+        noteFieldMappings: {
+          "semantic-qa:Semantic QA": {
+            cardType: "semantic-qa",
+            modelName: "Semantic QA",
+            loadedFieldNames: ["Title", "Body"],
+            titleField: "Title",
+            bodyField: "Body",
+            loadedAt: 456,
+          },
         },
-      },
-      noteFieldMappings: {
-        "semantic-qa:Semantic QA": {
-          cardType: "semantic-qa",
-          modelName: "Semantic QA",
-          loadedFieldNames: ["Title", "Body"],
-          titleField: "Title",
-          bodyField: "Body",
-          loadedAt: 456,
-        },
-      },
-    });
+      } as never,
+    }));
 
     const reloaded = await repository.load();
 
     expect(reloaded.cardAnswerCutoffMode).toBe("double-blank-lines");
-    expect(reloaded.semanticQaMarker).toBe("#semantic-qa");
-    expect(reloaded.semanticQaNoteType).toBe("Semantic QA");
-    expect(reloaded.noteFieldMappings).toEqual({
-      "semantic-qa:Semantic QA": {
-        cardType: "semantic-qa",
-        modelName: "Semantic QA",
-        loadedFieldNames: ["Title", "Body"],
-        titleField: "Title",
-        bodyField: "Body",
-        loadedAt: 456,
-      },
-    });
+    expect(reloaded.noteFieldMappings).toEqual({});
+    expect("semantic-qa" in reloaded.cardTypeConfigs).toBe(false);
   });
 });

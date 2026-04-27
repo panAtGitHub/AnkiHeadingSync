@@ -414,7 +414,7 @@ class FakePlugin {
   public listFolderTreeCalls = 0;
   public insertDeckTemplateCalls = 0;
   public listNoteModelsError: Error | null = null;
-  public noteModels = ["Basic", "Custom Basic", "Cloze", "Custom Cloze", "Semantic QA", QA_GROUP_USER_MODEL_NAME];
+  public noteModels = ["Basic", "Custom Basic", "Cloze", "Custom Cloze", QA_GROUP_USER_MODEL_NAME];
   public settings = normalizePluginSettings({
     ...DEFAULT_SETTINGS,
     qaNoteType: "Custom Basic",
@@ -502,10 +502,6 @@ class FakePlugin {
 
     if (modelName.includes("Cloze")) {
       return ["Text", "Extra", "Hint"];
-    }
-
-    if (modelName === "Semantic QA") {
-      return ["Title", "Body", "Source"];
     }
 
     if (modelName === "Basic") {
@@ -796,7 +792,6 @@ describe("PluginSettingTab", () => {
       "问答题（多级列表形式）",
       "填空题",
     ]);
-    expect(() => queryByDataset(tab.containerEl, "cardTypeMarker", "semantic-qa")).toThrow("Element not found");
   });
 
   it("does not render the legacy card-types description copy", async () => {
@@ -1008,6 +1003,32 @@ describe("PluginSettingTab", () => {
     expect(plugin.updateCalls).toHaveLength(1);
   });
 
+  it("flushes pending text saves when the settings tab hides", async () => {
+    vi.useFakeTimers();
+    const plugin = new FakePlugin();
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await expandCard(tab, "card-types");
+
+    const markerInput = queryByDataset(tab.containerEl, "cardTypeMarker", "cloze");
+    markerInput.value = "#cloze-hidden";
+    await markerInput.trigger("input");
+
+    expect(plugin.updateCalls).toHaveLength(0);
+
+    tab.hide();
+    await flushPromises();
+
+    expect(plugin.settings.cardTypeConfigs.cloze.extraMarker).toBe("#cloze-hidden");
+    expect(plugin.updateCalls).toHaveLength(1);
+
+    vi.runOnlyPendingTimers();
+    await flushPromises();
+
+    expect(plugin.updateCalls).toHaveLength(1);
+  });
+
   it("blocks conflicting default rows and shows the error in card 1", async () => {
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
@@ -1063,7 +1084,7 @@ describe("PluginSettingTab", () => {
     expect(plugin.getModelFieldNamesByModelNamesCalls).toBe(1);
     expect(plugin.getNoteModelDetailsCalls).toBe(0);
     expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
-    expect(collectTexts(tab.containerEl).some((text) => text.includes("已获取 6 个笔记模板，已选择并配置 2 个卡片模式。"))).toBe(true);
+    expect(collectTexts(tab.containerEl).some((text) => text.includes("已获取 5 个笔记模板，已选择并配置 2 个卡片模式。"))).toBe(true);
   });
 
   it("persists loaded Anki note types and uses the cache before the next manual refresh", async () => {
@@ -1080,7 +1101,6 @@ describe("PluginSettingTab", () => {
       "Cloze",
       "Custom Basic",
       "Custom Cloze",
-      "Semantic QA",
       QA_GROUP_USER_MODEL_NAME,
     ].sort((left, right) => left.localeCompare(right)));
     expect(plugin.updateCalls.some((call) => Array.isArray(call.ankiNoteTypeCache))).toBe(true);
@@ -1579,6 +1599,22 @@ describe("PluginSettingTab", () => {
     await childCheckbox.trigger("change");
     expect(plugin.settings.includeFolders).toContain("notes/sub");
     expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
+  });
+
+  it("shows an explicit warning when include mode has no selected folders", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      scopeMode: "include",
+      includeFolders: [],
+    });
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
+    await flushPromises();
+
+    expect(queryByDataset(tab.containerEl, "scopeWarning", "unconfigured").textContent).toContain("至少选择一个文件夹后才能同步");
   });
 
   it("toggling file deck mode refreshes only the deck card", async () => {

@@ -55,14 +55,6 @@ function resolveNoteModel(cardType: IndexedCard["cardType"], settings: PluginSet
     return settings.clozeNoteType;
   }
 
-  if (cardType === "semantic-qa") {
-    if (!settings.semanticQaNoteType.trim()) {
-      throw new PluginUserError("errors.noteFieldMapping.noteTypeNotSelected.semanticQa");
-    }
-
-    return settings.semanticQaNoteType;
-  }
-
   if (!settings.qaNoteType.trim()) {
     throw new PluginUserError("errors.noteFieldMapping.noteTypeNotSelected.basic");
   }

@@ -1,11 +1,11 @@
-export type CardType = "basic" | "cloze" | "semantic-qa";
+export type CardType = "basic" | "cloze";
 
 export function isClozeCardType(cardType: CardType): cardType is "cloze" {
   return cardType === "cloze";
 }
 
-export function isBasicLikeCardType(cardType: CardType): cardType is "basic" | "semantic-qa" {
-  return cardType !== "cloze";
+export function isBasicLikeCardType(cardType: CardType): cardType is "basic" {
+  return cardType === "basic";
 }
 
 export interface RenderedFields {

@@ -8,7 +8,7 @@ export type FileDeckInsertLocation = "yaml" | "body";
 export type FolderDeckMode = "off" | "folder" | "folder-and-file";
 export type CardAnswerCutoffMode = "heading-block" | "double-blank-lines";
 export type ObsidianBacklinkPlacement = "question-last-line" | "answer-first-line" | "answer-last-line";
-export const CARD_TYPE_CONFIG_IDS = ["basic", "qa-group", "cloze", "semantic-qa"] as const;
+export const CARD_TYPE_CONFIG_IDS = ["basic", "qa-group", "cloze"] as const;
 export type CardTypeConfigId = (typeof CARD_TYPE_CONFIG_IDS)[number];
 
 export interface CardTypeConfig {
@@ -36,9 +36,7 @@ const DEFAULT_BASIC_NOTE_TYPE = "";
 const DEFAULT_CLOZE_NOTE_TYPE = "";
 const LEGACY_DEFAULT_CLOZE_MARKER = "";
 const DEFAULT_CLOZE_MARKER = "#anki-cloze";
-const DEFAULT_SEMANTIC_QA_NOTE_TYPE = "Semantic QA";
 const DEFAULT_QA_GROUP_MARKER = "#anki-list";
-const DEFAULT_SEMANTIC_QA_MARKER = "#anki-list-qa";
 const qaGroupFieldMappingService = new QaGroupFieldMappingService();
 
 export interface PluginSettings {
@@ -48,8 +46,6 @@ export interface PluginSettings {
   qaGroupMarker: string;
   qaNoteType: string;
   clozeNoteType: string;
-  semanticQaMarker: string;
-  semanticQaNoteType: string;
   cardTypeConfigs: CardTypeConfigs;
   noteFieldMappings: Record<string, NoteModelFieldMapping>;
   ankiNoteTypeCache: string[];
@@ -79,8 +75,6 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   qaGroupMarker: DEFAULT_QA_GROUP_MARKER,
   qaNoteType: DEFAULT_BASIC_NOTE_TYPE,
   clozeNoteType: DEFAULT_CLOZE_NOTE_TYPE,
-  semanticQaMarker: DEFAULT_SEMANTIC_QA_MARKER,
-  semanticQaNoteType: DEFAULT_SEMANTIC_QA_NOTE_TYPE,
   cardTypeConfigs: createDefaultCardTypeConfigs(),
   noteFieldMappings: {},
   ankiNoteTypeCache: [],
@@ -103,14 +97,10 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   ankiConnectUrl: "http://127.0.0.1:8765",
 };
 
-export const SEMANTIC_QA_MARKER_REGEXP = /^#[^\s#]+$/;
+export const HASHTAG_MARKER_REGEXP = /^#[^\s#]+$/;
 
 export function isValidHashtagMarker(marker: string): boolean {
-  return SEMANTIC_QA_MARKER_REGEXP.test(marker);
-}
-
-export function isValidSemanticQaMarker(marker: string): boolean {
-  return isValidHashtagMarker(marker);
+  return HASHTAG_MARKER_REGEXP.test(marker);
 }
 
 export function normalizeObsidianBacklinkLabel(value: string | null | undefined): string {
@@ -219,6 +209,14 @@ export function validatePluginSettings(settings: PluginSettings): void {
   }
 }
 
+export function isRunScopeConfigured(scopeMode: ScopeMode, includeFolders: string[]): boolean {
+  if (scopeMode !== "include") {
+    return true;
+  }
+
+  return includeFolders.some((folder) => folder.trim().length > 0);
+}
+
 function validateAnkiNoteTypeCache(ankiNoteTypeCache: string[]): void {
   if (!Array.isArray(ankiNoteTypeCache)) {
     throw new PluginUserError("errors.settings.ankiNoteTypeCacheArray");
@@ -294,10 +292,6 @@ export function validateCardTypeConfigs(cardTypeConfigs: CardTypeConfigs): void 
       throw new PluginUserError("errors.settings.cardTypeExtraMarkerString");
     }
 
-    if (configId === "semantic-qa" && !config.noteType.trim()) {
-      throw new PluginUserError("errors.settings.semanticQaNoteTypeRequired");
-    }
-
     if (!config.enabled || config.extraMarker.trim().length > 0) {
       continue;
     }
@@ -320,7 +314,7 @@ function validateNoteFieldMappings(noteFieldMappings: Record<string, NoteModelFi
   }
 
   for (const mapping of Object.values(noteFieldMappings)) {
-    if (mapping.cardType !== "basic" && mapping.cardType !== "qa-group" && mapping.cardType !== "cloze" && mapping.cardType !== "semantic-qa") {
+    if (mapping.cardType !== "basic" && mapping.cardType !== "qa-group" && mapping.cardType !== "cloze") {
       throw new PluginUserError("errors.settings.noteFieldMappingsCardType");
     }
 
@@ -403,12 +397,6 @@ function createDefaultCardTypeConfigs(): CardTypeConfigs {
       extraMarker: DEFAULT_CLOZE_MARKER,
       noteType: DEFAULT_CLOZE_NOTE_TYPE,
     },
-    "semantic-qa": {
-      enabled: true,
-      headingLevel: DEFAULT_BASIC_HEADING_LEVEL,
-      extraMarker: DEFAULT_SEMANTIC_QA_MARKER,
-      noteType: DEFAULT_SEMANTIC_QA_NOTE_TYPE,
-    },
   };
 }
 
@@ -431,12 +419,6 @@ function createLegacyBackfilledCardTypeConfigs(settings: Partial<PluginSettings>
       ...defaults.cloze,
       headingLevel: sanitizeHeadingLevel(settings.clozeHeadingLevel, defaults.cloze.headingLevel),
       noteType: sanitizeNoteType(settings.clozeNoteType, defaults.cloze.noteType),
-    },
-    "semantic-qa": {
-      ...defaults["semantic-qa"],
-      headingLevel: sanitizeHeadingLevel(settings.qaHeadingLevel, defaults["semantic-qa"].headingLevel),
-      extraMarker: sanitizeMarker(settings.semanticQaMarker, defaults["semantic-qa"].extraMarker),
-      noteType: sanitizeNoteType(settings.semanticQaNoteType, defaults["semantic-qa"].noteType),
     },
   };
 }
@@ -502,15 +484,13 @@ function hasExplicitClozeRecognitionConfig(rawConfig: Partial<CardTypeConfig> | 
   return "headingLevel" in rawConfig || "extraMarker" in rawConfig;
 }
 
-function deriveLegacySettings(cardTypeConfigs: CardTypeConfigs): Pick<PluginSettings, "qaHeadingLevel" | "clozeHeadingLevel" | "qaGroupMarker" | "qaNoteType" | "clozeNoteType" | "semanticQaMarker" | "semanticQaNoteType"> {
+function deriveLegacySettings(cardTypeConfigs: CardTypeConfigs): Pick<PluginSettings, "qaHeadingLevel" | "clozeHeadingLevel" | "qaGroupMarker" | "qaNoteType" | "clozeNoteType"> {
   return {
     qaHeadingLevel: cardTypeConfigs.basic.headingLevel,
     clozeHeadingLevel: cardTypeConfigs.cloze.headingLevel,
     qaGroupMarker: cardTypeConfigs["qa-group"].extraMarker,
     qaNoteType: cardTypeConfigs.basic.noteType,
     clozeNoteType: cardTypeConfigs.cloze.noteType,
-    semanticQaMarker: cardTypeConfigs["semantic-qa"].extraMarker,
-    semanticQaNoteType: cardTypeConfigs["semantic-qa"].noteType,
   };
 }
 
@@ -548,7 +528,7 @@ function normalizeNoteFieldMappings(value: unknown): Record<string, NoteModelFie
     }
 
     const mapping = rawMapping as Partial<NoteModelFieldMapping> & Record<string, unknown>;
-    if (mapping.cardType !== "basic" && mapping.cardType !== "qa-group" && mapping.cardType !== "cloze" && mapping.cardType !== "semantic-qa") {
+    if (mapping.cardType !== "basic" && mapping.cardType !== "qa-group" && mapping.cardType !== "cloze") {
       continue;
     }
 
@@ -608,7 +588,7 @@ function hydrateMissingNoteFieldMappingsFromCache(settings: PluginSettings): Rec
       continue;
     }
 
-    const cardType = configId === "cloze" ? "cloze" : configId === "semantic-qa" ? "semantic-qa" : "basic";
+    const cardType = configId === "cloze" ? "cloze" : "basic";
     const mappingKey = createNoteFieldMappingKey(cardType, modelName);
     if (hydratedMappings[mappingKey]) {
       continue;

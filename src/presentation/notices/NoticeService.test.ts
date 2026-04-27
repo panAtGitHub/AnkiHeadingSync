@@ -100,20 +100,6 @@ describe("NoticeService", () => {
     ]);
   });
 
-  it("renders rebuild summary and warnings in Simplified Chinese", () => {
-    getLanguageMock.mockReturnValue("zh");
-    const service = new NoticeService();
-
-    service.showRebuildSummary(createManualSyncResult({
-      warnings: [{ filePath: "notes/a.md", code: "deck_multiple_body_declarations", params: { marker: "MY DECK" } }],
-    }));
-
-    expect(noticeRecords.map((entry) => entry.message)).toEqual([
-      "卡片索引重建完成：文件 3，卡片 8，迁移牌组 1，孤儿 0，重写标记 2，跳过 5。 警告：1。",
-      "检测到文件中存在多个 MY DECK 声明，本次同步只使用第一个正文声明。",
-    ]);
-  });
-
   it("renders clear-current-file summaries with localized failures", () => {
     getLanguageMock.mockReturnValue("zh");
     const service = new NoticeService();

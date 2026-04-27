@@ -102,12 +102,6 @@ describe("PluginSettings", () => {
         extraMarker: "#anki-cloze",
         noteType: "",
       },
-      "semantic-qa": {
-        enabled: true,
-        headingLevel: 4,
-        extraMarker: "#anki-list-qa",
-        noteType: "Semantic QA",
-      },
     });
   });
 
@@ -373,12 +367,6 @@ describe("PluginSettings", () => {
         extraMarker: "#anki-cloze",
         noteType: "Legacy Cloze",
       },
-      "semantic-qa": {
-        enabled: true,
-        headingLevel: 4,
-        extraMarker: "#anki-list-qa",
-        noteType: "Semantic QA",
-      },
     });
   });
 
@@ -420,7 +408,7 @@ describe("PluginSettings", () => {
     }, "errors.settings.keepPureTagLinesInCardBodyBoolean");
   });
 
-  it("rejects invalid QA Group markers and semantic marker collisions", () => {
+  it("accepts custom QA Group markers during validation", () => {
     expect(() => validatePluginSettings({
       ...DEFAULT_SETTINGS,
       cardTypeConfigs: {

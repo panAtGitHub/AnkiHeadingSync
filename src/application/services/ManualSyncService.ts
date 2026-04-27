@@ -1,5 +1,5 @@
 import type { PluginSettings } from "@/application/config/PluginSettings";
-import { validatePluginSettings } from "@/application/config/PluginSettings";
+import { isRunScopeConfigured, validatePluginSettings } from "@/application/config/PluginSettings";
 import { PluginUserError, type PluginFileFailure } from "@/application/errors/PluginUserError";
 import type { AnkiGateway, AnkiGroupGateway } from "@/application/ports/AnkiGateway";
 import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
@@ -15,7 +15,6 @@ import type { IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
 import type { IndexedGroupCardBlock } from "@/domain/manual-sync/entities/IndexedGroupCardBlock";
 import { toNoteIdKey, type CardState, type GroupBlockState, type PluginState } from "@/domain/manual-sync/entities/PluginState";
 import type { RenderedSyncCard } from "@/domain/manual-sync/entities/RenderedSyncCard";
-import { GroupMarkerService, type GroupMarkerWriteRequest } from "@/domain/manual-sync/services/GroupMarkerService";
 import { DiffPlannerService } from "@/domain/manual-sync/services/DiffPlannerService";
 import { ManualCardRenderer, type ManualCardRenderContext } from "@/domain/manual-sync/services/ManualCardRenderer";
 import type { DeckResolutionWarning } from "@/domain/manual-sync/value-objects/DeckResolution";
@@ -30,10 +29,16 @@ export class CurrentFileOutOfScopeError extends PluginUserError {
   }
 }
 
+export class RunScopeNotConfiguredError extends PluginUserError {
+  constructor() {
+    super("errors.runScopeNotConfigured");
+    this.name = "RunScopeNotConfiguredError";
+  }
+}
+
 export class ManualSyncService {
   private readonly scanScopeService = new ScanScopeService();
   private readonly qaGroupSyncService: QaGroupSyncService;
-  private readonly groupMarkerService: GroupMarkerService;
   private readonly renderConfigService: RenderConfigService;
   private readonly now: () => number;
 
@@ -59,7 +64,6 @@ export class ManualSyncService {
       undefined,
       this.vaultGateway.createBacklink.bind(this.vaultGateway),
     );
-    this.groupMarkerService = new GroupMarkerService();
 
     if (isRenderConfigService(renderConfigServiceOrNow)) {
       this.renderConfigService = renderConfigServiceOrNow;
@@ -73,6 +77,7 @@ export class ManualSyncService {
 
   async syncVault(settings: PluginSettings): Promise<ManualSyncResult> {
     validatePluginSettings(settings);
+    this.assertRunScopeConfigured(settings);
     const state = await this.pluginStateRepository.load();
     const indexResult = await this.fileIndexerService.indexVault(settings, state);
     return this.syncIndexedResult(indexResult, state, settings);
@@ -80,6 +85,7 @@ export class ManualSyncService {
 
   async syncFile(filePath: string, settings: PluginSettings): Promise<ManualSyncResult> {
     validatePluginSettings(settings);
+    this.assertRunScopeConfigured(settings);
     if (!this.scanScopeService.isPathInScope(filePath, settings.scopeMode, settings.includeFolders, settings.excludeFolders)) {
       throw new CurrentFileOutOfScopeError(filePath);
     }
@@ -89,53 +95,10 @@ export class ManualSyncService {
     return this.syncIndexedResult(indexResult, state, settings);
   }
 
-  async rebuildIndex(settings: PluginSettings): Promise<ManualSyncResult> {
-    validatePluginSettings(settings);
-    const state = await this.pluginStateRepository.load();
-    const indexResult = await this.fileIndexerService.indexVault(settings, state, true);
-    const plan = this.diffPlannerService.plan(indexResult.cards, state, indexResult.scopedFilePaths, settings);
-    const indexedFilesByPath = new Map(indexResult.indexedFiles.map((file) => [file.filePath, file]));
-    const markerWrites = plan.toRewriteMarker.filter((plannedCard) => plannedCard.noteId !== undefined);
-    const rebuildGroupResult = this.buildReindexedGroupStates(indexResult.groupBlocks, state);
-
-    const writeBackResult = await this.markdownWriteBackService.write(markerWrites, indexedFilesByPath, rebuildGroupResult.markerWrites);
-    const orphanGroupBlocks = collectOrphanGroupBlocks(state, indexResult.scopedFilePaths, rebuildGroupResult.syncedGroupBlocks);
-    const nextState = this.buildNextState(
-      state,
-      indexResult.cards,
-      indexResult.indexedFiles,
-      rebuildGroupResult.syncedGroupBlocks,
-      settings,
-      new Set(writeBackResult.writtenSyncKeys),
-      new Map(),
-      plan.toOrphan,
-      orphanGroupBlocks,
-    );
-    nextState.pendingWriteBack = [
-      ...state.pendingWriteBack.filter((pending) => !new Set(indexResult.scopedFilePaths).has(pending.filePath)),
-      ...writeBackResult.pendingEntries,
-    ];
-    this.markFilesDirty(nextState, [...writeBackResult.failureFiles.map((failure) => failure.filePath), ...writeBackResult.conflictFiles]);
-    await this.pluginStateRepository.save(nextState);
-
-    if (writeBackResult.failureFiles.length > 0) {
-      throw this.createWriteBackFailureError(writeBackResult.failureFiles);
+  private assertRunScopeConfigured(settings: PluginSettings): void {
+    if (!isRunScopeConfigured(settings.scopeMode, settings.includeFolders)) {
+      throw new RunScopeNotConfiguredError();
     }
-
-    return {
-      scannedFiles: indexResult.scannedFiles,
-      scannedCards: indexResult.cards.length + indexResult.groupBlocks.length,
-      created: 0,
-      updated: 0,
-      migratedNoteTypes: 0,
-      migratedDecks: 0,
-      orphaned: plan.toOrphan.length + orphanGroupBlocks.length,
-      uploadedMedia: 0,
-      skippedUnchangedCards: indexResult.skippedUnchangedCards,
-      rewrittenMarkers: writeBackResult.writtenSyncKeys.length,
-      markerWriteConflictFiles: writeBackResult.conflictFiles,
-      warnings: mergeDeckWarnings(plan.warnings, rebuildGroupResult.warnings),
-    };
   }
 
   private async syncIndexedResult(
@@ -349,98 +312,6 @@ export class ManualSyncService {
     return nextState;
   }
 
-  private buildReindexedGroupStates(
-    groupBlocks: IndexedGroupCardBlock[],
-    state: PluginState,
-  ): { syncedGroupBlocks: GroupBlockState[]; markerWrites: GroupMarkerWriteRequest[]; warnings: DeckResolutionWarning[] } {
-    const syncedGroupBlocks: GroupBlockState[] = [];
-    const markerWrites: GroupMarkerWriteRequest[] = [];
-    const warnings: DeckResolutionWarning[] = [];
-    const byNoteId = new Map<number, GroupBlockState>(Object.values(state.groupBlocks ?? {})
-      .filter((groupBlock) => !groupBlock.orphan)
-      .map((groupBlock) => [groupBlock.noteId, groupBlock]));
-    const bySrc = new Map<string, GroupBlockState[]>();
-
-    for (const groupBlock of Object.values(state.groupBlocks ?? {}).filter((entry) => !entry.orphan)) {
-      const entries = bySrc.get(groupBlock.src);
-      if (entries) {
-        entries.push(groupBlock);
-      } else {
-        bySrc.set(groupBlock.src, [groupBlock]);
-      }
-    }
-
-    for (const block of groupBlocks) {
-      const existingState = (block.groupId ? state.groupBlocks?.[block.groupId] : undefined)
-        ?? (block.noteId !== undefined ? byNoteId.get(block.noteId) : undefined)
-        ?? uniqueGroupStateMatch(bySrc.get(block.src));
-      if (!existingState) {
-        continue;
-      }
-
-      const itemToSlot = Object.fromEntries(existingState.items
-        .filter((item) => item.itemId && item.slot)
-        .map((item) => [item.itemId as string, item.slot as number]));
-
-      syncedGroupBlocks.push({
-        ...existingState,
-        filePath: block.filePath,
-        headingText: block.headingText,
-        backlinkHeadingText: block.backlinkHeadingText,
-        headingLevel: block.headingLevel,
-        stem: block.stem,
-        src: block.src,
-        blockStartOffset: block.blockStartOffset,
-        blockEndOffset: block.blockEndOffset,
-        blockStartLine: block.blockStartLine,
-        bodyStartLine: block.bodyStartLine,
-        blockEndLine: block.blockEndLine,
-        contentEndLine: block.contentEndLine,
-        markerLine: block.markerLine,
-        markerIndent: block.markerIndent,
-        rawBlockText: block.rawBlockText,
-        rawBlockHash: block.rawBlockHash,
-        deckHint: block.deckHint,
-        deckHintSource: block.deckHintSource,
-        deckWarnings: [...block.deckWarnings],
-        tagsHint: block.tagsHint ? [...block.tagsHint] : [],
-        orphan: false,
-      });
-
-      warnings.push(...block.deckWarnings);
-
-      if (
-        block.sourceContent
-        && (
-          block.markerState !== "present-valid"
-          || !this.groupMarkerService.isEquivalent(block.groupMarker, existingState.noteId, itemToSlot, existingState.freeSlots)
-          || hasLegacyInnerIdMarkers(block)
-        )
-      ) {
-        markerWrites.push({
-          syncKey: block.syncKey,
-          filePath: block.filePath,
-          blockStartLine: block.blockStartLine,
-          contentEndLine: block.contentEndLine,
-          blockEndLine: block.blockEndLine,
-          markerLine: block.markerLine,
-          markerIndent: block.markerIndent,
-          noteId: existingState.noteId,
-          groupId: existingState.groupId,
-          itemToSlot,
-          freeSlots: [...existingState.freeSlots],
-          sourceContent: block.sourceContent,
-        });
-      }
-    }
-
-    return {
-      syncedGroupBlocks,
-      markerWrites,
-      warnings,
-    };
-  }
-
   private markFilesDirty(nextState: PluginState, filePaths: string[]): void {
     for (const filePath of new Set(filePaths)) {
       if (nextState.files[filePath]) {
@@ -484,27 +355,4 @@ function mergeDeckWarnings(...warningGroups: DeckResolutionWarning[][]): DeckRes
   }
 
   return [...warningMap.values()];
-}
-
-function uniqueGroupStateMatch(groupBlocks: GroupBlockState[] | undefined): GroupBlockState | undefined {
-  if (!groupBlocks || groupBlocks.length !== 1) {
-    return undefined;
-  }
-
-  return groupBlocks[0];
-}
-
-function hasLegacyInnerIdMarkers(block: IndexedGroupCardBlock): boolean {
-  if (!block.sourceContent) {
-    return false;
-  }
-
-  const lines = block.sourceContent.split(/\r?\n/);
-  for (let lineIndex = block.blockStartLine; lineIndex < block.blockEndLine; lineIndex += 1) {
-    if (/^\s*<!--\s*ID:/i.test(lines[lineIndex] ?? "")) {
-      return true;
-    }
-  }
-
-  return false;
 }

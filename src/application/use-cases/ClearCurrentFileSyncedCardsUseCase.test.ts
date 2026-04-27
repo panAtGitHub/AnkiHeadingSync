@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { createNoteFieldMappingKey } from "@/application/config/NoteModelFieldMapping";
 import type { PluginSettings } from "@/application/config/PluginSettings";
 import { createDeckRulesFingerprint } from "@/application/services/FileIndexerService";
 import { ManualSyncService } from "@/application/services/ManualSyncService";
@@ -14,7 +13,7 @@ import { ClearCurrentFileSyncedCardsUseCase } from "./ClearCurrentFileSyncedCard
 
 describe("ClearCurrentFileSyncedCardsUseCase", () => {
   it("deletes notes, removes markers, deletes local records, and allows later sync to recreate cards", async () => {
-    const settings = createModule3Settings();
+    const settings = createModule3Settings({ scopeMode: "all" });
     const filePath = "notes/example.md";
     const content = [
       "#### Prompt",
@@ -128,99 +127,8 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
     expect(ankiGateway.deletedNotes).toEqual([]);
   });
 
-  it("clears semantic QA child cards and allows a later sync to recreate them", async () => {
-    const settings = createSemanticQaSettings();
-    const filePath = "notes/semantic.md";
-    const content = [
-      "#### Concepts #anki-list-qa",
-      "- Alpha",
-      "  First answer",
-      "  <!--ID: 41-->",
-      "- Beta",
-      "  Second answer",
-      "  <!--ID: 42-->",
-    ].join("\n");
-    const vaultGateway = new FakeManualSyncVaultGateway({
-      [filePath]: content,
-    });
-    const stateRepository = new InMemoryPluginStateRepository({
-      files: {
-        [filePath]: createStoredFileState(settings, filePath, content, { noteIds: [41, 42] }),
-      },
-      cards: {
-        "41": createStoredSyncedCard(settings, {
-          noteId: 41,
-          filePath,
-          cardType: "semantic-qa",
-          heading: "Concepts<br>Alpha",
-          backlinkHeadingText: "Concepts #anki-list-qa",
-          bodyMarkdown: "First answer",
-          rawBlockText: ["semantic-qa:Concepts::1", "Concepts", "Alpha", "First answer"].join("\n"),
-          bodyStartLine: 3,
-          contentEndLine: 3,
-          blockEndLine: 4,
-          markerLine: 4,
-        }),
-        "42": createStoredSyncedCard(settings, {
-          noteId: 42,
-          filePath,
-          cardType: "semantic-qa",
-          heading: "Concepts<br>Beta",
-          backlinkHeadingText: "Concepts #anki-list-qa",
-          bodyMarkdown: "Second answer",
-          rawBlockText: ["semantic-qa:Concepts::2", "Concepts", "Beta", "Second answer"].join("\n"),
-          blockStartLine: 5,
-          bodyStartLine: 6,
-          contentEndLine: 6,
-          blockEndLine: 7,
-          markerLine: 7,
-        }),
-      },
-      pendingWriteBack: [],
-    });
-    const ankiGateway = new FakeManualSyncAnkiGateway();
-    const useCase = new ClearCurrentFileSyncedCardsUseCase(stateRepository, ankiGateway, vaultGateway);
-
-    await expect(useCase.hasTrackedCards(filePath)).resolves.toBe(true);
-
-    const result = await useCase.execute(filePath);
-
-    expect(result).toMatchObject({
-      trackedCards: 2,
-      trackedGroups: 0,
-      deletedNotes: 2,
-      removedMarkers: 2,
-      removedCardMarkers: 2,
-      removedGroupMarkers: 0,
-      deletedLocalRecords: 2,
-      conflictFiles: [],
-      failureFiles: [],
-    });
-    expect(ankiGateway.deletedNotes).toEqual([[41, 42]]);
-    expect(vaultGateway.getFileContent(filePath)).toBe([
-      "#### Concepts #anki-list-qa",
-      "- Alpha",
-      "  First answer",
-      "- Beta",
-      "  Second answer",
-    ].join("\n"));
-    expect(stateRepository.savedState?.files[filePath]).toBeUndefined();
-    expect(stateRepository.savedState?.cards["41"]).toBeUndefined();
-    expect(stateRepository.savedState?.cards["42"]).toBeUndefined();
-
-    const manualSyncService = new ManualSyncService(vaultGateway, stateRepository, ankiGateway, undefined, undefined, undefined, undefined, undefined, undefined, () => 3000);
-    const syncResult = await manualSyncService.syncFile(filePath, settings);
-
-    expect(syncResult.created).toBe(2);
-    expect(ankiGateway.addedNotes).toHaveLength(2);
-    expect(vaultGateway.getFileContent(filePath)).toContain("<!--ID: 9001-->");
-    expect(vaultGateway.getFileContent(filePath)).toContain("<!--ID: 9002-->");
-    expect(vaultGateway.getFileContent(filePath)).not.toContain("<!--ID: 41-->");
-    expect(vaultGateway.getFileContent(filePath)).not.toContain("<!--ID: 42-->");
-  });
-
   it("clears QA Group records and allows a later sync to recreate the GI marker", async () => {
-    const settings = createModule3Settings();
+    const settings = createModule3Settings({ scopeMode: "all" });
     const filePath = "notes/group.md";
     const content = [
       "#### Concepts #anki-list",
@@ -277,6 +185,7 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
       "  - Second answer",
     ].join("\n"));
     expect(stateRepository.savedState?.files[filePath]).toBeUndefined();
+
     expect(stateRepository.savedState?.groupBlocks?.["group-1"]).toBeUndefined();
 
     const manualSyncService = new ManualSyncService(vaultGateway, stateRepository, ankiGateway, undefined, undefined, undefined, undefined, undefined, () => 3000);
@@ -290,7 +199,7 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
   });
 
   it("clears mixed card and group routes in one pass", async () => {
-    const settings = createModule3Settings();
+    const settings = createModule3Settings({ scopeMode: "all" });
     const filePath = "notes/mixed.md";
     const content = [
       "#### Prompt",
@@ -364,7 +273,7 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
   });
 
   it("reports marker write conflicts for QA Group clears but still removes local state so a later sync can recreate the note", async () => {
-    const settings = createModule3Settings();
+    const settings = createModule3Settings({ scopeMode: "all" });
     const filePath = "notes/group-conflict.md";
     const content = [
       "#### Concepts #anki-list",
@@ -433,7 +342,7 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
   });
 
   it("clears all pending write-back entries for the current file regardless of marker kind", async () => {
-    const settings = createModule3Settings();
+    const settings = createModule3Settings({ scopeMode: "all" });
     const filePath = "notes/pending.md";
     const otherFilePath = "notes/other.md";
     const content = [
@@ -499,25 +408,6 @@ describe("ClearCurrentFileSyncedCardsUseCase", () => {
     ]);
   });
 });
-
-function createSemanticQaSettings(): PluginSettings {
-  const base = createModule3Settings();
-
-  return {
-    ...base,
-    noteFieldMappings: {
-      ...base.noteFieldMappings,
-      [createNoteFieldMappingKey("semantic-qa", base.semanticQaNoteType)]: {
-        cardType: "semantic-qa",
-        modelName: base.semanticQaNoteType,
-        loadedFieldNames: ["Front", "Back"],
-        titleField: "Front",
-        bodyField: "Back",
-        loadedAt: 1,
-      },
-    },
-  };
-}
 
 function createStoredFileState(
   settings: PluginSettings,

@@ -46,32 +46,6 @@ export class NoticeService {
     }
   }
 
-  showRebuildSummary(result: ManualSyncResult): void {
-    const locale = resolvePluginLocale();
-    const segments = [t("notice.summary.rebuild", {
-      scannedFiles: result.scannedFiles,
-      scannedCards: result.scannedCards,
-      migratedDecks: result.migratedDecks,
-      orphaned: result.orphaned,
-      rewrittenMarkers: result.rewrittenMarkers,
-      skippedUnchangedCards: result.skippedUnchangedCards,
-    })];
-
-    if (result.markerWriteConflictFiles.length > 0) {
-      segments.push(t("notice.summary.markerWriteConflicts", {
-        files: formatList(locale, result.markerWriteConflictFiles),
-      }));
-    }
-    if (result.warnings.length > 0) {
-      segments.push(t("notice.summary.warningsCount", { count: result.warnings.length }));
-    }
-
-    this.info(segments.join(" "));
-    for (const warning of result.warnings.slice(0, 3)) {
-      this.info(this.renderDeckWarning(warning));
-    }
-  }
-
   showClearCurrentFileSummary(result: ClearCurrentFileSyncedCardsResult): void {
     const locale = resolvePluginLocale();
     const segments = [t("notice.summary.clearCurrentFile", {

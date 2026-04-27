@@ -16,7 +16,6 @@ import { resolveAnswerBoundary } from "./AnswerBoundaryParser";
 import { CardMarkerService } from "./CardMarkerService";
 import { DeckExtractionService } from "./DeckExtractionService";
 import { QaGroupBlockParser } from "./QaGroupBlockParser";
-import { SemanticQaListParser } from "./SemanticQaListParser";
 
 interface HeadingMatch {
   level: number;
@@ -35,7 +34,6 @@ export interface CardIndexingContext {
   clozeHeadingLevel?: number;
   cardAnswerCutoffMode?: CardAnswerCutoffMode;
   qaGroupMarker?: string;
-  semanticQaMarker?: string;
   syncObsidianTagsToAnki?: boolean;
   fileStamp: string;
   knownCards: CardState[];
@@ -46,14 +44,13 @@ export interface CardIndexingContext {
 }
 
 const HEADING_REGEXP = /^(#{1,6})\s+(.*?)\s*$/;
-const CARD_TYPE_MATCH_ORDER: CardTypeConfigId[] = ["qa-group", "semantic-qa", "cloze", "basic"];
+const CARD_TYPE_MATCH_ORDER: CardTypeConfigId[] = ["qa-group", "cloze", "basic"];
 
 export class CardIndexingService {
   constructor(
     private readonly markerService = new CardMarkerService(),
     private readonly deckExtractionService = new DeckExtractionService(),
     private readonly qaGroupBlockParser = new QaGroupBlockParser(),
-    private readonly semanticQaListParser = new SemanticQaListParser(),
   ) {}
 
   index(sourceFile: SourceFile, context: CardIndexingContext): IndexedFile {
@@ -143,63 +140,6 @@ export class CardIndexingService {
           freeSlots: parsedGroupBlock.groupMarker?.freeSlots ?? resolvedGroupIdentity.freeSlots,
           sourceContent: sourceFile.content,
         });
-
-        continue;
-      }
-
-      if (matchedConfig.configId === "semantic-qa") {
-        const semanticQaMarker = matchedConfig.config.extraMarker;
-        for (const semanticCard of this.semanticQaListParser.parse({
-          parentHeadingText: heading.text,
-          marker: semanticQaMarker,
-          bodyLines,
-          bodyStartLine: heading.lineIndex + 2,
-          cardAnswerCutoffMode: cutoffMode,
-        })) {
-          const resolvedIdentity = this.resolveIdentity(
-            sourceFile.path,
-            semanticCard.blockStartLine,
-            semanticCard.rawBlockHash,
-            semanticCard.markerNoteId,
-            knownCardsByBlockKey,
-            pendingByBlockKey,
-            usedNoteIds,
-          );
-
-          if (resolvedIdentity.noteId !== undefined) {
-            usedNoteIds.add(resolvedIdentity.noteId);
-          }
-
-          cards.push({
-            noteId: resolvedIdentity.noteId,
-            syncKey: createIndexedCardSyncKey(sourceFile.path, semanticCard.blockStartLine, semanticCard.rawBlockHash),
-            idMarkerState: semanticCard.idMarkerState,
-            noteIdSource: resolvedIdentity.noteIdSource,
-            filePath: sourceFile.path,
-            cardType: "semantic-qa",
-            heading: semanticCard.heading,
-            backlinkHeadingText: semanticCard.backlinkHeadingText,
-            headingLevel: heading.level,
-            bodyMarkdown: semanticCard.bodyMarkdown,
-            blockStartOffset: lineStartOffsets[semanticCard.blockStartLine - 1] ?? 0,
-            blockEndOffset: semanticCard.blockEndLine < lines.length
-              ? (lineStartOffsets[semanticCard.blockEndLine] ?? sourceFile.content.length)
-              : sourceFile.content.length,
-            blockStartLine: semanticCard.blockStartLine,
-            bodyStartLine: semanticCard.bodyStartLine,
-            blockEndLine: semanticCard.blockEndLine,
-            contentEndLine: semanticCard.contentEndLine,
-            markerLine: semanticCard.markerLine,
-            markerIndent: semanticCard.markerIndent,
-            rawBlockText: semanticCard.rawBlockText,
-            rawBlockHash: semanticCard.rawBlockHash,
-            deckHint: extractedDeck.explicitDeckHint,
-            deckHintSource: extractedDeck.explicitDeckSource,
-            deckWarnings: [...extractedDeck.warnings],
-            tagsHint: [...fileTags],
-            sourceContent: sourceFile.content,
-          });
-        }
 
         continue;
       }
@@ -389,11 +329,6 @@ function resolveCardTypeConfigs(context: CardIndexingContext): CardTypeConfigs {
     cloze: {
       ...DEFAULT_SETTINGS.cardTypeConfigs.cloze,
       headingLevel: context.clozeHeadingLevel ?? DEFAULT_SETTINGS.cardTypeConfigs.cloze.headingLevel,
-    },
-    "semantic-qa": {
-      ...DEFAULT_SETTINGS.cardTypeConfigs["semantic-qa"],
-      headingLevel: context.qaHeadingLevel ?? DEFAULT_SETTINGS.cardTypeConfigs["semantic-qa"].headingLevel,
-      extraMarker: context.semanticQaMarker ?? DEFAULT_SETTINGS.cardTypeConfigs["semantic-qa"].extraMarker,
     },
   };
 }

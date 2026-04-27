@@ -6,7 +6,6 @@ import { DeckTemplateInsertionService } from "@/application/services/DeckTemplat
 import { CleanupEmptyDecksUseCase } from "@/application/use-cases/CleanupEmptyDecksUseCase";
 import { ClearCurrentFileSyncedCardsUseCase } from "@/application/use-cases/ClearCurrentFileSyncedCardsUseCase";
 import { ManualSyncCurrentFileUseCase } from "@/application/use-cases/ManualSyncCurrentFileUseCase";
-import { RebuildCardIndexUseCase } from "@/application/use-cases/RebuildCardIndexUseCase";
 import { ManualSyncVaultUseCase } from "@/application/use-cases/ManualSyncVaultUseCase";
 import { AnkiConnectGateway } from "@/infrastructure/anki/AnkiConnectGateway";
 import { ObsidianPluginDataStore } from "@/infrastructure/obsidian/ObsidianPluginDataStore";
@@ -19,7 +18,7 @@ import { EmptyDeckSelectionModal } from "@/presentation/modals/EmptyDeckSelectio
 import { t } from "@/presentation/i18n";
 import { NoticeService } from "@/presentation/notices/NoticeService";
 import { AnkiHeadingSyncSettingTab } from "@/presentation/settings/PluginSettingTab";
-import { CurrentFileOutOfScopeError, ManualSyncService } from "@/application/services/ManualSyncService";
+import { CurrentFileOutOfScopeError, ManualSyncService, RunScopeNotConfiguredError } from "@/application/services/ManualSyncService";
 import type { FolderTreeNode } from "@/application/dto/FolderTreeNode";
 import type { ManualSyncVaultGateway } from "@/application/ports/ManualSyncVaultGateway";
 
@@ -32,7 +31,6 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
 
   private syncCurrentFileUseCase?: ManualSyncCurrentFileUseCase;
   private syncVaultUseCase?: ManualSyncVaultUseCase;
-  private rebuildCardIndexUseCase?: RebuildCardIndexUseCase;
   private clearCurrentFileSyncedCardsUseCase?: ClearCurrentFileSyncedCardsUseCase;
   private cleanupEmptyDecksUseCase?: CleanupEmptyDecksUseCase;
   private pluginConfigRepository?: DataJsonPluginConfigRepository;
@@ -56,7 +54,6 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
     const manualSyncService = new ManualSyncService(vaultGateway, pluginStateRepository, this.ankiGateway);
     this.syncCurrentFileUseCase = new ManualSyncCurrentFileUseCase(manualSyncService);
     this.syncVaultUseCase = new ManualSyncVaultUseCase(manualSyncService);
-    this.rebuildCardIndexUseCase = new RebuildCardIndexUseCase(manualSyncService);
     this.clearCurrentFileSyncedCardsUseCase = new ClearCurrentFileSyncedCardsUseCase(pluginStateRepository, this.ankiGateway, vaultGateway);
     this.cleanupEmptyDecksUseCase = new CleanupEmptyDecksUseCase(this.ankiGateway);
 
@@ -119,7 +116,7 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
       const result = await this.syncCurrentFileUseCase.execute(activeFile.path, this.settings);
       this.noticeService.showSyncSummary("currentFile", result);
     } catch (error) {
-      if (error instanceof CurrentFileOutOfScopeError) {
+      if (error instanceof CurrentFileOutOfScopeError || error instanceof RunScopeNotConfiguredError) {
         this.noticeService.info(renderUserMessage(error));
         return;
       }
@@ -139,23 +136,13 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
       const result = await this.syncVaultUseCase.execute(this.settings);
       this.noticeService.showSyncSummary("vault", result);
     } catch (error) {
+      if (error instanceof RunScopeNotConfiguredError) {
+        this.noticeService.info(renderUserMessage(error));
+        return;
+      }
+
       console.error("Vault sync failed.", error);
       this.noticeService.error(renderUnknownUserFacingError(error, "notice.vaultSyncFailed"));
-    }
-  }
-
-  async runRebuildCardIndex(): Promise<void> {
-    if (!this.rebuildCardIndexUseCase) {
-      this.noticeService.error(t("notice.syncUseCaseNotInitialized"));
-      return;
-    }
-
-    try {
-      const result = await this.rebuildCardIndexUseCase.execute(this.settings);
-      this.noticeService.showRebuildSummary(result);
-    } catch (error) {
-      console.error("Card index rebuild failed.", error);
-      this.noticeService.error(renderUnknownUserFacingError(error, "notice.rebuildFailed"));
     }
   }
 

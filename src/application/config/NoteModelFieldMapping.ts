@@ -10,7 +10,7 @@ interface BaseNoteModelFieldMapping {
 }
 
 export interface BasicLikeNoteModelFieldMapping extends BaseNoteModelFieldMapping {
-  cardType: Extract<NoteModelFieldMappingCardType, "basic" | "semantic-qa">;
+  cardType: Extract<NoteModelFieldMappingCardType, "basic">;
   titleField?: string;
   bodyField?: string;
 }
@@ -48,7 +48,7 @@ export function createNoteFieldMappingKey(cardType: NoteModelFieldMappingCardTyp
 }
 
 export function isBasicLikeNoteModelFieldMapping(mapping: NoteModelFieldMapping | undefined): mapping is BasicLikeNoteModelFieldMapping {
-  return mapping?.cardType === "basic" || mapping?.cardType === "semantic-qa";
+  return mapping?.cardType === "basic";
 }
 
 export function isClozeNoteModelFieldMapping(mapping: NoteModelFieldMapping | undefined): mapping is ClozeNoteModelFieldMapping {

@@ -58,12 +58,13 @@ export class ObsidianVaultGateway implements VaultGateway, ManualSyncVaultGatewa
       throw new MarkdownFileNotFoundError(path);
     }
 
-    const currentContent = await this.app.vault.cachedRead(abstractFile);
-    if (currentContent !== expectedContent) {
-      throw new MarkdownWriteConflictError(path);
-    }
+    await this.app.vault.process(abstractFile, (currentContent) => {
+      if (currentContent !== expectedContent) {
+        throw new MarkdownWriteConflictError(path);
+      }
 
-    await this.app.vault.modify(abstractFile, nextContent);
+      return nextContent;
+    });
   }
 
   resolveWikiLink(rawTarget: string, sourcePath: string) {
