@@ -76,6 +76,69 @@ describe("FileIndexerService", () => {
     expect(result.cards[0]).toMatchObject({ noteId: 10, noteIdSource: "marker", idMarkerState: "present-valid" });
   });
 
+  it("re-reads unchanged files when cached cloze state missed an all-cloze marker", async () => {
+    const content = [
+      "#### Cloze #anki-cloze-all",
+      "{A} {B} {C}",
+      "<!--ID: 10-->",
+    ].join("\n");
+    const settings = createIndexSettingsForPath("notes/one.md");
+    const vaultGateway = new FakeManualSyncVaultGateway({
+      "notes/one.md": content,
+    });
+    const service = new FileIndexerService(vaultGateway);
+    const state = {
+      files: {
+        "notes/one.md": {
+          filePath: "notes/one.md",
+          fileHash: "hash-a",
+          fileStamp: `1:${content.length}`,
+          deckRulesFingerprint: createDeckRulesFingerprint(settings),
+          lastIndexedAt: 1,
+          noteIds: [10],
+        },
+      },
+      cards: {
+        "10": {
+          noteId: 10,
+          filePath: "notes/one.md",
+          heading: "Cloze #anki-cloze-all",
+          backlinkHeadingText: "Cloze #anki-cloze-all",
+          headingLevel: 4,
+          bodyMarkdown: "{A} {B} {C}",
+          cardType: "cloze" as const,
+          clozeMode: "sequential" as const,
+          blockStartOffset: 0,
+          blockEndOffset: content.length,
+          blockStartLine: 1,
+          bodyStartLine: 2,
+          blockEndLine: 3,
+          contentEndLine: 2,
+          markerLine: 3,
+          rawBlockText: content,
+          rawBlockHash: "hash-card",
+          renderConfigHash: "render-hash",
+          deck: "Obsidian",
+          deckWarnings: [],
+          tagsHint: [],
+          lastSyncedAt: 1,
+          orphan: false,
+        },
+      },
+      pendingWriteBack: [],
+    };
+
+    const result = await service.indexVault(settings, state);
+
+    expect(result.skippedUnchangedFiles).toBe(0);
+    expect(vaultGateway.readCalls).toEqual(["notes/one.md"]);
+    expect(result.cards[0]).toMatchObject({
+      noteId: 10,
+      cardType: "cloze",
+      clozeMode: "all",
+    });
+  });
+
   it("forces re-read when deck rules fingerprint changed even if file stamp is unchanged", async () => {
     const content = ["#### One", "Body"].join("\n");
     const vaultGateway = new FakeManualSyncVaultGateway({

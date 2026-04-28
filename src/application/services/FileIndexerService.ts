@@ -96,12 +96,14 @@ export class FileIndexerService {
       const hasPendingWriteBack = pendingWriteBack.length > 0;
       const knownCards = stateIndex.cardsByFilePath.get(ref.path) ?? [];
       const hasMissingKnownCard = (existingFileState?.noteIds ?? []).some((noteId) => !state.cards[toNoteIdKey(noteId)]);
+      const hasStaleClozeAllMode = hasCachedClozeAllMarkerWithoutAllMode(knownCards, settings);
       const shouldRead =
         forceReadAll ||
         hasPendingWriteBack ||
         !existingFileState ||
         existingFileState.fileStamp !== fileStamp ||
         existingFileState.deckRulesFingerprint !== deckRulesFingerprint ||
+        hasStaleClozeAllMode ||
         hasMissingKnownCard;
 
       if (!shouldRead) {
@@ -231,6 +233,26 @@ function restoreIndexedCard(card: CardState): IndexedCard {
     deckWarnings: [...card.deckWarnings],
     tagsHint: card.tagsHint,
   };
+}
+
+function hasCachedClozeAllMarkerWithoutAllMode(cards: CardState[], settings: PluginSettings): boolean {
+  const clozeAllConfig = settings.cardTypeConfigs["cloze-all"];
+  const marker = clozeAllConfig.enabled ? clozeAllConfig.extraMarker.trim() : "";
+  if (marker.length === 0) {
+    return false;
+  }
+
+  return cards.some((card) => {
+    if (card.cardType !== "cloze" || normalizeStoredClozeMode(card.cardType, card.clozeMode) === "all") {
+      return false;
+    }
+
+    return card.heading.trimEnd().endsWith(marker) || getRawHeading(card.rawBlockText).trimEnd().endsWith(marker);
+  });
+}
+
+function getRawHeading(rawBlockText: string): string {
+  return rawBlockText.split(/\r?\n/, 1)[0] ?? "";
 }
 
 function restoreIndexedGroupBlock(groupBlock: GroupBlockState): IndexedGroupCardBlock {
