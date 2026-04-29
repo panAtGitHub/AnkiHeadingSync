@@ -48,6 +48,15 @@ Anki Heading Sync 是一个 Obsidian 桌面端插件，用来批量地制作 Ank
    - 如果 release 中包含 `styles.css`，也一起复制
 4. 回到 Obsidian，启用 Anki Heading Sync。
 
+### 示例文件
+
+Release 中还提供了两个示例文件：
+
+- `dead-sea-example.md`：Obsidian 里的示例源文件，可以放进你的 vault 中查看标题制卡写法。
+- `dead-sea-example.apkg`：Anki 示例牌组，可以导入 Anki，用来获得示例卡片、笔记类型和多级列表问答题模板。
+
+如果你想使用多级列表形式的问答题，建议先导入 `dead-sea-example.apkg`。导入后，再在插件设置里把 QA Group 对应到这个多级列表笔记类型和字段。
+
 ### AnkiConnect 设置
 
 1. 在桌面端打开 Anki。
@@ -160,6 +169,15 @@ Once the plugin is accepted into the Obsidian Community Plugins directory, insta
    - `manifest.json`
    - `styles.css` when present
 4. Enable Anki Heading Sync in Obsidian.
+
+### Example files
+
+The release also includes two example files:
+
+- `dead-sea-example.md`: an Obsidian Markdown source example that you can place in your vault to inspect the heading-based card format.
+- `dead-sea-example.apkg`: a sample Anki deck that you can import into Anki to get example cards, note types, and the multi-level list Q&A template.
+
+If you want to use multi-level list Q&A cards, import `dead-sea-example.apkg` first. After importing it, map the QA Group route in the plugin settings to the imported multi-level list note type and fields.
 
 ### AnkiConnect setup
 
