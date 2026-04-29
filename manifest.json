@@ -3,8 +3,8 @@
   "name": "Anki Heading Sync",
   "version": "1.0.0",
   "minAppVersion": "1.5.0",
-  "description": "Focused heading-based Obsidian to Anki sync plugin.",
+  "description": "Focused heading-based Markdown to Anki sync plugin.",
   "author": "Dusk",
-  "authorUrl": "https://github.com/panAtGitHub/AnkiHeadingSync",
+  "authorUrl": "https://github.com/panAtGitHub",
   "isDesktopOnly": true
 }
