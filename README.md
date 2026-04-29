@@ -1,21 +1,143 @@
 # Anki Heading Sync
 
-Anki Heading Sync is an Obsidian desktop plugin that syncs Markdown heading blocks into Anki through a file-first workflow.
+## 中文
 
-It is designed for users who want to keep note authoring in Obsidian, push selected heading blocks to Anki, and let the plugin write stable sync markers back into the same Markdown files.
+Anki Heading Sync 是一个 Obsidian 桌面端插件，用来批量地制作 Anki 卡片。
+与其他的制卡插件（如expand to anki插件）最大的不同是：它固定将标题级文字（推荐四级标题）作为问题，以减少烦琐的配置工作。
+用「标题文字」作为问题的好处在于：
+1）可以在「大纲」侧边栏中方便地看到本 md 文件中的问题集
+2）可以很方便地做出「卡片级跳转」：在anki里复习时，可以一键精准地跳转到对应的ob卡片中。
 
-## What the plugin supports
+另外，我在这个插件中创新性地引入了 标题 + 自定义字符（推荐用标签）的形式，来支持不同的卡片类型。
+目前，卡片类型主要为四种。
+1）普通问答题
+2）多级列表形式的问答题
+3）每次挖单空的填空题
+4）一次性全部挖空的填空题
 
-- Basic Q&A cards from heading blocks
-- Cloze cards with the sequential marker route `#anki-cloze`
-- Cloze-all cards with the all-in-one marker route `#anki-cloze-all`
-- QA Group list notes with the group marker route `#anki-list`
-- Syncing either the current file or all files inside the configured vault scope
+### 插件支持什么
+
+- 从 标题 + 自定义字符 生成四类卡片
+- 转换当前文件，或批量转换设置范围内的整个库文件
+- 通过默认牌组、文件夹映射、文件级自定义牌组进行牌组路由
+- 可选同步 Obsidian 反向链接和标签
+- 清理当前文件里的同步标记及anki对应的卡片
+- 清理 Anki 中的空牌组
+
+### 使用要求
+
+- Obsidian 桌面端 1.5.0 或更高版本
+- Anki 桌面端
+- Anki 中已安装并启用 AnkiConnect
+
+本插件仅支持桌面端。插件会访问你在设置中配置的 AnkiConnect URL，默认地址是 `http://127.0.0.1:8765`。
+
+### 安装
+
+#### 社区插件
+
+插件被 Obsidian 社区插件目录收录后，可以直接在 Obsidian 的 Community Plugins 页面中搜索并安装。
+
+#### 从 Release 手动安装
+
+1. 下载你需要版本的 release assets。
+2. 创建或打开当前 vault 的插件目录：`.obsidian/plugins/anki-heading-sync`。
+3. 把以下文件复制到该目录：
+   - `main.js`
+   - `manifest.json`
+   - 如果 release 中包含 `styles.css`，也一起复制
+4. 回到 Obsidian，启用 Anki Heading Sync。
+
+### AnkiConnect 设置
+
+1. 在桌面端打开 Anki。
+2. 在 Anki 中安装并启用 AnkiConnect 插件。
+3. 安装后重启 Anki。
+4. 在 Obsidian 中打开 Settings -> Community plugins -> Anki Heading Sync。
+5. 如果没有特殊网络配置，保持默认 AnkiConnect URL：`http://127.0.0.1:8765`。
+6. 每次同步前确认 Anki 正在运行。
+
+### 初始设置
+
+#### 1. 选择笔记类型和字段映射
+
+打开插件设置页，为你要同步的卡片类型配置 Anki 笔记类型和字段映射。
+
+- 基础问答卡片使用 basic route。
+- Cloze 和 cloze-all 使用 cloze routes。
+- QA Group 使用专门的 group route。
+
+如果之后在 Anki 中改了笔记类型字段，请回到插件设置页刷新并重新确认字段映射，再继续同步。
+
+#### 2. 配置同步范围
+
+全库同步会按照你配置的运行范围执行。
+
+- `all`：同步插件能索引到的所有 Markdown 文件
+- `include`：只同步 `includeFolders` 中列出的文件夹
+- `exclude`：同步除 `excludeFolders` 中列出的文件夹以外的内容
+
+如果选择了 `include` 模式，但 include 列表为空，全库同步将没有可处理的文件。
+
+#### 3. 配置牌组行为
+
+先设置一个默认牌组。之后可以按需增加基于文件夹的牌组映射，或在文件中声明文件级自定义牌组。
+
+当前牌组优先级是：
+
+1. 文件级自定义牌组
+2. 文件夹映射牌组（建议用这种方式）
+3. 默认牌组
+
+### 命令
+
+- `Sync current file to Anki`：同步当前文件到 Anki
+- `Sync vault to Anki`：同步整个库范围到 Anki
+- `Clear synced cards in current file`：清理当前文件中已同步卡片的标记
+- `Clean up empty decks`：清理 Anki 中的空牌组
+
+插件不会为这些命令注册默认快捷键，因此不会覆盖用户已有快捷键。
+
+### 卡片中的「答案提取」范围
+
+插件支持两种「答案提取」模式。
+
+- `heading-block`：除非遇到有效同步标记，否则保留整个标题块作为卡片内容
+- `double-blank-lines`：除非遇到有效同步标记，否则在第一次出现连续 2 个或更多空行前停止
+
+如果已经存在有效的 `<!--ID: ...-->` 或 `<!--GI: ...-->` 标记，该标记的优先级高于空行截断规则。
+
+
+## English
+
+Anki Heading Sync is an Obsidian desktop plugin for creating Anki cards in batches.
+
+Compared with other card-making plugins, such as Expand to Anki, its main difference is that it consistently uses heading text, preferably H4 headings, as the question. This reduces the amount of configuration needed before you can start making cards.
+
+Using heading text as the question has two practical benefits:
+
+1. You can use Obsidian's Outline sidebar to see the question set inside the current Markdown file.
+2. You can create card-level navigation: while reviewing in Anki, you can jump precisely back to the corresponding Obsidian card with one click.
+
+The plugin also introduces a flexible pattern: heading plus custom marker text, with tags recommended as the marker format. This makes it possible to support different card types from the same heading-based workflow.
+
+Currently, the plugin mainly supports four card types:
+
+1. Basic Q&A cards
+2. Multi-level list Q&A cards
+3. Cloze cards that reveal one blank at a time
+4. Cloze cards that reveal all blanks at once
+
+### What the plugin supports
+
+- Creating four card types from heading text plus custom marker text
+- Converting the current file, or converting all files inside the configured vault scope in batches
 - Deck routing through default deck, folder mapping, and optional file-level custom deck
 - Optional Obsidian backlinks and tag sync
-- Clearing synced markers in the current file and cleaning up empty decks in Anki
+- Clearing synced markers in the current file and the corresponding Anki cards
+- Cleaning up empty decks in Anki
 
-## Requirements
+### Requirements
 
 - Obsidian desktop 1.5.0 or newer
 - Anki desktop
@@ -23,25 +145,23 @@ It is designed for users who want to keep note authoring in Obsidian, push selec
 
 This plugin is desktop-only. It talks to the configured AnkiConnect URL, which defaults to `http://127.0.0.1:8765`.
 
-The plugin does not upload your notes to a remote service by itself. Network requests are sent only to the AnkiConnect URL you configure in the plugin settings.
+### Install
 
-## Install
-
-### Community Plugins
+#### Community Plugins
 
 Once the plugin is accepted into the Obsidian Community Plugins directory, install it from Obsidian's Community Plugins browser.
 
-### Manual install from a release
+#### Manual install from a release
 
 1. Download the release assets for the version you want.
 2. Create or open your vault plugin folder: `.obsidian/plugins/anki-heading-sync`.
 3. Copy these release assets into that folder:
-	 - `main.js`
-	 - `manifest.json`
-	 - `styles.css` when present
+   - `main.js`
+   - `manifest.json`
+   - `styles.css` when present
 4. Enable Anki Heading Sync in Obsidian.
 
-## AnkiConnect setup
+### AnkiConnect setup
 
 1. Open Anki on your desktop.
 2. Install and enable the AnkiConnect add-on in Anki.
@@ -50,9 +170,9 @@ Once the plugin is accepted into the Obsidian Community Plugins directory, insta
 5. Keep the default AnkiConnect URL `http://127.0.0.1:8765` unless you intentionally expose AnkiConnect on another address.
 6. Confirm that Anki is running before you start a sync.
 
-## Initial plugin setup
+### Initial plugin setup
 
-### 1. Choose note types and field mappings
+#### 1. Choose note types and field mappings
 
 Open the plugin settings and configure the note types and field mappings used by the routes you want to sync.
 
@@ -62,7 +182,7 @@ Open the plugin settings and configure the note types and field mappings used by
 
 If you change note model fields in Anki later, revisit the plugin settings and refresh the mappings before syncing again.
 
-### 2. Configure sync scope
+#### 2. Configure sync scope
 
 Vault sync uses the configured run scope.
 
@@ -72,17 +192,17 @@ Vault sync uses the configured run scope.
 
 If `include` mode is selected and the include list is empty, vault sync has no in-scope files to process.
 
-### 3. Configure deck behavior
+#### 3. Configure deck behavior
 
 Set a default deck first. You can then optionally add folder-based deck routing and file-level custom deck declarations.
 
 Current deck priority is:
 
 1. File-level custom deck
-2. Folder mapping deck
+2. Folder mapping deck, which is the recommended approach
 3. Default deck
 
-## Commands
+### Commands
 
 - `Sync current file to Anki`
 - `Sync vault to Anki`
@@ -91,134 +211,11 @@ Current deck priority is:
 
 The plugin registers these commands without default hotkeys so they do not override user shortcuts.
 
-## Supported Markdown patterns
+### Answer extraction range inside cards
 
-### Basic Q&A
-
-By default, a plain H4 heading block is treated as a basic card.
-
-```md
-#### Capital of France
-Paris
-```
-
-### Cloze, sequential route
-
-Use the cloze marker on the heading. Native Anki cloze syntax is preserved.
-
-```md
-#### Atomic structure #anki-cloze
-Electrons orbit the {{c1::nucleus}}.
-```
-
-### Cloze, all route
-
-Use the cloze-all marker on the heading when all generated clozes in the block should share the same deletion index.
-
-```md
-#### Key ideas #anki-cloze-all
-{Alpha} and {Beta} are reviewed together.
-```
-
-### QA Group list note
-
-Use the QA Group marker on the heading. The whole heading block syncs as one QA Group note.
-
-```md
-#### Concepts #anki-list
-- Alpha
-	- First answer
-- Beta
-	- Second answer
-```
-
-### Multi-level list QA example
-
-Nested content under the answer bullet stays inside the answer region.
-
-```md
-#### Physics laws #anki-list
-- Newton's first law
-	- An object remains at rest or in uniform motion.
-		- Unless a net external force acts on it.
-- Newton's second law
-	- Force equals mass times acceleration.
-```
-
-## Marker write-back
-
-After a successful sync, the plugin writes sync markers back into the Markdown file.
-
-- Single-card routes write an Anki note marker such as `<!--ID: 41-->`
-- QA Group routes write a group marker such as `<!--GI:n=42;i=item_a:1,item_b:2;f=3,4,5,6,7,8,9,10,11,12-->`
-
-The plugin writes these markers into the Markdown file so later syncs can update the existing Anki notes instead of creating duplicates.
-
-The `Clear synced cards in current file` command removes synced marker state from the current file so you can intentionally recreate notes.
-
-## Answer cutoff behavior
-
-The plugin supports two answer cutoff modes.
+The plugin supports two answer extraction modes.
 
 - `heading-block`: keep the entire heading block as card content unless a valid sync marker is present
 - `double-blank-lines`: stop before the first run of 2 or more blank lines unless a valid sync marker is present
 
 If a valid `<!--ID: ...-->` or `<!--GI: ...-->` marker already exists, that marker takes precedence over the blank-line cutoff.
-
-## Privacy and local-network behavior
-
-- The plugin sends requests only to the configured AnkiConnect URL.
-- The default URL is local: `http://127.0.0.1:8765`.
-- The plugin modifies Markdown files in your vault to write sync markers and maintain note identity.
-- Plugin settings and state are stored through Obsidian plugin data storage, which results in plugin data being persisted in the plugin `data.json` file.
-
-## Troubleshooting
-
-### Anki is not open
-
-Open Anki first, then run the sync command again. The plugin cannot sync while AnkiConnect is unavailable.
-
-### AnkiConnect is not installed or not responding
-
-Confirm that AnkiConnect is installed in Anki, restart Anki, and verify the plugin's AnkiConnect URL setting.
-
-### Field mapping is stale
-
-If you changed note fields or note types in Anki, revisit the plugin settings and remap the fields before syncing again.
-
-### Deck routing is not what you expected
-
-Check the deck priority order: file-level custom deck overrides folder mapping, and folder mapping overrides the default deck.
-
-### Vault sync does not pick up any files
-
-Check the sync scope settings. In `include` mode, an empty include list means there are no in-scope files.
-
-### You want to recreate old notes instead of updating them
-
-Use `Clear synced cards in current file` to remove the current file's sync markers, then sync again.
-
-## Development
-
-```bash
-npm install
-npm run lint
-npm test
-npm run build
-```
-
-To build and sync the bundled plugin into a local vault during development, set `OBSIDIAN_PLUGIN_DIR` if you want to override the default local target path:
-
-```bash
-OBSIDIAN_PLUGIN_DIR="/absolute/path/to/.obsidian/plugins/Anki Heading Sync" npm run build:obsidian
-```
-
-The vault sync step copies only the built plugin assets and does not overwrite `data.json`.
-
-## Release assets
-
-GitHub release assets for Obsidian should include:
-
-- `main.js`
-- `manifest.json`
-- `styles.css` when present
