@@ -1673,10 +1673,16 @@ describe("PluginSettingTab", () => {
     await flushPromises();
 
     const overrideCheckbox = queryByDataset(tab.containerEl, "folderDeckModeOverride", "notes/sub");
+    const childLabel = queryByDataset(tab.containerEl, "folderPathLabel", "notes/sub");
     const overrideAttributes = overrideCheckbox as unknown as { title?: string; "aria-label"?: string };
+    const labelParent = (childLabel as unknown as { parent?: { children?: unknown[] } }).parent;
+    const overrideParent = (overrideCheckbox as unknown as { parent?: { children?: unknown[] } }).parent;
     expect(overrideCheckbox.classList.contains("ahs-settings-folder-override-checkbox")).toBe(true);
     expect(overrideAttributes.title).toBe("当前全局为「文件夹」，勾选后此文件夹改用「文件夹及文件名」作为牌组名");
     expect(overrideAttributes["aria-label"]).toBe("切换 sub 的文件夹牌组映射模式");
+    expect(overrideParent).toBe(labelParent);
+    expect(labelParent?.children?.[0]).toBe(childLabel);
+    expect(labelParent?.children?.[1]).toBe(overrideCheckbox);
     expect(() => queryByDataset(tab.containerEl, "folderDeckModeOverrideHint", "notes/sub")).toThrow();
   });
 
@@ -1703,8 +1709,15 @@ describe("PluginSettingTab", () => {
     expect(plugin.updateCalls).toContainEqual({
       alternateFolderDeckModeFolders: ["notes/sub"],
     });
+    const childLabel = queryByDataset(tab.containerEl, "folderPathLabel", "notes/sub");
+    const rerenderedOverrideCheckbox = queryByDataset(tab.containerEl, "folderDeckModeOverride", "notes/sub");
     const hint = queryByDataset(tab.containerEl, "folderDeckModeOverrideHint", "notes/sub");
+    const inlineParent = (childLabel as unknown as { parent?: { children?: unknown[] } }).parent;
     expect(hint.classList.contains("ahs-settings-folder-override-hint")).toBe(true);
+    expect((hint as unknown as { parent?: unknown }).parent).toBe(inlineParent);
+    expect(inlineParent?.children?.[0]).toBe(childLabel);
+    expect(inlineParent?.children?.[1]).toBe(rerenderedOverrideCheckbox);
+    expect(inlineParent?.children?.[2]).toBe(hint);
     expect(hint.textContent).toContain("文件夹及文件名");
   });
 

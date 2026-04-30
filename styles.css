@@ -200,7 +200,7 @@
 
 .anki-heading-sync-settings .ahs-settings-folder-row {
 	display: grid;
-	grid-template-columns: 24px 24px minmax(0, 1fr) auto;
+	grid-template-columns: 24px 24px minmax(0, 1fr);
 	align-items: center;
 	column-gap: 0;
 	width: 100%;
@@ -241,12 +241,22 @@
 .anki-heading-sync-settings .ahs-settings-folder-label-stack {
 	display: flex;
 	flex-direction: column;
+	align-items: flex-start;
 	min-width: 0;
 	gap: 2px;
 }
 
+.anki-heading-sync-settings .ahs-settings-folder-label-inline {
+	display: inline-flex;
+	align-items: center;
+	align-self: flex-start;
+	gap: 8px;
+	min-width: 0;
+	max-width: 100%;
+}
+
 .anki-heading-sync-settings .ahs-settings-folder-override-checkbox {
-	justify-self: end;
+	flex: none;
 	width: 16px;
 	height: 16px;
 	margin: 0;
@@ -271,9 +281,11 @@
 }
 
 .anki-heading-sync-settings .ahs-settings-folder-override-hint {
+	flex: none;
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
 	line-height: 1.35;
+	white-space: nowrap;
 }
 
 .anki-heading-sync-settings .ahs-settings-inline-control-group {
@@ -318,6 +330,12 @@
 	box-sizing: border-box;
 	margin: 0;
 	overflow: hidden;
+}
+
+.anki-heading-sync-settings .ahs-settings-folder-label.ahs-settings-fluid-ellipsis {
+	flex: 0 1 auto;
+	width: auto;
+	max-width: 100%;
 }
 
 .anki-heading-sync-settings select.ahs-settings-fluid-control,

@@ -1698,13 +1698,16 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const contentEl = row.createDiv();
     addClasses(contentEl, "ahs-settings-folder-label-stack");
 
-    const labelEl = contentEl.createSpan({ text: node.name });
+    const inlineLabelEl = contentEl.createDiv();
+    addClasses(inlineLabelEl, "ahs-settings-folder-label-inline");
+
+    const labelEl = inlineLabelEl.createSpan({ text: node.name });
     labelEl.dataset.folderPathLabel = node.path;
     addClasses(labelEl, "ahs-settings-folder-label");
     this.applyFluidEllipsis(labelEl);
 
     if (scopeMode === "include" && node.checked && this.plugin.settings.folderDeckMode !== "off") {
-      const overrideCheckbox = row.createEl("input");
+      const overrideCheckbox = inlineLabelEl.createEl("input");
       const overrideLabel = t("settings.scope.folderDeckModeOverride.ariaLabel", { name: node.name });
       const overrideTitle = this.getFolderDeckModeOverrideTitle();
       const overrideChecked = this.plugin.settings.alternateFolderDeckModeFolders.includes(node.path);
@@ -1723,7 +1726,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       });
 
       if (overrideChecked) {
-        const hintEl = contentEl.createDiv({ text: this.getFolderDeckModeOverrideHint() });
+        const hintEl = inlineLabelEl.createSpan({ text: this.getFolderDeckModeOverrideHint() });
         hintEl.dataset.folderDeckModeOverrideHint = node.path;
         addClasses(hintEl, "ahs-settings-folder-override-hint");
       }
