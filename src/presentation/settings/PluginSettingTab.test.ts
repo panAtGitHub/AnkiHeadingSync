@@ -1658,6 +1658,98 @@ describe("PluginSettingTab", () => {
     expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
   });
 
+  it("renders folder deck mode override controls for checked include rows when folder mapping is enabled", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      scopeMode: "include",
+      includeFolders: ["notes/sub"],
+      folderDeckMode: "folder",
+    });
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
+    await flushPromises();
+
+    const overrideCheckbox = queryByDataset(tab.containerEl, "folderDeckModeOverride", "notes/sub");
+    const overrideAttributes = overrideCheckbox as unknown as { title?: string; "aria-label"?: string };
+    expect(overrideCheckbox.classList.contains("ahs-settings-folder-override-checkbox")).toBe(true);
+    expect(overrideAttributes.title).toBe("当前全局为「文件夹」，勾选后此文件夹改用「文件夹及文件名」作为牌组名");
+    expect(overrideAttributes["aria-label"]).toBe("切换 sub 的文件夹牌组映射模式");
+    expect(() => queryByDataset(tab.containerEl, "folderDeckModeOverrideHint", "notes/sub")).toThrow();
+  });
+
+  it("toggling a folder deck mode override only updates alternateFolderDeckModeFolders and shows the hint", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      scopeMode: "include",
+      includeFolders: ["notes/sub"],
+      folderDeckMode: "folder",
+    });
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
+    await flushPromises();
+
+    const overrideCheckbox = queryByDataset(tab.containerEl, "folderDeckModeOverride", "notes/sub");
+    overrideCheckbox.checked = true;
+    await overrideCheckbox.trigger("change");
+
+    expect(plugin.settings.includeFolders).toEqual(["notes/sub"]);
+    expect(plugin.settings.alternateFolderDeckModeFolders).toEqual(["notes/sub"]);
+    expect(plugin.updateCalls).toContainEqual({
+      alternateFolderDeckModeFolders: ["notes/sub"],
+    });
+    const hint = queryByDataset(tab.containerEl, "folderDeckModeOverrideHint", "notes/sub");
+    expect(hint.classList.contains("ahs-settings-folder-override-hint")).toBe(true);
+    expect(hint.textContent).toContain("文件夹及文件名");
+  });
+
+  it("cleans folder deck mode overrides for an unchecked include folder and its descendants", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      scopeMode: "include",
+      includeFolders: ["notes"],
+      folderDeckMode: "folder",
+      alternateFolderDeckModeFolders: ["notes", "notes/sub"],
+    });
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
+    await flushPromises();
+
+    const notesCheckbox = queryByDataset(tab.containerEl, "folderPath", "notes");
+    notesCheckbox.checked = false;
+    await notesCheckbox.trigger("change");
+
+    expect(plugin.settings.includeFolders).toEqual([]);
+    expect(plugin.settings.alternateFolderDeckModeFolders).toEqual([]);
+  });
+
+  it("hides folder deck mode override controls when folder mapping is off", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      scopeMode: "include",
+      includeFolders: ["notes/sub"],
+      folderDeckMode: "off",
+      alternateFolderDeckModeFolders: ["notes/sub"],
+    });
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
+    await flushPromises();
+
+    expect(() => queryByDataset(tab.containerEl, "folderDeckModeOverride", "notes/sub")).toThrow();
+    expect(plugin.settings.alternateFolderDeckModeFolders).toEqual(["notes/sub"]);
+  });
+
   it("shows an explicit warning when include mode has no selected folders", async () => {
     const plugin = new FakePlugin();
     plugin.settings = normalizePluginSettings({

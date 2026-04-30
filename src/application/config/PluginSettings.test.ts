@@ -76,6 +76,7 @@ describe("PluginSettings", () => {
     expect(DEFAULT_SETTINGS.folderDeckMode).toBe("folder-and-file");
     expect(DEFAULT_SETTINGS.qaGroupMarker).toBe("#anki-list");
     expect(DEFAULT_SETTINGS.cardAnswerCutoffMode).toBe("heading-block");
+    expect(DEFAULT_SETTINGS.alternateFolderDeckModeFolders).toEqual([]);
     expect(DEFAULT_SETTINGS.obsidianBacklinkLabel).toBe(DEFAULT_OBSIDIAN_BACKLINK_LABEL);
     expect(DEFAULT_SETTINGS.obsidianBacklinkPlacement).toBe("answer-last-line");
     expect(DEFAULT_SETTINGS.syncObsidianTagsToAnki).toBe(true);
@@ -109,6 +110,40 @@ describe("PluginSettings", () => {
         noteType: "",
       },
     });
+  });
+
+  it("defaults alternate folder deck mode override folders to an empty array when missing", () => {
+    const settings = mergePluginSettings({
+      defaultDeck: "Default",
+    });
+
+    expect(settings.alternateFolderDeckModeFolders).toEqual([]);
+  });
+
+  it("preserves alternate folder deck mode override folders using the current folder-list convention", () => {
+    const settings = mergePluginSettings({
+      alternateFolderDeckModeFolders: ["notes", "notes/sub", "notes"],
+    });
+
+    expect(settings.alternateFolderDeckModeFolders).toEqual(["notes", "notes/sub", "notes"]);
+  });
+
+  it("rejects non-array alternate folder deck mode override folders", () => {
+    expectPluginUserError(() => {
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        alternateFolderDeckModeFolders: "notes" as never,
+      });
+    }, "errors.settings.alternateFolderDeckModeFoldersArray");
+  });
+
+  it("rejects non-string alternate folder deck mode override folder entries", () => {
+    expectPluginUserError(() => {
+      validatePluginSettings({
+        ...DEFAULT_SETTINGS,
+        alternateFolderDeckModeFolders: ["notes", 1] as never,
+      });
+    }, "errors.settings.alternateFolderDeckModeFoldersStrings");
   });
 
   it("normalizes cached Anki note types on load and save paths", () => {

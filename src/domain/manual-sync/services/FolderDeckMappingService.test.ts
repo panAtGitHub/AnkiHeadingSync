@@ -20,6 +20,26 @@ describe("FolderDeckMappingService", () => {
     });
   });
 
+  it("uses the opposite folder deck mode inside alternate override folders", () => {
+    const service = new FolderDeckMappingService();
+
+    expect(service.mapFilePathToDeck("notes/sub/topic.md", "folder", ["notes/sub"]).deck).toBe("notes::sub::topic");
+    expect(service.mapFilePathToDeck("notes/sub/topic.md", "folder-and-file", ["notes/sub"]).deck).toBe("notes::sub");
+  });
+
+  it("applies alternate overrides to descendants without matching sibling prefixes", () => {
+    const service = new FolderDeckMappingService();
+
+    expect(service.mapFilePathToDeck("notes/sub/topic.md", "folder", ["notes"]).deck).toBe("notes::sub::topic");
+    expect(service.mapFilePathToDeck("notes2/sub/topic.md", "folder", ["notes"]).deck).toBe("notes2::sub");
+  });
+
+  it("ignores alternate overrides when folder deck mode is off", () => {
+    const service = new FolderDeckMappingService();
+
+    expect(service.mapFilePathToDeck("notes/sub/topic.md", "off", ["notes/sub"])).toEqual({ warnings: [] });
+  });
+
   it("returns empty for root-level files", () => {
     const service = new FolderDeckMappingService();
 

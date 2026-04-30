@@ -291,7 +291,7 @@ export function createFileStamp(mtime: number, size: number): string {
   return `${mtime}:${size}`;
 }
 
-const DECK_RULES_FINGERPRINT_VERSION = "deck-rules-v4";
+const DECK_RULES_FINGERPRINT_VERSION = "deck-rules-v5";
 
 export function createDeckRulesFingerprint(settings: PluginSettings): string {
   return hashString(JSON.stringify({
@@ -302,6 +302,7 @@ export function createDeckRulesFingerprint(settings: PluginSettings): string {
     fileDeckEnabled: settings.fileDeckEnabled,
     fileDeckMarker: settings.fileDeckMarker,
     folderDeckMode: settings.folderDeckMode,
+    alternateFolderDeckModeFolders: [...settings.alternateFolderDeckModeFolders].sort(),
     syncObsidianTagsToAnki: settings.syncObsidianTagsToAnki,
     keepPureTagLinesInCardBody: settings.keepPureTagLinesInCardBody,
   }));

@@ -60,6 +60,7 @@ export interface PluginSettings {
   scopeMode: ScopeMode;
   includeFolders: string[];
   excludeFolders: string[];
+  alternateFolderDeckModeFolders: string[];
   addObsidianBacklink: boolean;
   obsidianBacklinkLabel: string;
   obsidianBacklinkPlacement: ObsidianBacklinkPlacement;
@@ -89,6 +90,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   scopeMode: "include",
   includeFolders: [],
   excludeFolders: [],
+  alternateFolderDeckModeFolders: [],
   addObsidianBacklink: true,
   obsidianBacklinkLabel: DEFAULT_OBSIDIAN_BACKLINK_LABEL,
   obsidianBacklinkPlacement: "answer-last-line",
@@ -144,6 +146,7 @@ export function mergePluginSettings(settings?: Partial<PluginSettings> | null): 
     ankiModelFieldCache: partialSettings.ankiModelFieldCache ?? DEFAULT_SETTINGS.ankiModelFieldCache,
     includeFolders: partialSettings.includeFolders ?? DEFAULT_SETTINGS.includeFolders,
     excludeFolders: partialSettings.excludeFolders ?? DEFAULT_SETTINGS.excludeFolders,
+    alternateFolderDeckModeFolders: partialSettings.alternateFolderDeckModeFolders ?? DEFAULT_SETTINGS.alternateFolderDeckModeFolders,
   });
 }
 
@@ -204,6 +207,7 @@ export function validatePluginSettings(settings: PluginSettings): void {
 
   validateFolderList(settings.includeFolders, "include");
   validateFolderList(settings.excludeFolders, "exclude");
+  validateFolderList(settings.alternateFolderDeckModeFolders, "alternateFolderDeckMode");
 
   if (!settings.ankiConnectUrl.trim()) {
     throw new PluginUserError("errors.settings.ankiConnectUrlRequired");
@@ -256,14 +260,30 @@ function validateAnkiModelFieldCache(ankiModelFieldCache: AnkiModelFieldCache): 
   }
 }
 
-function validateFolderList(folderList: string[], label: "include" | "exclude"): void {
+function validateFolderList(folderList: string[], label: "include" | "exclude" | "alternateFolderDeckMode"): void {
   if (!Array.isArray(folderList)) {
-    throw new PluginUserError(label === "include" ? "errors.settings.includeFoldersArray" : "errors.settings.excludeFoldersArray");
+    if (label === "include") {
+      throw new PluginUserError("errors.settings.includeFoldersArray");
+    }
+
+    if (label === "exclude") {
+      throw new PluginUserError("errors.settings.excludeFoldersArray");
+    }
+
+    throw new PluginUserError("errors.settings.alternateFolderDeckModeFoldersArray");
   }
 
   for (const folder of folderList) {
     if (typeof folder !== "string") {
-      throw new PluginUserError(label === "include" ? "errors.settings.includeFoldersStrings" : "errors.settings.excludeFoldersStrings");
+      if (label === "include") {
+        throw new PluginUserError("errors.settings.includeFoldersStrings");
+      }
+
+      if (label === "exclude") {
+        throw new PluginUserError("errors.settings.excludeFoldersStrings");
+      }
+
+      throw new PluginUserError("errors.settings.alternateFolderDeckModeFoldersStrings");
     }
   }
 }

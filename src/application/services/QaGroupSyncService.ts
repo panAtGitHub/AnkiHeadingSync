@@ -138,7 +138,7 @@ export class QaGroupSyncService {
         deckHint: block.deckHint,
         deckHintSource: block.deckHintSource,
         deckWarnings: block.deckWarnings,
-      } as never, settings.defaultDeck, settings.folderDeckMode);
+      } as never, settings);
       for (const warning of deckResolution.warnings) {
         warningMap.set(getDeckResolutionWarningKey(warning), warning);
       }

@@ -63,6 +63,20 @@ describe("DataJsonPluginConfigRepository", () => {
     expect(settings.folderDeckMode).toBe("off");
   });
 
+  it("persists alternate folder deck mode overrides across save and reload", async () => {
+    const store = new InMemoryPluginDataStore();
+    const repository = new DataJsonPluginConfigRepository(store);
+
+    await repository.save({
+      ...DEFAULT_SETTINGS,
+      alternateFolderDeckModeFolders: ["notes", "notes/sub"],
+    });
+
+    const reloaded = await repository.load();
+
+    expect(reloaded.alternateFolderDeckModeFolders).toEqual(["notes", "notes/sub"]);
+  });
+
   it("normalizes blank backlink labels on load and save", async () => {
     const store = new InMemoryPluginDataStore({
       settings: {

@@ -1627,7 +1627,32 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const currentSelection = scopeMode === "include" ? this.plugin.settings.includeFolders : this.plugin.settings.excludeFolders;
     const nextSelection = toggleFolderTreeSelection(this.folderTree, currentSelection, folderPath, checked);
 
-    await this.plugin.updateSettings(scopeMode === "include" ? { includeFolders: nextSelection } : { excludeFolders: nextSelection });
+    if (scopeMode === "include") {
+      const nextAlternateFolderDeckModeFolders = checked
+        ? this.plugin.settings.alternateFolderDeckModeFolders
+        : this.plugin.settings.alternateFolderDeckModeFolders.filter((path) => !isPathInsideFolder(path, folderPath));
+
+      await this.plugin.updateSettings({
+        includeFolders: nextSelection,
+        alternateFolderDeckModeFolders: nextAlternateFolderDeckModeFolders,
+      });
+    } else {
+      await this.plugin.updateSettings({ excludeFolders: nextSelection });
+    }
+
+    this.renderCard("scope");
+  }
+
+  private async updateAlternateFolderDeckModeFolder(folderPath: string, checked: boolean): Promise<void> {
+    const nextAlternateFolderDeckModeFolders = checked
+      ? (this.plugin.settings.alternateFolderDeckModeFolders.includes(folderPath)
+          ? [...this.plugin.settings.alternateFolderDeckModeFolders]
+          : [...this.plugin.settings.alternateFolderDeckModeFolders, folderPath])
+      : this.plugin.settings.alternateFolderDeckModeFolders.filter((path) => path !== folderPath);
+
+    await this.plugin.updateSettings({
+      alternateFolderDeckModeFolders: nextAlternateFolderDeckModeFolders,
+    });
     this.renderCard("scope");
   }
 
@@ -1670,10 +1695,39 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       void this.updateFolderSelection(scopeMode, node.path, checkbox.checked);
     });
 
-    const labelEl = row.createSpan({ text: node.name });
+    const contentEl = row.createDiv();
+    addClasses(contentEl, "ahs-settings-folder-label-stack");
+
+    const labelEl = contentEl.createSpan({ text: node.name });
     labelEl.dataset.folderPathLabel = node.path;
     addClasses(labelEl, "ahs-settings-folder-label");
     this.applyFluidEllipsis(labelEl);
+
+    if (scopeMode === "include" && node.checked && this.plugin.settings.folderDeckMode !== "off") {
+      const overrideCheckbox = row.createEl("input");
+      const overrideLabel = t("settings.scope.folderDeckModeOverride.ariaLabel", { name: node.name });
+      const overrideTitle = this.getFolderDeckModeOverrideTitle();
+      const overrideChecked = this.plugin.settings.alternateFolderDeckModeFolders.includes(node.path);
+
+      overrideCheckbox.type = "checkbox";
+      overrideCheckbox.checked = overrideChecked;
+      overrideCheckbox.dataset.folderDeckModeOverride = node.path;
+      overrideCheckbox.setAttr("aria-label", overrideLabel);
+      overrideCheckbox.setAttr("title", overrideTitle);
+      addClasses(overrideCheckbox, "ahs-settings-folder-override-checkbox");
+      overrideCheckbox.addEventListener("click", (event?: Event) => {
+        event?.stopPropagation();
+      });
+      overrideCheckbox.addEventListener("change", () => {
+        void this.updateAlternateFolderDeckModeFolder(node.path, overrideCheckbox.checked);
+      });
+
+      if (overrideChecked) {
+        const hintEl = contentEl.createDiv({ text: this.getFolderDeckModeOverrideHint() });
+        hintEl.dataset.folderDeckModeOverrideHint = node.path;
+        addClasses(hintEl, "ahs-settings-folder-override-hint");
+      }
+    }
 
     if (!hasChildren || !expanded) {
       return;
@@ -1706,6 +1760,22 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
   private getSelectedFoldersForScopeMode(scopeMode: ScopeMode): string[] {
     return scopeMode === "include" ? this.plugin.settings.includeFolders : this.plugin.settings.excludeFolders;
+  }
+
+  private getFolderDeckModeOverrideHint(): string {
+    if (this.plugin.settings.folderDeckMode === "folder") {
+      return t("settings.scope.folderDeckModeOverride.hint.folderAndFile");
+    }
+
+    return t("settings.scope.folderDeckModeOverride.hint.folder");
+  }
+
+  private getFolderDeckModeOverrideTitle(): string {
+    if (this.plugin.settings.folderDeckMode === "folder") {
+      return t("settings.scope.folderDeckModeOverride.title.folderAndFile");
+    }
+
+    return t("settings.scope.folderDeckModeOverride.title.folder");
   }
 
   private createInlineControlGroup(containerEl: HTMLElement, label: string): HTMLElement {
@@ -1873,6 +1943,16 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     return t("settings.cards.cardTypes.rows.qaGroup");
   }
+}
+
+function normalizeFolderScopePath(path: string): string {
+  return path.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
+function isPathInsideFolder(filePath: string, folderPath: string): boolean {
+  const normalizedFilePath = normalizeFolderScopePath(filePath);
+  const normalizedFolderPath = normalizeFolderScopePath(folderPath);
+  return normalizedFilePath === normalizedFolderPath || normalizedFilePath.startsWith(`${normalizedFolderPath}/`);
 }
 
 function getScopeModeSummary(scopeMode: ScopeMode): string {

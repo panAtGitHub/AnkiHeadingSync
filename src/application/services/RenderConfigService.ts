@@ -21,7 +21,7 @@ export class RenderConfigService {
 
   resolve(card: IndexedCard, settings: PluginSettings): RenderPlan {
     const noteModel = resolveNoteModel(card.cardType, settings);
-    const deckResolution = this.deckResolutionService.resolve(card, settings.defaultDeck, settings.folderDeckMode);
+    const deckResolution = this.deckResolutionService.resolve(card, settings);
     const deck = deckResolution.resolvedDeck.value;
     const mapping = settings.noteFieldMappings[createNoteFieldMappingKey(card.cardType, noteModel)] ?? null;
     const clozeMode = card.cardType === "cloze" && card.clozeMode === "all"

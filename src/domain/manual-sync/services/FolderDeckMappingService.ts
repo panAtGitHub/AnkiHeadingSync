@@ -11,24 +11,27 @@ export interface FolderDeckMappingResult {
 export class FolderDeckMappingService {
   constructor(private readonly deckNormalizationService = new DeckNormalizationService()) {}
 
-  mapFilePathToDeck(filePath: string, mode: FolderDeckMode): FolderDeckMappingResult {
-    if (mode === "off") {
+  mapFilePathToDeck(filePath: string, mode: FolderDeckMode, alternateFolderDeckModeFolders: string[] = []): FolderDeckMappingResult {
+    const effectiveMode = resolveEffectiveFolderDeckMode(filePath, mode, alternateFolderDeckModeFolders);
+
+    if (effectiveMode === "off") {
       return { warnings: [] };
     }
 
-    const lastSlash = filePath.lastIndexOf("/");
+    const normalizedFilePath = normalizeFilePath(filePath);
+    const lastSlash = normalizedFilePath.lastIndexOf("/");
     if (lastSlash < 0) {
       return { warnings: [] };
     }
 
-    const folderPath = filePath.slice(0, lastSlash);
+    const folderPath = normalizedFilePath.slice(0, lastSlash);
     if (!folderPath.trim()) {
       return { warnings: [] };
     }
 
     const segments = folderPath.split("/").filter(Boolean);
-    if (mode === "folder-and-file") {
-      const fileName = filePath.slice(lastSlash + 1).replace(/\.[^.]+$/, "").trim();
+    if (effectiveMode === "folder-and-file") {
+      const fileName = normalizedFilePath.slice(lastSlash + 1).replace(/\.[^.]+$/, "").trim();
       if (fileName) {
         segments.push(fileName);
       }
@@ -48,4 +51,34 @@ export class FolderDeckMappingService {
       warnings: [],
     };
   }
+}
+
+function resolveEffectiveFolderDeckMode(filePath: string, mode: FolderDeckMode, alternateFolderDeckModeFolders: string[]): FolderDeckMode {
+  if (mode === "off") {
+    return "off";
+  }
+
+  const normalizedFilePath = normalizeFilePath(filePath);
+  const hasAlternateOverride = alternateFolderDeckModeFolders.some((folderPath) => {
+    const normalizedFolderPath = normalizeFolderPath(folderPath);
+    return normalizedFolderPath.length > 0 && isPathInsideFolder(normalizedFilePath, normalizedFolderPath);
+  });
+
+  if (!hasAlternateOverride) {
+    return mode;
+  }
+
+  return mode === "folder" ? "folder-and-file" : "folder";
+}
+
+function normalizeFolderPath(folderPath: string): string {
+  return folderPath.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
+function normalizeFilePath(filePath: string): string {
+  return filePath.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+}
+
+function isPathInsideFolder(filePath: string, folderPath: string): boolean {
+  return filePath === folderPath || filePath.startsWith(`${folderPath}/`);
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { PluginSettings } from "@/application/config/PluginSettings";
 import type { IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
 
 import { DeckResolutionService } from "./DeckResolutionService";
@@ -12,7 +13,7 @@ describe("DeckResolutionService", () => {
       filePath: "课程/数学/第一章/导数.md",
       deckHint: "显式/Deck",
       deckHintSource: "frontmatter",
-    }), "Default", "folder");
+    }), createDeckSettings({ folderDeckMode: "folder" }));
 
     expect(result.resolvedDeck).toEqual({
       value: "显式::Deck",
@@ -24,7 +25,7 @@ describe("DeckResolutionService", () => {
   it("uses folder mapping when no explicit deck exists", () => {
     const service = new DeckResolutionService();
 
-    const result = service.resolve(createIndexedCard({ filePath: "课程/数学/第一章/导数.md" }), "Default", "folder");
+    const result = service.resolve(createIndexedCard({ filePath: "课程/数学/第一章/导数.md" }), createDeckSettings({ folderDeckMode: "folder" }));
 
     expect(result.resolvedDeck).toEqual({
       value: "课程::数学::第一章",
@@ -35,7 +36,7 @@ describe("DeckResolutionService", () => {
   it("supports folder-and-file mapping mode", () => {
     const service = new DeckResolutionService();
 
-    const result = service.resolve(createIndexedCard({ filePath: "课程/数学/第一章/导数.md" }), "Default", "folder-and-file");
+    const result = service.resolve(createIndexedCard({ filePath: "课程/数学/第一章/导数.md" }), createDeckSettings({ folderDeckMode: "folder-and-file" }));
 
     expect(result.resolvedDeck).toEqual({
       value: "课程::数学::第一章::导数",
@@ -46,7 +47,10 @@ describe("DeckResolutionService", () => {
   it("falls back to default deck for root-level files and emits a warning", () => {
     const service = new DeckResolutionService();
 
-    const result = service.resolve(createIndexedCard({ filePath: "导数.md" }), " Default/Deck ", "folder-and-file");
+    const result = service.resolve(createIndexedCard({ filePath: "导数.md" }), createDeckSettings({
+      defaultDeck: " Default/Deck ",
+      folderDeckMode: "folder-and-file",
+    }));
 
     expect(result.resolvedDeck).toEqual({
       value: "Default::Deck",
@@ -58,7 +62,7 @@ describe("DeckResolutionService", () => {
   it("warns and falls back to default deck when folder mapping is invalid", () => {
     const service = new DeckResolutionService();
 
-    const result = service.resolve(createIndexedCard({ filePath: "课程::非法/导数.md" }), "Default", "folder");
+    const result = service.resolve(createIndexedCard({ filePath: "课程::非法/导数.md" }), createDeckSettings({ folderDeckMode: "folder" }));
 
     expect(result.resolvedDeck.value).toBe("Default");
     expect(result.warnings.map((warning) => warning.code)).toEqual([
@@ -70,9 +74,34 @@ describe("DeckResolutionService", () => {
       filePath: "课程::非法/导数.md",
       deckHint: "显式::Deck",
       deckHintSource: "body",
-    }), "Default", "folder").resolvedDeck.value).toBe("显式::Deck");
+    }), createDeckSettings({ folderDeckMode: "folder" })).resolvedDeck.value).toBe("显式::Deck");
+  });
+
+  it("uses the opposite folder mapping mode when the file path hits an alternate override folder", () => {
+    const service = new DeckResolutionService();
+
+    const result = service.resolve(createIndexedCard({ filePath: "notes/sub/topic.md" }), createDeckSettings({
+      folderDeckMode: "folder",
+      alternateFolderDeckModeFolders: ["notes/sub"],
+    }));
+
+    expect(result.resolvedDeck).toEqual({
+      value: "notes::sub::topic",
+      source: "folder",
+    });
   });
 });
+
+function createDeckSettings(
+  overrides: Partial<Pick<PluginSettings, "defaultDeck" | "folderDeckMode" | "alternateFolderDeckModeFolders">> = {},
+): Pick<PluginSettings, "defaultDeck" | "folderDeckMode" | "alternateFolderDeckModeFolders"> {
+  return {
+    defaultDeck: "Default",
+    folderDeckMode: "folder-and-file",
+    alternateFolderDeckModeFolders: [],
+    ...overrides,
+  };
+}
 
 function createIndexedCard(overrides: Partial<IndexedCard> = {}): IndexedCard {
   return {

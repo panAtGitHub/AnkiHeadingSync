@@ -1,4 +1,4 @@
-import type { FolderDeckMode } from "@/application/config/PluginSettings";
+import type { PluginSettings } from "@/application/config/PluginSettings";
 import type { IndexedCard } from "@/domain/manual-sync/entities/IndexedCard";
 import type { DeckResolutionResult } from "@/domain/manual-sync/value-objects/DeckResolution";
 
@@ -11,7 +11,7 @@ export class DeckResolutionService {
     private readonly deckNormalizationService = new DeckNormalizationService(),
   ) {}
 
-  resolve(card: IndexedCard, defaultDeck: string, folderDeckMode: FolderDeckMode): DeckResolutionResult {
+  resolve(card: IndexedCard, settings: Pick<PluginSettings, "defaultDeck" | "folderDeckMode" | "alternateFolderDeckModeFolders">): DeckResolutionResult {
     if (card.deckHint) {
       return {
         resolvedDeck: {
@@ -22,7 +22,11 @@ export class DeckResolutionService {
       };
     }
 
-    const folderMapping = this.folderDeckMappingService.mapFilePathToDeck(card.filePath, folderDeckMode);
+    const folderMapping = this.folderDeckMappingService.mapFilePathToDeck(
+      card.filePath,
+      settings.folderDeckMode,
+      settings.alternateFolderDeckModeFolders,
+    );
     if (folderMapping.deck) {
       return {
         resolvedDeck: {
@@ -35,7 +39,7 @@ export class DeckResolutionService {
 
     return {
       resolvedDeck: {
-        value: this.deckNormalizationService.normalize(defaultDeck),
+        value: this.deckNormalizationService.normalize(settings.defaultDeck),
         source: "default",
       },
       warnings: [

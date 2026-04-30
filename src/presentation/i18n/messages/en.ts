@@ -196,6 +196,17 @@ export const en = {
       failedLoad: "Failed to load folders from the current vault.",
       expandFolder: "Expand {{name}}",
       collapseFolder: "Collapse {{name}}",
+      folderDeckModeOverride: {
+        ariaLabel: "Toggle the alternate folder deck mapping mode for {{name}}",
+        hint: {
+          folder: "This folder uses the folder-only deck name by itself",
+          folderAndFile: "This folder uses the folder-and-file deck name by itself",
+        },
+        title: {
+          folder: "Global mode is folder-and-file; enable this to use folder-only deck names for this folder",
+          folderAndFile: "Global mode is folder-only; enable this to use folder-and-file deck names for this folder",
+        },
+      },
     },
     cards: {
       cardTypes: {
@@ -377,6 +388,8 @@ export const en = {
       includeFoldersStrings: "Include folders must only contain strings.",
       excludeFoldersArray: "Exclude folders must be an array.",
       excludeFoldersStrings: "Exclude folders must only contain strings.",
+      alternateFolderDeckModeFoldersArray: "Alternate folder deck mode folders must be an array.",
+      alternateFolderDeckModeFoldersStrings: "Alternate folder deck mode folders must only contain strings.",
       ankiConnectUrlRequired: "AnkiConnect URL is required.",
       ankiNoteTypeCacheArray: "Anki note type cache must be an array.",
       ankiNoteTypeCacheStrings: "Anki note type cache can only contain strings.",

@@ -194,6 +194,17 @@ export const zh = {
       failedLoad: "读取当前 vault 文件夹失败。",
       expandFolder: "展开 {{name}}",
       collapseFolder: "收起 {{name}}",
+      folderDeckModeOverride: {
+        ariaLabel: "切换 {{name}} 的文件夹牌组映射模式",
+        hint: {
+          folder: "本文件夹单独采用「文件夹」作为牌组名",
+          folderAndFile: "本文件夹单独采用「文件夹及文件名」作为牌组名",
+        },
+        title: {
+          folder: "当前全局为「文件夹及文件名」，勾选后此文件夹改用「文件夹」作为牌组名",
+          folderAndFile: "当前全局为「文件夹」，勾选后此文件夹改用「文件夹及文件名」作为牌组名",
+        },
+      },
     },
     cards: {
       cardTypes: {
@@ -375,6 +386,8 @@ export const zh = {
       includeFoldersStrings: "包含文件夹列表中只能包含字符串。",
       excludeFoldersArray: "排除文件夹必须是数组。",
       excludeFoldersStrings: "排除文件夹列表中只能包含字符串。",
+      alternateFolderDeckModeFoldersArray: "文件夹牌组模式覆盖列表必须是数组。",
+      alternateFolderDeckModeFoldersStrings: "文件夹牌组模式覆盖列表中只能包含字符串。",
       ankiConnectUrlRequired: "AnkiConnect URL 不能为空。",
       ankiNoteTypeCacheArray: "Anki 笔记模板缓存必须是数组。",
       ankiNoteTypeCacheStrings: "Anki 笔记模板缓存中只能包含字符串。",
