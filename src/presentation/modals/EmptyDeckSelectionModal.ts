@@ -71,7 +71,7 @@ export class EmptyDeckSelectionModal extends Modal {
         });
       });
 
-    this.selectionCountEl = footerSetting.settingEl.createEl("span", {
+    this.selectionCountEl = footerSetting.settingEl.createSpan({
       text: this.getSelectionCountText(),
     });
     this.selectionCountEl.addClass("anki-helper-empty-deck-selection-count");

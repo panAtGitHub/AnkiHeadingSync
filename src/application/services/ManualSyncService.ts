@@ -126,7 +126,7 @@ export class ManualSyncService {
     const executionResult = await this.ankiBatchExecutor.execute(
       plan,
       renderedCards,
-      async (plannedCard) => this.renderer.render(plannedCard, renderContext),
+      (plannedCard) => Promise.resolve(this.renderer.render(plannedCard, renderContext)),
       settings.noteFieldMappings,
     );
     const qaGroupExecution = await this.qaGroupSyncService.sync(indexResult.groupBlocks, state, settings);

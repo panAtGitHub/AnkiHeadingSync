@@ -13,7 +13,7 @@ describe("ObsidianVaultGateway", () => {
     const gateway = new ObsidianVaultGateway({
       vault: {
         getAbstractFileByPath: () => file,
-        cachedRead: async () => "# Title\nBody",
+        cachedRead: () => Promise.resolve("# Title\nBody"),
       },
       metadataCache: {
         getFileCache: () => ({
@@ -43,7 +43,7 @@ describe("ObsidianVaultGateway", () => {
     const gateway = new ObsidianVaultGateway({
       vault: {
         getAbstractFileByPath: () => file,
-        cachedRead: async () => "# Title\nBody",
+        cachedRead: () => Promise.resolve("# Title\nBody"),
       },
       metadataCache: {
         getFileCache: () => null,
@@ -97,10 +97,10 @@ describe("ObsidianVaultGateway", () => {
     const gateway = new ObsidianVaultGateway({
       vault: {
         getAbstractFileByPath: () => file,
-        process: async (targetFile: TFile, updater: (data: string) => string) => {
+        process: (targetFile: TFile, updater: (data: string) => string) => {
           processedFile = targetFile;
           writtenContent = updater("# Title\nBody");
-          return writtenContent;
+          return Promise.resolve(writtenContent);
         },
       },
     } as never);
@@ -117,7 +117,7 @@ describe("ObsidianVaultGateway", () => {
     const gateway = new ObsidianVaultGateway({
       vault: {
         getAbstractFileByPath: () => file,
-        process: async (_targetFile: TFile, updater: (data: string) => string) => updater("# Title\nChanged"),
+        process: (_targetFile: TFile, updater: (data: string) => string) => Promise.resolve(updater("# Title\nChanged")),
       },
     } as never);
 

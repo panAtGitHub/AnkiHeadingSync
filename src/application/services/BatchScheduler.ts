@@ -10,7 +10,7 @@ export class BatchScheduler {
     }
 
     const batches = chunk(items, batchSize);
-    const results: TResult[][] = new Array(batches.length);
+    const results: TResult[][] = [];
     let nextIndex = 0;
 
     await Promise.all(

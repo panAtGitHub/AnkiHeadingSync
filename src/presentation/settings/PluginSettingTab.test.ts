@@ -87,7 +87,7 @@ const {
       public readonly parent: HoistedFakeElement | null = null,
     ) {}
 
-    createEl(tag: string, options?: { text?: string }): HoistedFakeElement {
+    private createChild(tag: string, options?: { text?: string }): HoistedFakeElement {
       const child = new HoistedFakeElement(this.root, tag, this);
       if (options?.text) {
         child.text = options.text;
@@ -98,8 +98,16 @@ const {
       return child;
     }
 
+    createEl(tag: string, options?: { text?: string }): HoistedFakeElement {
+      return this.createChild(tag, options);
+    }
+
     createDiv(options?: { text?: string }): HoistedFakeElement {
-      return this.createEl("div", options);
+      return this.createChild("div", options);
+    }
+
+    createSpan(options?: { text?: string }): HoistedFakeElement {
+      return this.createChild("span", options);
     }
 
     addEventListener(eventName: string, callback: () => void | Promise<void>): void {
@@ -286,27 +294,57 @@ const {
   class HoistedFakeSetting {
     public name = "";
     public desc: unknown = "";
+    public readonly settingEl: HoistedFakeElement;
+    public readonly infoEl: HoistedFakeElement;
+    public readonly nameEl: HoistedFakeElement;
+    public readonly descEl: HoistedFakeElement;
+    public readonly controlEl: HoistedFakeElement;
     public controls: Array<
       HoistedFakeButtonComponent | HoistedFakeDropdownComponent | HoistedFakeTextComponent | HoistedFakeToggleComponent
     > = [];
 
     constructor(containerEl: HoistedFakeElement) {
+      this.settingEl = new HoistedFakeElement(containerEl.root, "div", containerEl);
+      this.infoEl = new HoistedFakeElement(containerEl.root, "div", this.settingEl);
+      this.nameEl = new HoistedFakeElement(containerEl.root, "div", this.infoEl);
+      this.descEl = new HoistedFakeElement(containerEl.root, "div", this.infoEl);
+      this.controlEl = new HoistedFakeElement(containerEl.root, "div", this.settingEl);
+
+      this.settingEl.children.push(this.infoEl, this.controlEl);
+      this.infoEl.children.push(this.nameEl, this.descEl);
+      containerEl.children.push(this.settingEl);
       containerEl.root.settings.push(this);
       containerEl.ownedSettings.push(this);
     }
 
     setName(name: string): this {
       this.name = name;
+      this.nameEl.text = name;
+      this.nameEl.textContent = name;
       return this;
     }
 
     setDesc(desc: unknown): this {
       this.desc = desc;
+      if (typeof desc === "string") {
+        this.descEl.text = desc;
+        this.descEl.textContent = desc;
+      }
+      return this;
+    }
+
+    setHeading(): this {
+      this.settingEl.classList.add("is-heading");
+      return this;
+    }
+
+    setClass(className: string): this {
+      this.settingEl.classList.add(className);
       return this;
     }
 
     addButton(callback: (button: HoistedFakeButtonComponent) => void): this {
-      const button = new HoistedFakeButtonComponent();
+      const button = new HoistedFakeButtonComponent(this.controlEl);
       this.controls.push(button);
       callback(button);
       return this;
@@ -405,7 +443,11 @@ type FakeElementInstance = InstanceType<typeof FakeElement>;
 type QueryRoot = FakeContainer | FakeElementInstance | HTMLElement;
 
 class FakePlugin {
-  public readonly app = {};
+  public readonly app = {
+    workspace: {
+      activeWindow: typeof window === "undefined" ? undefined : window,
+    },
+  };
   public readonly updateCalls: Array<Record<string, unknown>> = [];
   public readonly fieldNamesByModelName: Record<string, string[]> = {};
   public listNoteModelsCalls = 0;
@@ -451,7 +493,7 @@ class FakePlugin {
     },
   ];
 
-  async updateSettings(partialSettings: Record<string, unknown>): Promise<void> {
+  updateSettings(partialSettings: Record<string, unknown>): Promise<void> {
     this.updateCalls.push(partialSettings);
     this.settings = normalizePluginSettings({
       ...this.settings,
@@ -459,40 +501,45 @@ class FakePlugin {
       cardTypeConfigs: (partialSettings.cardTypeConfigs as typeof this.settings.cardTypeConfigs | undefined) ?? this.settings.cardTypeConfigs,
       noteFieldMappings: (partialSettings.noteFieldMappings as typeof this.settings.noteFieldMappings | undefined) ?? this.settings.noteFieldMappings,
     });
+
+    return Promise.resolve();
   }
 
-  async listNoteModels(): Promise<string[]> {
+  listNoteModels(): Promise<string[]> {
     this.listNoteModelsCalls += 1;
     if (this.listNoteModelsError) {
-      throw this.listNoteModelsError;
+      return Promise.reject(this.listNoteModelsError);
     }
 
-    return [...this.noteModels];
+    return Promise.resolve([...this.noteModels]);
   }
 
-  async getModelFieldNamesByModelNames(modelNames: string[]): Promise<Record<string, string[]>> {
+  getModelFieldNamesByModelNames(modelNames: string[]): Promise<Record<string, string[]>> {
     this.getModelFieldNamesByModelNamesCalls += 1;
 
-    return modelNames.reduce<Record<string, string[]>>((fieldNamesByModelName, modelName) => {
-      fieldNamesByModelName[modelName] = this.getFieldNamesForModel(modelName);
-      return fieldNamesByModelName;
+    const fieldNamesByModelName = modelNames.reduce<Record<string, string[]>>((resolvedFieldNamesByModelName, modelName) => {
+      resolvedFieldNamesByModelName[modelName] = this.getFieldNamesForModel(modelName);
+      return resolvedFieldNamesByModelName;
     }, {});
+
+    return Promise.resolve(fieldNamesByModelName);
   }
 
-  async getNoteModelDetails(modelName: string): Promise<{ fieldNames: string[] }> {
+  getNoteModelDetails(modelName: string): Promise<{ fieldNames: string[] }> {
     this.getNoteModelDetailsCalls += 1;
-    return {
+    return Promise.resolve({
       fieldNames: this.getFieldNamesForModel(modelName),
-    };
+    });
   }
 
-  async listFolderTree(): Promise<typeof this.folderTree> {
+  listFolderTree(): Promise<typeof this.folderTree> {
     this.listFolderTreeCalls += 1;
-    return this.folderTree;
+    return Promise.resolve(this.folderTree);
   }
 
-  async insertDeckTemplateToCurrentFile(): Promise<void> {
+  insertDeckTemplateToCurrentFile(): Promise<void> {
     this.insertDeckTemplateCalls += 1;
+    return Promise.resolve();
   }
 
   private getFieldNamesForModel(modelName: string): string[] {
@@ -641,31 +688,54 @@ async function flushPromises(): Promise<void> {
 }
 
 async function expandCard(tab: AnkiHeadingSyncSettingTab, cardId: string): Promise<void> {
-  if (queryByDataset(tab.containerEl, "settingsCardBody", cardId).style.display === "block") {
+  if (!queryByDataset(tab.containerEl, "settingsCardBody", cardId).classList.contains("ahs-is-hidden")) {
     return;
   }
 
   await queryByDataset(tab.containerEl, "settingsCardToggle", cardId).trigger("click");
 }
 
-describe("PluginSettingTab", () => {
-  const originalResizeObserver = globalThis.ResizeObserver;
+function isCardExpanded(tab: AnkiHeadingSyncSettingTab, cardId: string): boolean {
+  return !queryByDataset(tab.containerEl, "settingsCardBody", cardId).classList.contains("ahs-is-hidden");
+}
 
+type TestActiveWindow = {
+  setTimeout: (callback: () => void, delay?: number) => ReturnType<typeof setTimeout>;
+  clearTimeout: (timer: ReturnType<typeof setTimeout>) => void;
+};
+
+type TestWindow = {
+  activeWindow: TestActiveWindow;
+  ResizeObserver: typeof ResizeObserver;
+};
+
+function createTestWindow(): TestWindow {
+  const activeWindow: TestActiveWindow = {
+    // eslint-disable-next-line obsidianmd/prefer-active-window-timers
+    setTimeout: (callback, delay) => setTimeout(callback, delay),
+    // eslint-disable-next-line obsidianmd/prefer-active-window-timers
+    clearTimeout: (timer) => clearTimeout(timer),
+  };
+
+  return {
+    activeWindow,
+    ResizeObserver: FakeResizeObserver as unknown as typeof ResizeObserver,
+  };
+}
+
+describe("PluginSettingTab", () => {
   beforeEach(() => {
     getLanguageMock.mockReturnValue("zh");
     vi.useRealTimers();
     resetResizeObserverInstances();
-    Reflect.set(globalThis, "ResizeObserver", FakeResizeObserver);
+    vi.stubGlobal("navigator", { language: "zh" });
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+    vi.stubGlobal("window", createTestWindow());
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    if (typeof originalResizeObserver === "undefined") {
-      Reflect.deleteProperty(globalThis, "ResizeObserver");
-      return;
-    }
-
-    Reflect.set(globalThis, "ResizeObserver", originalResizeObserver);
+    vi.unstubAllGlobals();
   });
 
   it("renders five cards collapsed by default", () => {
@@ -678,11 +748,11 @@ describe("PluginSettingTab", () => {
     expect(queryByDataset(tab.containerEl, "settingsPageHeader", "true")).toBeDefined();
     const cards = queryAllByDataset(tab.containerEl, "settingsCard");
     expect(cards).toHaveLength(5);
-    expect(queryByDataset(tab.containerEl, "settingsCardBody", "sync-content").style.display).toBe("none");
-    expect(queryByDataset(tab.containerEl, "settingsCardBody", "card-types").style.display).toBe("none");
-    expect(queryByDataset(tab.containerEl, "settingsCardBody", "commands").style.display).toBe("none");
-    expect(queryByDataset(tab.containerEl, "settingsCardBody", "scope").style.display).toBe("none");
-    expect(queryByDataset(tab.containerEl, "settingsCardBody", "deck").style.display).toBe("none");
+    expect(isCardExpanded(tab, "sync-content")).toBe(false);
+    expect(isCardExpanded(tab, "card-types")).toBe(false);
+    expect(isCardExpanded(tab, "commands")).toBe(false);
+    expect(isCardExpanded(tab, "scope")).toBe(false);
+    expect(isCardExpanded(tab, "deck")).toBe(false);
 
     expect(cards.map((card) => card.dataset.settingsCard)).toEqual(["card-types", "sync-content", "deck", "scope", "commands"]);
 
@@ -699,15 +769,15 @@ describe("PluginSettingTab", () => {
 
     await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
 
-    expect(queryByDataset(tab.containerEl, "settingsCardBody", "scope").style.display).toBe("block");
-    expect(queryByDataset(tab.containerEl, "settingsCardBody", "card-types").style.display).toBe("none");
-    expect(queryByDataset(tab.containerEl, "settingsCardBody", "sync-content").style.display).toBe("none");
-    expect(queryByDataset(tab.containerEl, "settingsCardBody", "deck").style.display).toBe("none");
-    expect(queryByDataset(tab.containerEl, "settingsCardBody", "commands").style.display).toBe("none");
+    expect(isCardExpanded(tab, "scope")).toBe(true);
+    expect(isCardExpanded(tab, "card-types")).toBe(false);
+    expect(isCardExpanded(tab, "sync-content")).toBe(false);
+    expect(isCardExpanded(tab, "deck")).toBe(false);
+    expect(isCardExpanded(tab, "commands")).toBe(false);
 
     await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
 
-    expect(queryByDataset(tab.containerEl, "settingsCardBody", "scope").style.display).toBe("none");
+    expect(isCardExpanded(tab, "scope")).toBe(false);
   });
 
   it("applies sticky styles to the opaque page header gap, mask, and card headers", () => {
@@ -718,39 +788,17 @@ describe("PluginSettingTab", () => {
 
     const pageHeader = queryByDataset(tab.containerEl, "settingsPageHeader", "true");
     const pageHeaderMask = queryByDataset(pageHeader, "settingsPageHeaderMask", "true");
-    expect(pageHeader.style.position).toBe("sticky");
-    expect(pageHeader.style.top).toBe("0px");
-    expect(pageHeader.style.zIndex).toBe("300");
-    expect(pageHeader.style.width).toBe("100%");
-    expect(pageHeader.style.boxSizing).toBe("border-box");
-    expect(pageHeader.style.marginBottom).toBe("0");
-    expect(pageHeader.style.paddingBottom).toBe("calc(12px + var(--ahs-settings-sticky-card-gap, 8px))");
-    expect(pageHeader.style.backgroundColor).toBe("var(--modal-background, var(--background-primary))");
-    expect(pageHeader.style.boxShadow).toBe("none");
+    expect(pageHeader.classList.contains("ahs-settings-page-header")).toBe(true);
     expect(collectTexts(pageHeader)).toContain("Anki Heading Sync");
 
-    expect(pageHeaderMask.style.position).toBe("absolute");
-    expect(pageHeaderMask.style.top).toBe("-128px");
-    expect(pageHeaderMask.style.left).toBe("-24px");
-    expect(pageHeaderMask.style.right).toBe("-24px");
-    expect(pageHeaderMask.style.bottom).toBe("0px");
-    expect(pageHeaderMask.style.backgroundColor).toBe("var(--modal-background, var(--background-primary))");
+    expect(pageHeaderMask.classList.contains("ahs-settings-page-header-mask")).toBe(true);
 
     expect(getStyleProperty(tab.containerEl, "--ahs-settings-page-header-height")).toBe("64px");
     expect(getStyleProperty(tab.containerEl, "--ahs-settings-sticky-card-gap")).toBe("8px");
 
     for (const cardId of ["card-types", "sync-content", "deck", "scope", "commands"] as const) {
       const header = queryByDataset(tab.containerEl, "settingsCardToggle", cardId);
-      expect(header.style.position).toBe("sticky");
-      expect(header.style.top).toBe("var(--ahs-settings-page-header-height, 64px)");
-      expect(header.style.zIndex).toBe("200");
-      expect(header.style.display).toBe("flex");
-      expect(header.style.width).toBe("100%");
-      expect(header.style.backgroundColor).toBe("var(--modal-background, var(--background-primary))");
-      expect(header.style.fontSize).toBe("1.5em");
-      expect(header.style.fontWeight).toBe("600");
-      expect(header.style.border).toBe("2px solid var(--background-modifier-border)");
-      expect(header.style.boxShadow).toBe("none");
+      expect(header.classList.contains("ahs-settings-card-toggle")).toBe(true);
     }
   });
 
@@ -819,7 +867,9 @@ describe("PluginSettingTab", () => {
     expect(queryByDataset(tab.containerEl, "settingsCardToggle", "sync-content").textContent).toContain("卡片正文同步内容");
     expect(collectTexts(tab.containerEl)).not.toContain("这些选项只影响卡片渲染内容，修改后仅刷新这一张卡片。");
 
-    const sectionTitles = queryAllByDataset(tab.containerEl, "syncContentSectionTitle").map((element) => element.textContent || element.text);
+    const sectionTitles = queryAllByDataset(tab.containerEl, "syncContentSectionTitle")
+      .map((element) => element.textContent || element.text)
+      .filter((text): text is string => text.length > 0);
     expect(sectionTitles).toEqual([
       "1. 确定「卡片正文」范围",
       "2. 确定是否增加回链，方便从 Anki「卡片级跳转」回 Obsidian",
@@ -827,7 +877,17 @@ describe("PluginSettingTab", () => {
       "4. 「填空题」专项",
     ]);
 
-    expect(collectSettingNames(tab.containerEl)).toEqual([
+    const syncContentSettingNames = collectSettingNames(tab.containerEl).filter((name) => [
+      "卡片正文截止模式",
+      "添加 Obsidian 回链",
+      "Obsidian 回链显示名称",
+      "Obsidian 回链放置位置",
+      "同步 Obsidian 标签到 Anki",
+      "在卡片正文中保留纯标签行",
+      "高亮转填空题",
+    ].includes(name));
+
+    expect(syncContentSettingNames).toEqual([
       "卡片正文截止模式",
       "添加 Obsidian 回链",
       "Obsidian 回链显示名称",
@@ -1066,11 +1126,11 @@ describe("PluginSettingTab", () => {
     const initialEmptyCount = getEmptyCallCount(tab.containerEl);
 
     await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
-    expect(queryByDataset(tab.containerEl, "settingsCardBody", "scope").style.display).toBe("block");
+    expect(isCardExpanded(tab, "scope")).toBe(true);
     expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
 
     await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
-    expect(queryByDataset(tab.containerEl, "settingsCardBody", "scope").style.display).toBe("none");
+    expect(isCardExpanded(tab, "scope")).toBe(false);
     expect(getEmptyCallCount(tab.containerEl)).toBe(initialEmptyCount);
   });
 
@@ -1108,22 +1168,18 @@ describe("PluginSettingTab", () => {
       "Custom Cloze",
       QA_GROUP_USER_MODEL_NAME,
     ].sort((left, right) => left.localeCompare(right)));
-    expect(plugin.updateCalls.some((call) => Array.isArray(call.ankiNoteTypeCache))).toBe(true);
-    expect(plugin.settings.ankiModelFieldCache).toEqual(expect.objectContaining({
-      Basic: {
-        fieldNames: ["Front", "Back", "Extra"],
-        loadedAt: expect.any(Number),
-      },
-      "Custom Basic": {
-        fieldNames: ["Title", "Body", "Hint"],
-        loadedAt: expect.any(Number),
-      },
-      Cloze: {
-        fieldNames: ["Text", "Extra", "Hint"],
-        loadedAt: expect.any(Number),
-      },
-    }));
-    expect(plugin.updateCalls.some((call) => typeof call.ankiModelFieldCache === "object" && call.ankiModelFieldCache !== null)).toBe(true);
+    expect(plugin.updateCalls.some((call) => Array.isArray(call["ankiNoteTypeCache"]))).toBe(true);
+    const { ankiModelFieldCache } = plugin.settings;
+    expect(ankiModelFieldCache.Basic?.fieldNames).toEqual(["Front", "Back", "Extra"]);
+    expect(typeof ankiModelFieldCache.Basic?.loadedAt).toBe("number");
+    expect(ankiModelFieldCache["Custom Basic"]?.fieldNames).toEqual(["Title", "Body", "Hint"]);
+    expect(typeof ankiModelFieldCache["Custom Basic"]?.loadedAt).toBe("number");
+    expect(ankiModelFieldCache.Cloze?.fieldNames).toEqual(["Text", "Extra", "Hint"]);
+    expect(typeof ankiModelFieldCache.Cloze?.loadedAt).toBe("number");
+    expect(plugin.updateCalls.some((call) => {
+      const ankiModelFieldCache = call["ankiModelFieldCache"];
+      return typeof ankiModelFieldCache === "object" && ankiModelFieldCache !== null;
+    })).toBe(true);
 
     const cachedPlugin = new FakePlugin();
     cachedPlugin.settings = normalizePluginSettings({
@@ -1564,17 +1620,13 @@ describe("PluginSettingTab", () => {
     const childLabel = queryByDataset(tab.containerEl, "folderPathLabel", "notes/sub");
 
     expect(parentToggle.textContent).toBe("▾");
-    expect(parentRow.style.display).toBe("grid");
-    expect(parentRow.style.gridTemplateColumns).toBe("24px 24px minmax(0, 1fr)");
-    expect(parentRow.style.alignItems).toBe("center");
-    expect(childRow.style.marginLeft).toBe("18px");
-    expect(childToggle.style.width).toBe("24px");
-    expect(childToggle.style.height).toBe("24px");
-    expect(childToggle.style.fontSize).toBe("2em");
+    expect(parentRow.classList.contains("ahs-settings-folder-row")).toBe(true);
+    expect(getStyleProperty(childRow, "--ahs-folder-depth-indent")).toBe("18px");
+    expect(childToggle.classList.contains("ahs-settings-folder-toggle")).toBe(true);
+    expect(childToggle.classList.contains("ahs-settings-folder-toggle-spacer")).toBe(true);
     expect(childCheckbox).toBeDefined();
-    expect(childLabel.style.whiteSpace).toBe("nowrap");
-    expect(childLabel.style.overflow).toBe("hidden");
-    expect(childLabel.style.textOverflow).toBe("ellipsis");
+    expect(childLabel.classList.contains("ahs-settings-folder-label")).toBe(true);
+    expect(childLabel.classList.contains("ahs-settings-fluid-ellipsis")).toBe(true);
   });
 
   it("folder tree expand and check refresh only the scope card", async () => {
@@ -1648,7 +1700,9 @@ describe("PluginSettingTab", () => {
     await queryByDataset(tab.containerEl, "settingsCardToggle", "deck").trigger("click");
 
     const deckBody = queryByDataset(tab.containerEl, "settingsCardBody", "deck");
-    const sectionTitles = queryAllByDataset(deckBody, "deckSectionTitle").map((element) => element.textContent || element.text);
+    const sectionTitles = queryAllByDataset(deckBody, "deckSectionTitle")
+      .map((element) => element.textContent || element.text)
+      .filter((text): text is string => text.length > 0);
     expect(sectionTitles).toEqual([
       "1，推荐用「文件夹及文件名」作为「Anki牌组」",
       "2，可打开「文件级自定义牌组」，作为个性化定制",
@@ -1667,18 +1721,13 @@ describe("PluginSettingTab", () => {
     const exampleRows = queryAllByDataset(exampleBlock, "deckExampleRow");
     expect(collectTexts(exampleBlock)).toContain("示例：");
     expect(exampleRows).toHaveLength(2);
-    expect(exampleBlock.style.marginLeft).toBe("32px");
-    expect(exampleRows[0]?.style.color).toBe("var(--text-muted)");
-    expect(exampleRows[0]?.style.fontSize).toBe("var(--font-ui-small)");
+    expect(exampleBlock.classList.contains("ahs-settings-deck-example-block")).toBe(true);
+    expect(exampleRows[0]?.classList.contains("ahs-settings-helper-text")).toBe(true);
 
     const fallbackHelper = queryByDataset(section3, "deckHelperText", "fallback");
     const priorityFooter = queryByDataset(deckBody, "deckPriorityFooter", "true");
-    expect(fallbackHelper.style.marginLeft).toBe("32px");
-    expect(fallbackHelper.style.color).toBe("var(--text-muted)");
-    expect(fallbackHelper.style.fontSize).toBe("var(--font-ui-small)");
-    expect(priorityFooter.style.marginLeft).toBe("32px");
-    expect(priorityFooter.style.color).toBe("var(--text-muted)");
-    expect(priorityFooter.style.fontSize).toBe("var(--font-ui-small)");
+    expect(fallbackHelper.classList.contains("ahs-settings-helper-text")).toBe(true);
+    expect(priorityFooter.classList.contains("ahs-settings-helper-text")).toBe(true);
     expect(collectTexts(section3)).not.toContain("最终牌组优先级：文件级自定义牌组 > 文件夹映射牌组 > 默认牌组。");
 
     expect(collectOwnedSettingNames(section1)).toEqual(["文件夹映射模式"]);

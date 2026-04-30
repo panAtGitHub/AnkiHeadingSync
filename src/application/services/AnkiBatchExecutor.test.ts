@@ -11,7 +11,7 @@ import { AnkiBatchExecutor } from "./AnkiBatchExecutor";
 class CountingAnkiGateway extends FakeManualSyncAnkiGateway {
   public getModelDetailsCalls: string[] = [];
 
-  override async getModelDetails(modelName: string): Promise<NoteModelDetails> {
+  override getModelDetails(modelName: string): Promise<NoteModelDetails> {
     this.getModelDetailsCalls.push(modelName);
     return super.getModelDetails(modelName);
   }
@@ -50,7 +50,7 @@ describe("AnkiBatchExecutor", () => {
     const result = await executor.execute(
       plan,
       renderedCards,
-      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      renderPlannedCard,
       createModule3Settings().noteFieldMappings,
     );
 
@@ -90,7 +90,7 @@ describe("AnkiBatchExecutor", () => {
         warnings: [],
       },
       renderedCards,
-      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      renderPlannedCard,
       createModule3Settings().noteFieldMappings,
     );
 
@@ -120,7 +120,7 @@ describe("AnkiBatchExecutor", () => {
         warnings: [],
       },
       new Map([[createCard.card.syncKey, createRenderedSyncCard(createCard)]]),
-      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      renderPlannedCard,
       createModule3Settings().noteFieldMappings,
     );
 
@@ -153,7 +153,7 @@ describe("AnkiBatchExecutor", () => {
         warnings: [],
       },
       new Map([[updateCard.card.syncKey, createRenderedSyncCard(updateCard)]]),
-      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      renderPlannedCard,
       createModule3Settings().noteFieldMappings,
     );
 
@@ -192,7 +192,7 @@ describe("AnkiBatchExecutor", () => {
         warnings: [],
       },
       new Map([[rebuildCard.card.syncKey, createRenderedSyncCard(rebuildCard)]]),
-      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      renderPlannedCard,
       createModule3Settings().noteFieldMappings,
     );
 
@@ -228,7 +228,7 @@ describe("AnkiBatchExecutor", () => {
         warnings: [],
       },
       new Map([[rebuildCard.card.syncKey, createRenderedSyncCard(rebuildCard)]]),
-      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      renderPlannedCard,
       createModule3Settings().noteFieldMappings,
     );
 
@@ -270,7 +270,7 @@ describe("AnkiBatchExecutor", () => {
         warnings: [],
       },
       new Map([[rebuildCard.card.syncKey, createRenderedSyncCard(rebuildCard)]]),
-      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      renderPlannedCard,
       createModule3Settings().noteFieldMappings,
     )).rejects.toThrow("delete old failed");
 
@@ -304,7 +304,7 @@ describe("AnkiBatchExecutor", () => {
         warnings: [],
       },
       new Map([[updateCard.card.syncKey, createRenderedSyncCard(updateCard)]]),
-      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      renderPlannedCard,
       createModule3Settings().noteFieldMappings,
     );
 
@@ -336,7 +336,7 @@ describe("AnkiBatchExecutor", () => {
         warnings: [],
       },
       new Map([[updateCard.card.syncKey, createRenderedSyncCard(updateCard)]]),
-      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      renderPlannedCard,
       {
         ...createModule3Settings().noteFieldMappings,
         "basic:New Basic": {
@@ -390,7 +390,7 @@ describe("AnkiBatchExecutor", () => {
         warnings: [],
       },
       new Map([[updateCard.card.syncKey, createRenderedSyncCard(updateCard)]]),
-      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      renderPlannedCard,
       {
         ...createModule3Settings().noteFieldMappings,
         "cloze:New Cloze": {
@@ -439,7 +439,7 @@ describe("AnkiBatchExecutor", () => {
         warnings: [],
       },
       new Map([[updateCard.card.syncKey, createRenderedSyncCard(updateCard)]]),
-      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      renderPlannedCard,
       createModule3Settings().noteFieldMappings,
     );
 
@@ -473,7 +473,7 @@ describe("AnkiBatchExecutor", () => {
         warnings: [],
       },
       new Map([[updateCard.card.syncKey, createRenderedSyncCard(updateCard)]]),
-      async (plannedCard) => createRenderedSyncCard(plannedCard),
+      renderPlannedCard,
       {
         ...createModule3Settings().noteFieldMappings,
         "basic:New Basic": {
@@ -523,6 +523,10 @@ function createRenderedSyncCard(plannedCard: PlannedCard): RenderedSyncCard {
     },
     media: [],
   };
+}
+
+function renderPlannedCard(plannedCard: PlannedCard): Promise<RenderedSyncCard> {
+  return Promise.resolve(createRenderedSyncCard(plannedCard));
 }
 
 function createIndexedCard(syncKey: string, noteId?: number, cardType: IndexedCard["cardType"] = "basic"): IndexedCard {

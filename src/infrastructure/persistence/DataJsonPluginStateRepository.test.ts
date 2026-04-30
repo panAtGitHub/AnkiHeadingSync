@@ -10,12 +10,13 @@ import type { PluginDataSnapshot } from "./DataJsonPluginConfigRepository";
 class InMemoryPluginDataStore implements PluginDataStore<PluginDataSnapshot> {
   constructor(private snapshot: PluginDataSnapshot | null = null) {}
 
-  async load(): Promise<PluginDataSnapshot | null> {
-    return this.snapshot;
+  load(): Promise<PluginDataSnapshot | null> {
+    return Promise.resolve(this.snapshot);
   }
 
-  async save(data: PluginDataSnapshot): Promise<void> {
+  save(data: PluginDataSnapshot): Promise<void> {
     this.snapshot = data;
+    return Promise.resolve();
   }
 }
 

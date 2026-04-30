@@ -6,8 +6,8 @@ export class ObsidianPluginDataStore<TData extends object> implements PluginData
   constructor(private readonly plugin: Plugin) {}
 
   async load(): Promise<TData | null> {
-    const data = await this.plugin.loadData();
-    return (data as TData | null) ?? null;
+    const data: unknown = await this.plugin.loadData();
+    return data !== null && typeof data === "object" ? data as TData : null;
   }
 
   async save(data: TData): Promise<void> {

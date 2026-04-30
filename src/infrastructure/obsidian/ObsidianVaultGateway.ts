@@ -15,20 +15,20 @@ const AUDIO_EXTENSIONS = new Set(["wav", "m4a", "flac", "mp3", "wma", "aac", "we
 export class ObsidianVaultGateway implements VaultGateway, ManualSyncVaultGateway {
   constructor(private readonly app: App) {}
 
-  async listFolderTree(): Promise<FolderTreeNode[]> {
-    return this.app.vault
+  listFolderTree(): Promise<FolderTreeNode[]> {
+    return Promise.resolve(this.app.vault
       .getRoot()
       .children.filter((child): child is TFolder => child instanceof TFolder)
-      .map((folder) => this.toFolderTreeNode(folder));
+      .map((folder) => this.toFolderTreeNode(folder)));
   }
 
-  async listMarkdownFileRefs(): Promise<MarkdownFileReference[]> {
-    return this.app.vault.getMarkdownFiles().map((file) => ({
+  listMarkdownFileRefs(): Promise<MarkdownFileReference[]> {
+    return Promise.resolve(this.app.vault.getMarkdownFiles().map((file) => ({
       path: file.path,
       basename: file.basename,
       mtime: file.stat.mtime,
       size: file.stat.size,
-    }));
+    })));
   }
 
   async listMarkdownFiles() {

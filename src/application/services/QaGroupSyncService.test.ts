@@ -538,19 +538,20 @@ describe("QaGroupSyncService", () => {
     expect(result.resolvedNoteIds.get("notes/example.md\u0000group\u00001\u0000hash-1")).toBe(42);
     expect(ankiGateway.addedNotes).toEqual([]);
     expect(ankiGateway.updatedNotes).toEqual([]);
-    expect(ankiGateway.updatedNoteModels).toEqual([
-      {
-        noteId: 42,
-        modelName: QA_GROUP_USER_NOTE_TYPE,
-        fields: expect.objectContaining({
-          题目: "Concepts",
-          问题01: "Alpha",
-          答案01: expect.stringContaining("First answer"),
-          问题02: "Beta",
-          答案02: expect.stringContaining("Second answer"),
-        }),
-      },
-    ]);
+    expect(ankiGateway.updatedNoteModels).toHaveLength(1);
+    const updatedQaGroupNoteModel = ankiGateway.updatedNoteModels[0];
+    expect(updatedQaGroupNoteModel).toBeDefined();
+    if (!updatedQaGroupNoteModel) {
+      throw new Error("Expected a QA Group note model update.");
+    }
+
+    expect(updatedQaGroupNoteModel.noteId).toBe(42);
+    expect(updatedQaGroupNoteModel.modelName).toBe(QA_GROUP_USER_NOTE_TYPE);
+    expect(updatedQaGroupNoteModel.fields["题目"]).toBe("Concepts");
+    expect(updatedQaGroupNoteModel.fields["问题01"]).toBe("Alpha");
+    expect(updatedQaGroupNoteModel.fields["答案01"]).toContain("First answer");
+    expect(updatedQaGroupNoteModel.fields["问题02"]).toBe("Beta");
+    expect(updatedQaGroupNoteModel.fields["答案02"]).toContain("Second answer");
     expect(ankiGateway.syncedNoteTags).toEqual([
       {
         noteId: 42,
@@ -642,16 +643,20 @@ describe("QaGroupSyncService", () => {
     }));
 
     expect(result.migratedNoteTypes).toBe(1);
-    expect(ankiGateway.updatedNoteModels[0]?.modelName).toBe("问答题（6组）");
-    expect(ankiGateway.updatedNoteModels[0]?.fields).toMatchObject({
-      题目: "Concepts",
-      问题01: "A",
-      答案01: expect.stringContaining("1"),
-      问题05: "E",
-      答案05: expect.stringContaining("5"),
-      问题06: "",
-      答案06: "",
-    });
+    const updatedNoteModel = ankiGateway.updatedNoteModels[0];
+    expect(updatedNoteModel).toBeDefined();
+    if (!updatedNoteModel) {
+      throw new Error("Expected a migrated QA Group note model update.");
+    }
+
+    expect(updatedNoteModel.modelName).toBe("问答题（6组）");
+    expect(updatedNoteModel.fields["题目"]).toBe("Concepts");
+    expect(updatedNoteModel.fields["问题01"]).toBe("A");
+    expect(updatedNoteModel.fields["答案01"]).toContain("1");
+    expect(updatedNoteModel.fields["问题05"]).toBe("E");
+    expect(updatedNoteModel.fields["答案05"]).toContain("5");
+    expect(updatedNoteModel.fields["问题06"]).toBe("");
+    expect(updatedNoteModel.fields["答案06"]).toBe("");
   });
 
   it("surfaces a user-facing error when QA Group note type migration fails", async () => {

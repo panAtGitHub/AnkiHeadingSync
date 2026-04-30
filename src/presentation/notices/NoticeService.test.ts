@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { getLanguageMock, noticeRecords } = vi.hoisted(() => {
   const hoistedGetLanguage = vi.fn(() => "en");
@@ -30,6 +30,10 @@ import type { ClearCurrentFileSyncedCardsResult, CleanupEmptyDecksResult } from 
 import type { ManualSyncResult } from "@/application/use-cases/manualSyncTypes";
 
 import { NoticeService } from "./NoticeService";
+
+function setNavigatorLanguage(language: string): void {
+  vi.stubGlobal("navigator", { language });
+}
 
 function createManualSyncResult(overrides: Partial<ManualSyncResult> = {}): ManualSyncResult {
   return {
@@ -81,6 +85,11 @@ describe("NoticeService", () => {
     noticeRecords.length = 0;
     getLanguageMock.mockReset();
     getLanguageMock.mockReturnValue("en");
+    setNavigatorLanguage("en");
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("renders sync summary and deck warnings in English", () => {
@@ -102,7 +111,7 @@ describe("NoticeService", () => {
   });
 
   it("renders clear-current-file summaries with localized failures", () => {
-    getLanguageMock.mockReturnValue("zh");
+    setNavigatorLanguage("zh");
     const service = new NoticeService();
 
     service.showClearCurrentFileSummary(createClearResult({

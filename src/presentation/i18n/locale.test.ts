@@ -1,25 +1,17 @@
-import * as obsidian from "obsidian";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { formatList, resolvePluginLocale } from "./locale";
 
 describe("locale", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
+  it("returns zh for zh-based language codes", () => {
+    expect(resolvePluginLocale("zh")).toBe("zh");
+    expect(resolvePluginLocale("zh-CN")).toBe("zh");
+    expect(resolvePluginLocale("zh-TW")).toBe("zh");
   });
 
-  it("returns zh only when Obsidian language is exactly zh", () => {
-    vi.spyOn(obsidian, "getLanguage").mockReturnValue("zh");
-
-    expect(resolvePluginLocale()).toBe("zh");
-  });
-
-  it("falls back to en for every other Obsidian language code", () => {
-    const getLanguage = vi.spyOn(obsidian, "getLanguage");
-
-    for (const language of ["en", "en-GB", "ja", "zh-TW"]) {
-      getLanguage.mockReturnValue(language);
-      expect(resolvePluginLocale()).toBe("en");
+  it("falls back to en for every other language code", () => {
+    for (const language of ["en", "en-GB", "ja"]) {
+      expect(resolvePluginLocale(language)).toBe("en");
     }
   });
 

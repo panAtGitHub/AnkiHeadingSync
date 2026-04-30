@@ -53,7 +53,9 @@ export function migratePluginState(pluginState?: PluginState | LegacyPluginState
     return createEmptyPluginState();
   }
 
-  const rawCards = pluginState.cards ?? {};
+  const rawCards = toLegacyCardRecord(pluginState.cards);
+  const rawFiles = toLegacyFileRecord(pluginState.files);
+  const rawGroupBlocks = toLegacyGroupBlockRecord(pluginState.groupBlocks);
   const cards: Record<string, CardState> = {};
 
   for (const rawCard of Object.values(rawCards)) {
@@ -75,7 +77,7 @@ export function migratePluginState(pluginState?: PluginState | LegacyPluginState
   }
 
   const files: Record<string, FileState> = {};
-  for (const [filePath, rawFile] of Object.entries(pluginState.files ?? {})) {
+  for (const [filePath, rawFile] of Object.entries(rawFiles)) {
     files[filePath] = {
       filePath,
       fileHash: typeof rawFile.fileHash === "string" ? rawFile.fileHash : "",
@@ -83,12 +85,12 @@ export function migratePluginState(pluginState?: PluginState | LegacyPluginState
       deckRulesFingerprint: typeof rawFile.deckRulesFingerprint === "string" ? rawFile.deckRulesFingerprint : undefined,
       lastIndexedAt: typeof rawFile.lastIndexedAt === "number" ? rawFile.lastIndexedAt : 0,
       noteIds: collectMigratedFileNoteIds(rawFile, rawCards, cards),
-      groupIds: collectMigratedFileGroupIds(rawFile, pluginState.groupBlocks ?? {}),
+      groupIds: collectMigratedFileGroupIds(rawFile, rawGroupBlocks),
     };
   }
 
   const groupBlocks: Record<string, GroupBlockState> = {};
-  for (const [groupId, rawGroupBlock] of Object.entries(pluginState.groupBlocks ?? {})) {
+  for (const [groupId, rawGroupBlock] of Object.entries(rawGroupBlocks)) {
     const nextGroupBlock = migrateGroupBlockState(rawGroupBlock, groupId);
     if (!nextGroupBlock) {
       continue;
@@ -199,7 +201,7 @@ function migrateGroupBlockState(rawGroupBlock: LegacyGroupBlockState, groupId: s
           return [];
         }
 
-        const nextItem = item as GroupBlockState["items"][number];
+        const nextItem = item as unknown as Record<string, unknown>;
         if (typeof nextItem.title !== "string" || typeof nextItem.answer !== "string" || typeof nextItem.ordinalInMarkdown !== "number") {
           return [];
         }
@@ -305,6 +307,44 @@ function collectMigratedFileGroupIds(
   }
 
   return rawFile.groupIds.filter((groupId): groupId is string => typeof groupId === "string" && Boolean(rawGroupBlocks[groupId]));
+}
+
+function toLegacyCardRecord(cards: PluginState["cards"] | LegacyPluginState["cards"] | undefined): Record<string, LegacyCardState> {
+  const next: Record<string, LegacyCardState> = {};
+  const source = cards ?? {};
+
+  for (const cardId in source) {
+    const rawCard = source[cardId];
+    next[cardId] = rawCard;
+  }
+
+  return next;
+}
+
+function toLegacyFileRecord(files: PluginState["files"] | LegacyPluginState["files"] | undefined): Record<string, LegacyFileState> {
+  const next: Record<string, LegacyFileState> = {};
+  const source = files ?? {};
+
+  for (const filePath in source) {
+    const rawFile = source[filePath];
+    next[filePath] = rawFile;
+  }
+
+  return next;
+}
+
+function toLegacyGroupBlockRecord(
+  groupBlocks: PluginState["groupBlocks"] | LegacyPluginState["groupBlocks"] | undefined,
+): Record<string, LegacyGroupBlockState> {
+  const next: Record<string, LegacyGroupBlockState> = {};
+  const source = groupBlocks ?? {};
+
+  for (const groupId in source) {
+    const rawGroupBlock = source[groupId];
+    next[groupId] = rawGroupBlock;
+  }
+
+  return next;
 }
 
 function sanitizeNoteId(value: unknown): number | undefined {

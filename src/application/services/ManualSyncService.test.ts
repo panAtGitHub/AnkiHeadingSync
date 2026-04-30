@@ -69,17 +69,28 @@ describe("ManualSyncService", () => {
 
     expect(result.created).toBe(1);
     expect(result.rewrittenMarkers).toBe(1);
-    expect(ankiGateway.addedNotes[0]?.modelName).toBe(QA_GROUP_USER_NOTE_TYPE);
-    expect(ankiGateway.addedNotes[0]?.fields).toMatchObject({
-      题目: "Concepts",
-      问题01: "Alpha",
-      答案01: expect.stringContaining("First answer"),
-      问题02: "Beta",
-      答案02: expect.stringContaining("Second answer"),
-    });
+    const addedNote = ankiGateway.addedNotes[0];
+    expect(addedNote?.modelName).toBe(QA_GROUP_USER_NOTE_TYPE);
+    const addedNoteFields = addedNote?.fields;
+    expect(addedNoteFields).toBeDefined();
+    if (!addedNoteFields) {
+      throw new Error("Expected the created note fields to be recorded.");
+    }
+
+    expect(addedNoteFields["题目"]).toBe("Concepts");
+    expect(addedNoteFields["问题01"]).toBe("Alpha");
+    expect(addedNoteFields["答案01"]).toContain("First answer");
+    expect(addedNoteFields["问题02"]).toBe("Beta");
+    expect(addedNoteFields["答案02"]).toContain("Second answer");
     expect(vaultGateway.getFileContent("notes/example.md")).toMatch(/<!--GI:n=9001;i=[^;]+;f=3-->/);
-    expect(Object.values(stateRepository.savedState?.groupBlocks ?? {})).toHaveLength(1);
-    expect(stateRepository.savedState?.files["notes/example.md"]?.groupIds).toHaveLength(1);
+    const savedState = stateRepository.savedState;
+    expect(savedState).not.toBeNull();
+    if (!savedState) {
+      throw new Error("Expected plugin state to be saved.");
+    }
+
+    expect(Object.keys(savedState.groupBlocks ?? {})).toHaveLength(1);
+    expect(savedState.files["notes/example.md"]?.groupIds).toHaveLength(1);
   });
 
   it("restores the original marker without creating a new Anki note when marker was deleted but content is unchanged", async () => {

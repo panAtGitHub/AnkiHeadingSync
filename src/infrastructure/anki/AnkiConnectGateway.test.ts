@@ -10,6 +10,26 @@ vi.mock("obsidian", () => ({
 
 import { AnkiConnectGateway } from "./AnkiConnectGateway";
 
+function getRequestBody(callIndex: number): unknown {
+  const maybeCall = requestUrlMock.mock.calls[callIndex] as unknown;
+  if (!Array.isArray(maybeCall)) {
+    throw new Error(`Missing request call for index ${callIndex}.`);
+  }
+
+  const [request] = maybeCall as unknown[];
+  if (!request || typeof request !== "object" || !("body" in request)) {
+    throw new Error(`Missing request body for call ${callIndex}.`);
+  }
+
+  const requestRecord = request as Record<string, unknown>;
+  const body = requestRecord["body"];
+  if (typeof body !== "string") {
+    throw new Error(`Request body for call ${callIndex} is not a string.`);
+  }
+
+  return JSON.parse(body) as unknown;
+}
+
 describe("AnkiConnectGateway", () => {
   beforeEach(() => {
     requestUrlMock.mockReset();
@@ -27,7 +47,7 @@ describe("AnkiConnectGateway", () => {
     const models = await gateway.listNoteModels();
 
     expect(models).toEqual(["Basic", "Cloze", "Custom Basic"]);
-    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+    expect(getRequestBody(0)).toEqual({
       action: "modelNames",
       version: 6,
       params: {},
@@ -59,7 +79,7 @@ describe("AnkiConnectGateway", () => {
       Basic: ["Front", "Back"],
       Cloze: ["Text", "Extra"],
     });
-    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+    expect(getRequestBody(0)).toEqual({
       action: "multi",
       version: 6,
       params: {
@@ -118,7 +138,7 @@ describe("AnkiConnectGateway", () => {
     const deckNames = await gateway.listDeckNames();
 
     expect(deckNames).toEqual(["Default", "Scoped::Deck", "Scoped::Deck::Leaf"]);
-    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+    expect(getRequestBody(0)).toEqual({
       action: "deckNamesAndIds",
       version: 6,
       params: {},
@@ -170,14 +190,14 @@ describe("AnkiConnectGateway", () => {
       { noteId: 100, modelName: "Basic", cardIds: [1], deckNames: ["Deck::One"], tags: ["tag-a"] },
       { noteId: 102, modelName: "Cloze", cardIds: [2], deckNames: ["Deck::Two"], tags: ["tag-b", "tag-c"] },
     ]);
-    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+    expect(getRequestBody(0)).toEqual({
       action: "notesInfo",
       version: 6,
       params: {
         notes: [100, 101, 102],
       },
     });
-    expect(JSON.parse(requestUrlMock.mock.calls[1][0].body)).toEqual({
+    expect(getRequestBody(1)).toEqual({
       action: "cardsInfo",
       version: 6,
       params: {
@@ -205,7 +225,7 @@ describe("AnkiConnectGateway", () => {
       },
     });
 
-    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+    expect(getRequestBody(0)).toEqual({
       action: "updateNoteModel",
       version: 6,
       params: {
@@ -263,7 +283,7 @@ describe("AnkiConnectGateway", () => {
       },
     ]);
 
-    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+    expect(getRequestBody(0)).toEqual({
       action: "multi",
       version: 6,
       params: {
@@ -330,12 +350,12 @@ describe("AnkiConnectGateway", () => {
       { deckName: "Empty", noteCount: 0 },
       { deckName: "Busy", noteCount: 3 },
     ]);
-    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+    expect(getRequestBody(0)).toEqual({
       action: "deckNamesAndIds",
       version: 6,
       params: {},
     });
-    expect(JSON.parse(requestUrlMock.mock.calls[1][0].body)).toEqual({
+    expect(getRequestBody(1)).toEqual({
       action: "getDeckStats",
       version: 6,
       params: {
@@ -572,7 +592,7 @@ describe("AnkiConnectGateway", () => {
     ]);
 
     expect(noteIds).toEqual([9001, 9002]);
-    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+    expect(getRequestBody(0)).toEqual({
       action: "multi",
       version: 6,
       params: {
@@ -642,7 +662,7 @@ describe("AnkiConnectGateway", () => {
       },
     ]);
 
-    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+    expect(getRequestBody(0)).toEqual({
       action: "multi",
       version: 6,
       params: {
@@ -659,7 +679,7 @@ describe("AnkiConnectGateway", () => {
         ],
       },
     });
-    expect(JSON.parse(requestUrlMock.mock.calls[1][0].body)).toEqual({
+    expect(getRequestBody(1)).toEqual({
       action: "multi",
       version: 6,
       params: {
@@ -674,7 +694,7 @@ describe("AnkiConnectGateway", () => {
         ],
       },
     });
-    expect(JSON.parse(requestUrlMock.mock.calls[2][0].body)).toEqual({
+    expect(getRequestBody(2)).toEqual({
       action: "multi",
       version: 6,
       params: {
@@ -707,7 +727,7 @@ describe("AnkiConnectGateway", () => {
     });
 
     expect(requestUrlMock).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+    expect(getRequestBody(0)).toEqual({
       action: "updateNoteFields",
       version: 6,
       params: {
@@ -738,14 +758,14 @@ describe("AnkiConnectGateway", () => {
     await gateway.deleteNotes([1, 2]);
     await gateway.deleteDecks(["Empty", "Empty", "Scoped::Deck"]);
 
-    expect(JSON.parse(requestUrlMock.mock.calls[0][0].body)).toEqual({
+    expect(getRequestBody(0)).toEqual({
       action: "deleteNotes",
       version: 6,
       params: {
         notes: [1, 2],
       },
     });
-    expect(JSON.parse(requestUrlMock.mock.calls[1][0].body)).toEqual({
+    expect(getRequestBody(1)).toEqual({
       action: "deleteDecks",
       version: 6,
       params: {

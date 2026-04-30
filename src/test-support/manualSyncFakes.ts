@@ -17,13 +17,14 @@ export class InMemoryPluginStateRepository implements PluginStateRepository {
 
   constructor(private state: PluginState = createEmptyPluginState()) {}
 
-  async load(): Promise<PluginState> {
-    return this.state;
+  load(): Promise<PluginState> {
+    return Promise.resolve(this.state);
   }
 
-  async save(state: PluginState): Promise<void> {
+  save(state: PluginState): Promise<void> {
     this.state = state;
     this.savedState = state;
+    return Promise.resolve();
   }
 }
 
@@ -43,74 +44,49 @@ export class FakeManualSyncVaultGateway implements ManualSyncVaultGateway {
     }
   }
 
-  async listMarkdownFileRefs() {
-    return Array.from(this.files.entries()).map(([path, file]) => ({
+  listMarkdownFileRefs(): Promise<Array<{ path: string; basename: string; mtime: number; size: number }>> {
+    return Promise.resolve(Array.from(this.files.entries()).map(([path, file]) => ({
       path,
       basename: path.split("/").pop()?.replace(/\.md$/i, "") ?? path,
       mtime: file.mtime,
       size: file.size,
-    }));
+    })));
   }
 
-  async listFolderTree(): Promise<FolderTreeNode[]> {
-    const rootMap = new Map<string, FolderTreeNode>();
-
-    for (const path of this.files.keys()) {
-      const segments = path.split("/");
-      segments.pop();
-
-      let currentPath = "";
-      let siblings = rootMap;
-      for (const segment of segments) {
-        currentPath = currentPath ? `${currentPath}/${segment}` : segment;
-        const existing = siblings.get(currentPath);
-        if (existing) {
-          siblings = new Map(existing.children.map((child) => [child.path, child]));
-          continue;
-        }
-
-        const nextNode: FolderTreeNode = {
-          path: currentPath,
-          name: segment,
-          children: [],
-        };
-        siblings.set(currentPath, nextNode);
-        siblings = new Map();
-      }
-    }
-
-    return buildFolderTree(Array.from(this.files.keys()));
+  listFolderTree(): Promise<FolderTreeNode[]> {
+    return Promise.resolve(buildFolderTree(Array.from(this.files.keys())));
   }
 
-  async readMarkdownFile(path: string): Promise<SourceFile | null> {
+  readMarkdownFile(path: string): Promise<SourceFile | null> {
     this.readCalls.push(path);
     const file = this.files.get(path);
     if (!file) {
-      return null;
+      return Promise.resolve(null);
     }
 
-    return {
+    return Promise.resolve({
       path,
       basename: path.split("/").pop()?.replace(/\.md$/i, "") ?? path,
       content: file.content,
       tags: [],
-    };
+    });
   }
 
-  async replaceMarkdownFile(path: string, expectedContent: string, nextContent: string): Promise<void> {
+  replaceMarkdownFile(path: string, expectedContent: string, nextContent: string): Promise<void> {
     this.replaceCalls.push({ path, expectedContent, nextContent });
 
-    if (this.errorPaths.has(path)) {
-      throw this.errorPaths.get(path);
+    const pathError = this.errorPaths.get(path);
+    if (pathError) {
+      return Promise.reject(pathError);
     }
 
     if (this.conflictPaths.has(path)) {
-      throw new MarkdownWriteConflictError(path);
+      return Promise.reject(new MarkdownWriteConflictError(path));
     }
 
     const current = this.files.get(path);
     if (!current || current.content !== expectedContent) {
-      throw new MarkdownWriteConflictError(path);
+      return Promise.reject(new MarkdownWriteConflictError(path));
     }
 
     this.files.set(path, {
@@ -118,6 +94,8 @@ export class FakeManualSyncVaultGateway implements ManualSyncVaultGateway {
       mtime: current.mtime + 1,
       size: nextContent.length,
     });
+
+    return Promise.resolve();
   }
 
   resolveWikiLink(rawTarget: string) {
@@ -170,40 +148,44 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
     await this.ensureDecks([deckName]);
   }
 
-  async ensureDecks(deckNames: string[]): Promise<void> {
+  ensureDecks(deckNames: string[]): Promise<void> {
     this.operationLog.push("ensureDecks");
     this.ensuredDecks.push(deckNames);
+    return Promise.resolve();
   }
 
-  async listNoteModels(): Promise<string[]> {
-    return Object.keys(this.modelDetailsByName);
+  listNoteModels(): Promise<string[]> {
+    return Promise.resolve(Object.keys(this.modelDetailsByName));
   }
 
-  async listDeckNames(): Promise<string[]> {
-    return this.listedDeckNames ? [...this.listedDeckNames] : Array.from(this.deckStatsByName.keys());
+  listDeckNames(): Promise<string[]> {
+    return Promise.resolve(this.listedDeckNames ? [...this.listedDeckNames] : Array.from(this.deckStatsByName.keys()));
   }
 
-  async getModelDetails(modelName: string): Promise<NoteModelDetails> {
-    return this.modelDetailsByName[modelName] ?? { fieldNames: ["Front", "Back"] };
+  getModelDetails(modelName: string): Promise<NoteModelDetails> {
+    return Promise.resolve(this.modelDetailsByName[modelName] ?? { fieldNames: ["Front", "Back"] });
   }
 
-  async getModelFieldNames(modelName: string): Promise<string[]> {
-    return this.modelDetailsByName[modelName]?.fieldNames ?? [];
+  getModelFieldNames(modelName: string): Promise<string[]> {
+    return Promise.resolve(this.modelDetailsByName[modelName]?.fieldNames ?? []);
   }
 
-  async getModelFieldNamesByModelNames(modelNames: string[]): Promise<Record<string, string[]>> {
-    return Object.fromEntries(await Promise.all(modelNames.map(async (modelName) => [
-      modelName,
-      await this.getModelFieldNames(modelName),
-    ])));
+  getModelFieldNamesByModelNames(modelNames: string[]): Promise<Record<string, string[]>> {
+    const fieldNamesByModelName: Record<string, string[]> = {};
+
+    for (const modelName of modelNames) {
+      fieldNamesByModelName[modelName] = this.modelDetailsByName[modelName]?.fieldNames ?? [];
+    }
+
+    return Promise.resolve(fieldNamesByModelName);
   }
 
-  async findNoteIds(query: string): Promise<number[]> {
-    return [...(this.foundNoteIds.get(query) ?? [])];
+  findNoteIds(query: string): Promise<number[]> {
+    return Promise.resolve([...(this.foundNoteIds.get(query) ?? [])]);
   }
 
-  async getNoteDetails(noteIds: number[]): Promise<AnkiNoteDetails[]> {
-    return noteIds.flatMap((noteId) => {
+  getNoteDetails(noteIds: number[]): Promise<AnkiNoteDetails[]> {
+    return Promise.resolve(noteIds.flatMap((noteId) => {
       const detail = this.noteDetailsById.get(noteId);
       if (detail) {
         return [{ ...detail, cardIds: [...detail.cardIds], deckNames: detail.deckNames ? [...detail.deckNames] : undefined, tags: detail.tags ? [...detail.tags] : undefined, fields: { ...detail.fields } }];
@@ -211,18 +193,18 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
 
       const summary = this.noteSummariesById.get(noteId);
       return summary ? [{ ...summary, deckNames: summary.deckNames ? [...summary.deckNames] : undefined, tags: summary.tags ? [...summary.tags] : undefined, fields: {} }] : [];
-    });
+    }));
   }
 
-  async getDeckStats(deckNames: string[]): Promise<DeckStat[]> {
-    return deckNames.map((deckName) => this.deckStatsByName.get(deckName) ?? { deckName });
+  getDeckStats(deckNames: string[]): Promise<DeckStat[]> {
+    return Promise.resolve(deckNames.map((deckName) => this.deckStatsByName.get(deckName) ?? { deckName }));
   }
 
-  async getNoteSummaries(noteIds: number[]): Promise<AnkiNoteSummary[]> {
-    return noteIds.flatMap((noteId) => {
+  getNoteSummaries(noteIds: number[]): Promise<AnkiNoteSummary[]> {
+    return Promise.resolve(noteIds.flatMap((noteId) => {
       const summary = this.noteSummariesById.get(noteId);
       return summary ? [{ ...summary, deckNames: summary.deckNames ? [...summary.deckNames] : undefined, tags: summary.tags ? [...summary.tags] : undefined }] : [];
-    });
+    }));
   }
 
   async addNote(input: AddAnkiNoteInput): Promise<number> {
@@ -230,12 +212,14 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
     return noteId;
   }
 
-  async addNotes(inputs: AddAnkiNoteInput[]): Promise<number[]> {
-    return inputs.map((input) => {
+  addNotes(inputs: AddAnkiNoteInput[]): Promise<number[]> {
+    const noteIds: number[] = [];
+
+    for (const input of inputs) {
       this.operationLog.push("addNotes");
       const pendingError = this.addNotesErrorQueue.shift();
       if (pendingError) {
-        throw pendingError;
+        return Promise.reject(pendingError);
       }
 
       this.addedNotes.push(input);
@@ -256,11 +240,13 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
         tags: [...input.tags],
         fields: { ...input.fields },
       });
-      return noteId;
-    });
+      noteIds.push(noteId);
+    }
+
+    return Promise.resolve(noteIds);
   }
 
-  async deleteNotes(noteIds: number[]): Promise<void> {
+  deleteNotes(noteIds: number[]): Promise<void> {
     this.operationLog.push("deleteNotes");
     this.deletedNotes.push(noteIds);
 
@@ -271,17 +257,19 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
 
     const pendingError = this.deleteNotesErrorQueue.shift();
     if (pendingError) {
-      throw pendingError;
+      return Promise.reject(pendingError);
     }
+
+    return Promise.resolve();
   }
 
   async updateNote(input: UpdateAnkiNoteInput): Promise<void> {
     await this.updateNotes([input]);
   }
 
-  async updateNoteModel(input: UpdateAnkiNoteModelInput): Promise<void> {
+  updateNoteModel(input: UpdateAnkiNoteModelInput): Promise<void> {
     if (this.updateNoteModelError) {
-      throw this.updateNoteModelError;
+      return Promise.reject(this.updateNoteModelError);
     }
 
     this.updatedNoteModels.push(input);
@@ -302,13 +290,16 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
         fields: { ...input.fields },
       });
     }
+
+    return Promise.resolve();
   }
 
-  async updateNotes(inputs: UpdateAnkiNoteInput[]): Promise<void> {
+  updateNotes(inputs: UpdateAnkiNoteInput[]): Promise<void> {
     this.updatedNotes.push(...inputs);
+    return Promise.resolve();
   }
 
-  async syncNoteTags(inputs: SyncAnkiNoteTagsInput[]): Promise<void> {
+  syncNoteTags(inputs: SyncAnkiNoteTagsInput[]): Promise<void> {
     this.syncedNoteTags.push(...inputs);
 
     for (const input of inputs) {
@@ -333,22 +324,27 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
         this.noteDetailsById.set(input.noteId, { ...detail, tags: nextTags });
       }
     }
+
+    return Promise.resolve();
   }
 
-  async changeDecks(inputs: ChangeDeckInput[]): Promise<void> {
+  changeDecks(inputs: ChangeDeckInput[]): Promise<void> {
     this.changedDecks.push(...inputs);
+    return Promise.resolve();
   }
 
-  async deleteDecks(deckNames: string[]): Promise<void> {
+  deleteDecks(deckNames: string[]): Promise<void> {
     this.deletedDecks.push(deckNames);
+    return Promise.resolve();
   }
 
   async storeMedia(asset: MediaAsset): Promise<void> {
     await this.storeMediaFiles([asset]);
   }
 
-  async storeMediaFiles(assets: MediaAsset[]): Promise<void> {
+  storeMediaFiles(assets: MediaAsset[]): Promise<void> {
     this.storedMedia.push(...assets);
+    return Promise.resolve();
   }
 }
 

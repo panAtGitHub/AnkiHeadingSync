@@ -1,5 +1,6 @@
 import js from "@eslint/js";
 import globals from "globals";
+import obsidianmd from "eslint-plugin-obsidianmd";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
@@ -8,6 +9,7 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  ...obsidianmd.configs.recommendedWithLocalesEn,
   {
     files: ["**/*.ts"],
     languageOptions: {
@@ -24,7 +26,9 @@ export default tseslint.config(
         "error",
         { "prefer": "type-imports" }
       ],
-      "@typescript-eslint/no-explicit-any": "error"
+      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/require-await": "error",
+      "require-await": "off"
     },
   },
 );

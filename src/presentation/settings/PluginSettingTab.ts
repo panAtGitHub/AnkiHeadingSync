@@ -39,18 +39,12 @@ const SETTINGS_CARD_ORDER = ["card-types", "sync-content", "deck", "scope", "com
 const VISIBLE_CARD_TYPE_CONFIG_IDS = ["basic", "qa-group", "cloze", "cloze-all"] as const;
 const SETTINGS_STICKY_CARD_GAP_PX = 8;
 const SETTINGS_PAGE_HEADER_FALLBACK_HEIGHT_PX = 64;
-const SETTINGS_PAGE_HEADER_BACKGROUND = "var(--modal-background, var(--background-primary))";
 const SETTINGS_PAGE_HEADER_HEIGHT_VARIABLE = "--ahs-settings-page-header-height";
 const SETTINGS_STICKY_CARD_GAP_VARIABLE = "--ahs-settings-sticky-card-gap";
 const SETTINGS_PAGE_HEADER_HEIGHT_FALLBACK = `${SETTINGS_PAGE_HEADER_FALLBACK_HEIGHT_PX}px`;
 const SETTINGS_STICKY_CARD_GAP = `${SETTINGS_STICKY_CARD_GAP_PX}px`;
-const SETTINGS_PAGE_HEADER_HEIGHT_VALUE = `var(${SETTINGS_PAGE_HEADER_HEIGHT_VARIABLE}, ${SETTINGS_PAGE_HEADER_HEIGHT_FALLBACK})`;
-const SETTINGS_STICKY_CARD_GAP_VALUE = `var(${SETTINGS_STICKY_CARD_GAP_VARIABLE}, ${SETTINGS_STICKY_CARD_GAP})`;
-const SETTINGS_PAGE_HEADER_PADDING_TOP = "12px";
-const SETTINGS_PAGE_HEADER_MASK_TOP = "-128px";
-const SETTINGS_PAGE_HEADER_MASK_SIDE = "-24px";
-const DECK_HELPER_TEXT_INDENT = "32px";
 const SETTINGS_ROOT_CLASS = "anki-heading-sync-settings";
+const SETTINGS_CARD_BODY_HIDDEN_CLASS = "ahs-is-hidden";
 
 type SettingsCardId = (typeof SETTINGS_CARD_ORDER)[number];
 type NoteTypeCacheCheckStatus = "idle" | "checking" | "same" | "changed" | "failed";
@@ -62,8 +56,21 @@ interface SettingsCardShell {
 }
 
 interface PendingTextSave {
-  timer: ReturnType<typeof setTimeout>;
+  timer: ReturnType<Window["setTimeout"]>;
   saveAction: (draftValue: string) => Promise<void>;
+}
+
+function addClasses(element: HTMLElement, ...classNames: string[]): void {
+  element.classList.add(...classNames);
+}
+
+function setClassEnabled(element: HTMLElement, className: string, enabled: boolean): void {
+  if (enabled) {
+    element.classList.add(className);
+    return;
+  }
+
+  element.classList.remove(className);
 }
 
 export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
@@ -126,35 +133,15 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
       const pageHeaderEl = containerEl.createDiv();
       pageHeaderEl.dataset.settingsPageHeader = "true";
-      pageHeaderEl.style.position = "sticky";
-      pageHeaderEl.style.top = "0px";
-      pageHeaderEl.style.zIndex = "300";
-      pageHeaderEl.style.width = "100%";
-      pageHeaderEl.style.boxSizing = "border-box";
-      pageHeaderEl.style.paddingTop = SETTINGS_PAGE_HEADER_PADDING_TOP;
-      pageHeaderEl.style.paddingBottom = `calc(${SETTINGS_PAGE_HEADER_PADDING_TOP} + ${SETTINGS_STICKY_CARD_GAP_VALUE})`;
-      pageHeaderEl.style.marginBottom = "0";
-      pageHeaderEl.style.overflow = "visible";
-      pageHeaderEl.style.background = SETTINGS_PAGE_HEADER_BACKGROUND;
-      pageHeaderEl.style.backgroundColor = SETTINGS_PAGE_HEADER_BACKGROUND;
-      pageHeaderEl.style.boxShadow = "none";
+      addClasses(pageHeaderEl, "ahs-settings-page-header");
 
       const pageHeaderMaskEl = pageHeaderEl.createDiv();
       pageHeaderMaskEl.dataset.settingsPageHeaderMask = "true";
-      pageHeaderMaskEl.style.position = "absolute";
-      pageHeaderMaskEl.style.top = SETTINGS_PAGE_HEADER_MASK_TOP;
-      pageHeaderMaskEl.style.left = SETTINGS_PAGE_HEADER_MASK_SIDE;
-      pageHeaderMaskEl.style.right = SETTINGS_PAGE_HEADER_MASK_SIDE;
-      pageHeaderMaskEl.style.bottom = "0px";
-      pageHeaderMaskEl.style.zIndex = "0";
-      pageHeaderMaskEl.style.pointerEvents = "none";
-      pageHeaderMaskEl.style.background = SETTINGS_PAGE_HEADER_BACKGROUND;
-      pageHeaderMaskEl.style.backgroundColor = SETTINGS_PAGE_HEADER_BACKGROUND;
+      addClasses(pageHeaderMaskEl, "ahs-settings-page-header-mask");
 
-      const titleEl = pageHeaderEl.createEl("h2", { text: t("settings.pluginTitle") });
-      titleEl.style.margin = "0";
-      titleEl.style.position = "relative";
-      titleEl.style.zIndex = "1";
+      const titleSetting = new Setting(pageHeaderEl).setName(t("settings.pluginTitle")).setHeading();
+      addClasses(titleSetting.settingEl, "ahs-settings-page-title-setting");
+      addClasses(titleSetting.nameEl, "ahs-settings-page-title");
 
       this.observePageHeaderHeight(pageHeaderEl);
 
@@ -182,34 +169,17 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       const cardEl = containerEl.createDiv();
       cardEl.dataset.settingsCard = cardId;
 
-      const headerEl = cardEl.createEl("button") as HTMLButtonElement;
+      const headerEl = cardEl.createEl("button");
       headerEl.type = "button";
       headerEl.dataset.settingsCardToggle = cardId;
-      headerEl.style.display = "flex";
-      headerEl.style.alignItems = "center";
-      headerEl.style.justifyContent = "flex-start";
-      headerEl.style.position = "sticky";
-      headerEl.style.top = SETTINGS_PAGE_HEADER_HEIGHT_VALUE;
-      headerEl.style.zIndex = "200";
-      headerEl.style.width = "100%";
-      headerEl.style.maxWidth = "100%";
-      headerEl.style.boxSizing = "border-box";
-      headerEl.style.padding = "10px 14px";
-      headerEl.style.fontSize = "1.5em";
-      headerEl.style.fontWeight = "600";
-      headerEl.style.background = SETTINGS_PAGE_HEADER_BACKGROUND;
-      headerEl.style.backgroundColor = SETTINGS_PAGE_HEADER_BACKGROUND;
-      headerEl.style.border = "2px solid var(--background-modifier-border)";
-      headerEl.style.borderRadius = "0";
-      headerEl.style.marginBottom = "8px";
-      headerEl.style.textAlign = "left";
-      headerEl.style.boxShadow = "none";
+      addClasses(headerEl, "ahs-settings-card-toggle");
       headerEl.addEventListener("click", () => {
         this.toggleCard(cardId);
       });
 
       const bodyEl = cardEl.createDiv();
       bodyEl.dataset.settingsCardBody = cardId;
+      addClasses(bodyEl, "ahs-settings-card-body", SETTINGS_CARD_BODY_HIDDEN_CLASS);
 
       this.cardShells.set(cardId, {
         cardEl,
@@ -238,7 +208,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const expanded = this.expandedCardIds.has(cardId);
     shell.headerEl.textContent = `${expanded ? "▾" : "▸"} ${this.getCardTitle(cardId)}`;
     shell.headerEl.setAttr("aria-expanded", String(expanded));
-    shell.bodyEl.style.display = expanded ? "block" : "none";
+    setClassEnabled(shell.bodyEl, SETTINGS_CARD_BODY_HIDDEN_CLASS, !expanded);
     shell.bodyEl.empty();
 
     if (!expanded) {
@@ -301,10 +271,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     this.maybeStartNoteTypeCacheCheck();
 
     const actionRow = containerEl.createDiv();
-    actionRow.style.display = "flex";
-    actionRow.style.flexDirection = "column";
-    actionRow.style.alignItems = "flex-start";
-    actionRow.style.gap = "8px";
+    addClasses(actionRow, "ahs-settings-action-row");
     const loadButton = new ButtonComponent(actionRow)
       .setButtonText(this.ankiConfigLoading
         ? t("settings.cards.cardTypes.loadAnki.loading")
@@ -313,15 +280,13 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setDisabled(this.ankiConfigLoading)
       .onClick(() => this.loadAnkiCardTypeConfig());
     loadButton.buttonEl.dataset.cardTypesRefresh = "true";
-    actionRow.createEl("span", {
+    actionRow.createSpan({
       text: `${t("settings.cards.cardTypes.statusLabel")}${renderUserFacingMessage(this.getCardTypeStatusMessage())}`,
     });
 
     const cardTypeList = containerEl.createDiv();
     cardTypeList.dataset.cardTypeList = "true";
-    cardTypeList.style.display = "flex";
-    cardTypeList.style.flexDirection = "column";
-    cardTypeList.style.gap = "14px";
+    addClasses(cardTypeList, "ahs-settings-card-list");
 
     for (const configId of VISIBLE_CARD_TYPE_CONFIG_IDS) {
       this.renderCardTypeBlock(cardTypeList, configId);
@@ -332,49 +297,43 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const config = this.plugin.settings.cardTypeConfigs[configId];
     const blockEl = containerEl.createDiv();
     blockEl.dataset.cardTypeConfig = configId;
-    blockEl.style.display = "flex";
-    blockEl.style.flexDirection = "column";
-    blockEl.style.gap = "8px";
-    blockEl.style.padding = "12px";
-    blockEl.style.border = "1px solid var(--background-modifier-border)";
-    blockEl.style.borderRadius = "8px";
+    addClasses(blockEl, "ahs-settings-card-type-block");
 
     const headerRow = blockEl.createDiv();
-    headerRow.style.display = "flex";
-    headerRow.style.alignItems = "center";
-    headerRow.style.gap = "10px";
+    addClasses(headerRow, "ahs-settings-card-type-header");
 
-    const enabledCheckbox = headerRow.createEl("input") as HTMLInputElement;
+    const enabledCheckbox = headerRow.createEl("input");
     enabledCheckbox.type = "checkbox";
     enabledCheckbox.checked = config.enabled;
     enabledCheckbox.dataset.cardTypeEnabled = configId;
-    enabledCheckbox.addEventListener("change", () => this.saveCardTypeConfig(configId, { enabled: enabledCheckbox.checked }));
+    enabledCheckbox.addEventListener("change", () => {
+      void this.saveCardTypeConfig(configId, { enabled: enabledCheckbox.checked });
+    });
 
     const titleEl = headerRow.createEl("strong", { text: this.getCardTypeLabel(configId) });
-    titleEl.style.fontSize = "var(--font-ui-medium)";
+    addClasses(titleEl, "ahs-settings-card-type-title");
 
     const recognitionRow = blockEl.createDiv();
-    recognitionRow.style.display = "flex";
-    recognitionRow.style.flexWrap = "wrap";
-    recognitionRow.style.alignItems = "center";
-    recognitionRow.style.gap = "10px 14px";
+    addClasses(recognitionRow, "ahs-settings-recognition-row");
 
     const headingGroup = this.createInlineControlGroup(recognitionRow, t("settings.cards.cardTypes.labels.headingLevel"));
     const headingSelect = this.createSelect(headingGroup, `card-type-heading:${configId}`);
     headingSelect.dataset.cardTypeHeading = configId;
-    headingSelect.style.width = "88px";
+    addClasses(headingSelect, "ahs-settings-heading-select");
     for (let level = 1; level <= 6; level += 1) {
       this.appendOption(headingSelect, String(level), `H${level}`);
     }
     headingSelect.value = String(config.headingLevel);
-    headingSelect.addEventListener("change", () => this.saveCardTypeConfig(configId, { headingLevel: Number(headingSelect.value) }));
+    headingSelect.addEventListener("change", () => {
+      void this.saveCardTypeConfig(configId, { headingLevel: Number(headingSelect.value) });
+    });
 
     const markerGroup = this.createInlineControlGroup(recognitionRow, t("settings.cards.cardTypes.labels.extraMarker"));
-    const markerInput = markerGroup.createEl("input") as HTMLInputElement;
+    const markerInput = markerGroup.createEl("input");
     markerInput.type = "text";
     markerInput.dataset.cardTypeMarker = configId;
     markerInput.placeholder = t("settings.cards.cardTypes.markerPlaceholder");
-    markerInput.style.width = "220px";
+    addClasses(markerInput, "ahs-settings-marker-input");
     markerInput.value = this.getDraftValue(`card-type-marker:${configId}`, config.extraMarker);
     markerInput.addEventListener("input", () => {
       this.scheduleDebouncedTextSave(`card-type-marker:${configId}`, markerInput.value, async (draftValue) => {
@@ -390,19 +349,12 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         text: t("settings.cards.cardTypes.sharedClozeMappingHint"),
       });
       sharedHintEl.dataset.cardTypeSharedHint = configId;
-      sharedHintEl.style.margin = "0";
-      sharedHintEl.style.color = "var(--text-muted)";
+      addClasses(sharedHintEl, "ahs-settings-muted-text");
       return;
     }
 
     const ankiRow = blockEl.createDiv();
-    ankiRow.style.display = "grid";
-    ankiRow.style.gridTemplateColumns = "minmax(0, 1.1fr) minmax(0, 0.75fr) minmax(220px, 0.95fr)";
-    ankiRow.style.alignItems = "center";
-    ankiRow.style.columnGap = "16px";
-    ankiRow.style.rowGap = "8px";
-    ankiRow.style.overflow = "visible";
-    ankiRow.style.width = "100%";
+    addClasses(ankiRow, "ahs-settings-grid-row");
 
     const noteTypeGroup = this.createGridControlSlot(ankiRow, t("settings.cards.cardTypes.labels.noteType"));
     const noteTypeSelect = this.createSelect(noteTypeGroup, `card-type-note-type:${configId}`);
@@ -413,7 +365,9 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     }
     noteTypeSelect.value = config.noteType;
     noteTypeSelect.disabled = this.ankiConfigLoading;
-    noteTypeSelect.addEventListener("change", () => this.saveCardTypeConfig(configId, { noteType: noteTypeSelect.value }));
+    noteTypeSelect.addEventListener("change", () => {
+      void this.saveCardTypeConfig(configId, { noteType: noteTypeSelect.value });
+    });
 
     this.renderCardTypeFieldControls(ankiRow, configId);
   }
@@ -432,7 +386,9 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       mainFieldSelect.dataset.cardTypeQuestionField = configId;
       this.applyFluidEllipsis(mainFieldSelect);
       this.populateFieldSelect(mainFieldSelect, clozeMapping?.loadedFieldNames ?? [], clozeMapping?.mainField);
-      mainFieldSelect.addEventListener("change", () => this.saveFieldMapping(configId, { mainField: mainFieldSelect.value || undefined }));
+      mainFieldSelect.addEventListener("change", () => {
+        void this.saveFieldMapping(configId, { mainField: mainFieldSelect.value || undefined });
+      });
       return;
     }
 
@@ -442,14 +398,18 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     titleFieldSelect.dataset.cardTypeQuestionField = configId;
     this.applyFluidEllipsis(titleFieldSelect);
     this.populateFieldSelect(titleFieldSelect, basicLikeMapping?.loadedFieldNames ?? [], basicLikeMapping?.titleField);
-    titleFieldSelect.addEventListener("change", () => this.saveFieldMapping(configId, { titleField: titleFieldSelect.value || undefined }));
+    titleFieldSelect.addEventListener("change", () => {
+      void this.saveFieldMapping(configId, { titleField: titleFieldSelect.value || undefined });
+    });
 
     const bodyFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.answerField"));
     const bodyFieldSelect = this.createFieldSelect(bodyFieldGroup, `card-type-answer-field:${configId}`);
     bodyFieldSelect.dataset.cardTypeAnswerField = configId;
     this.applyFluidEllipsis(bodyFieldSelect);
     this.populateFieldSelect(bodyFieldSelect, basicLikeMapping?.loadedFieldNames ?? [], basicLikeMapping?.bodyField);
-    bodyFieldSelect.addEventListener("change", () => this.saveFieldMapping(configId, { bodyField: bodyFieldSelect.value || undefined }));
+    bodyFieldSelect.addEventListener("change", () => {
+      void this.saveFieldMapping(configId, { bodyField: bodyFieldSelect.value || undefined });
+    });
   }
 
   private renderQaGroupFieldControls(containerEl: HTMLElement, configId: Extract<CardTypeConfigId, "qa-group">): void {
@@ -465,13 +425,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       this.populateFieldSelect(titleFieldSelect, qaGroupState.mapping.loadedFieldNames, qaGroupState.mapping.titleField);
       const qaGroupPairRow = containerEl.createDiv();
       qaGroupPairRow.dataset.qaGroupPairRow = configId;
-      qaGroupPairRow.style.gridColumn = "1 / -1";
-      qaGroupPairRow.style.display = "grid";
-      qaGroupPairRow.style.gridTemplateColumns = "minmax(0, 1fr) minmax(0, 1fr) max-content";
-      qaGroupPairRow.style.alignItems = "center";
-      qaGroupPairRow.style.columnGap = "16px";
-      qaGroupPairRow.style.rowGap = "8px";
-      qaGroupPairRow.style.width = "100%";
+      addClasses(qaGroupPairRow, "ahs-settings-qa-group-pair-row");
 
       const firstQuestionFieldGroup = this.createGridControlSlot(qaGroupPairRow, t("settings.cards.cardTypes.labels.qaGroupFirstQuestionField"));
       const firstQuestionFieldSelect = this.createFieldSelect(firstQuestionFieldGroup, `card-type-qa-group-first-question-field:${configId}`);
@@ -485,56 +439,50 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       this.applyFluidEllipsis(firstAnswerFieldSelect);
       this.populateFieldSelect(firstAnswerFieldSelect, qaGroupState.mapping.loadedFieldNames, selectedFields?.firstAnswerField);
 
-      const saveSelection = () => this.saveQaGroupFieldSelection(configId, {
-        titleField: titleFieldSelect.value || undefined,
-        firstQuestionField: firstQuestionFieldSelect.value || undefined,
-        firstAnswerField: firstAnswerFieldSelect.value || undefined,
-      });
+      const saveSelection = () => {
+        void this.saveQaGroupFieldSelection(configId, {
+          titleField: titleFieldSelect.value || undefined,
+          firstQuestionField: firstQuestionFieldSelect.value || undefined,
+          firstAnswerField: firstAnswerFieldSelect.value || undefined,
+        });
+      };
 
       titleFieldSelect.addEventListener("change", saveSelection);
       firstQuestionFieldSelect.addEventListener("change", saveSelection);
       firstAnswerFieldSelect.addEventListener("change", saveSelection);
 
-      const slotSummaryEl = qaGroupPairRow.createEl("span", {
+      const slotSummaryEl = qaGroupPairRow.createSpan({
         text: t("settings.cards.cardTypes.qaGroup.configuredSlots", {
           count: qaGroupState.mapping.slots.length,
         }),
       });
       slotSummaryEl.dataset.qaGroupSlotSummary = configId;
-      slotSummaryEl.style.whiteSpace = "nowrap";
-      slotSummaryEl.style.justifySelf = "start";
+      addClasses(slotSummaryEl, "ahs-settings-nowrap-start");
       this.applyFluidEllipsis(slotSummaryEl);
     } else {
-      titleFieldGroup.createEl("span", {
+      titleFieldGroup.createSpan({
         text: selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel"),
       }).dataset.qaGroupTitleField = configId;
 
       const qaGroupPairRow = containerEl.createDiv();
       qaGroupPairRow.dataset.qaGroupPairRow = configId;
-      qaGroupPairRow.style.gridColumn = "1 / -1";
-      qaGroupPairRow.style.display = "grid";
-      qaGroupPairRow.style.gridTemplateColumns = "minmax(0, 1fr) minmax(0, 1fr) max-content";
-      qaGroupPairRow.style.alignItems = "center";
-      qaGroupPairRow.style.columnGap = "16px";
-      qaGroupPairRow.style.rowGap = "8px";
-      qaGroupPairRow.style.width = "100%";
+      addClasses(qaGroupPairRow, "ahs-settings-qa-group-pair-row");
 
       const firstQuestionFieldGroup = this.createGridControlSlot(qaGroupPairRow, t("settings.cards.cardTypes.labels.qaGroupFirstQuestionField"));
-      firstQuestionFieldGroup.createEl("span", {
+      firstQuestionFieldGroup.createSpan({
         text: selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel"),
       }).dataset.qaGroupFirstQuestionField = configId;
 
       const firstAnswerFieldGroup = this.createGridControlSlot(qaGroupPairRow, t("settings.cards.cardTypes.labels.qaGroupFirstAnswerField"));
-      firstAnswerFieldGroup.createEl("span", {
+      firstAnswerFieldGroup.createSpan({
         text: selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel"),
       }).dataset.qaGroupFirstAnswerField = configId;
 
-      const slotSummaryEl = qaGroupPairRow.createEl("span", {
+      const slotSummaryEl = qaGroupPairRow.createSpan({
         text: selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel"),
       });
       slotSummaryEl.dataset.qaGroupSlotSummary = configId;
-      slotSummaryEl.style.whiteSpace = "nowrap";
-      slotSummaryEl.style.justifySelf = "start";
+      addClasses(slotSummaryEl, "ahs-settings-nowrap-start");
       this.applyFluidEllipsis(slotSummaryEl);
     }
 
@@ -543,7 +491,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         text: renderUserFacingMessage(qaGroupState.error),
       });
       errorEl.dataset.qaGroupError = configId;
-      errorEl.style.gridColumn = "1 / -1";
+      addClasses(errorEl, "ahs-settings-grid-full");
       return;
     }
 
@@ -553,28 +501,25 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     const warningsContainer = containerEl.createDiv();
     warningsContainer.dataset.qaGroupWarnings = configId;
-    warningsContainer.style.gridColumn = "1 / -1";
-    warningsContainer.style.display = "flex";
-    warningsContainer.style.flexDirection = "column";
-    warningsContainer.style.gap = "6px";
+    addClasses(warningsContainer, "ahs-settings-grid-full", "ahs-settings-warnings");
     warningsContainer.createEl("strong", { text: t("settings.cards.cardTypes.labels.qaGroupWarnings") });
 
     for (const warning of qaGroupState.mapping.warnings) {
-      warningsContainer.createEl("div", {
+      warningsContainer.createDiv({
         text: this.renderQaGroupWarning(warning),
       }).dataset.qaGroupWarning = configId;
     }
 
     const acceptLabel = warningsContainer.createEl("label");
-    acceptLabel.style.display = "inline-flex";
-    acceptLabel.style.alignItems = "center";
-    acceptLabel.style.gap = "8px";
-    const acceptCheckbox = acceptLabel.createEl("input") as HTMLInputElement;
+    addClasses(acceptLabel, "ahs-settings-inline-check");
+    const acceptCheckbox = acceptLabel.createEl("input");
     acceptCheckbox.type = "checkbox";
     acceptCheckbox.checked = areQaGroupWarningsAccepted(qaGroupState.mapping.warnings, qaGroupState.mapping.acceptedWarnings);
     acceptCheckbox.dataset.qaGroupWarningAccept = configId;
-    acceptCheckbox.addEventListener("change", () => this.saveQaGroupWarningAcceptance(configId, acceptCheckbox.checked));
-    acceptLabel.createEl("span", { text: t("settings.cards.cardTypes.qaGroup.acceptWarnings") });
+    acceptCheckbox.addEventListener("change", () => {
+      void this.saveQaGroupWarningAcceptance(configId, acceptCheckbox.checked);
+    });
+    acceptLabel.createSpan({ text: t("settings.cards.cardTypes.qaGroup.acceptWarnings") });
   }
 
   private renderSyncContentCard(containerEl: HTMLElement): void {
@@ -663,14 +608,8 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private createSyncContentSection(containerEl: HTMLElement, sectionId: string, title: string): HTMLElement {
     const sectionEl = containerEl.createDiv();
     sectionEl.dataset.syncContentSection = sectionId;
-    sectionEl.style.display = "flex";
-    sectionEl.style.flexDirection = "column";
-    sectionEl.style.gap = "8px";
-    sectionEl.style.marginTop = "16px";
-
-    const titleEl = sectionEl.createEl("h4", { text: title });
-    titleEl.dataset.syncContentSectionTitle = sectionId;
-    titleEl.style.margin = "0";
+    addClasses(sectionEl, "ahs-settings-section");
+    this.createSectionHeading(sectionEl, "syncContentSectionTitle", sectionId, title);
 
     return sectionEl;
   }
@@ -697,8 +636,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     if (!isRunScopeConfigured(this.plugin.settings.scopeMode, this.plugin.settings.includeFolders)) {
       const warningEl = containerEl.createEl("p", { text: t("settings.scope.unconfiguredWarning") });
       warningEl.dataset.scopeWarning = "unconfigured";
-      warningEl.style.color = "var(--text-warning)";
-      warningEl.style.fontWeight = "600";
+      addClasses(warningEl, "ahs-settings-warning-text");
     }
 
     if (this.plugin.settings.scopeMode === "all") {
@@ -729,9 +667,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const selectionTree = buildFolderTreeSelection(this.folderTree, selectedFolders);
     const treeContainer = containerEl.createDiv();
     treeContainer.dataset.scopeTree = "true";
-    treeContainer.style.display = "flex";
-    treeContainer.style.flexDirection = "column";
-    treeContainer.style.gap = "2px";
+    addClasses(treeContainer, "ahs-settings-folder-tree");
 
     for (const node of selectionTree) {
       this.renderFolderNode(treeContainer, node, this.plugin.settings.scopeMode, 0);
@@ -858,14 +794,10 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private renderDeckExampleBlock(containerEl: HTMLElement): void {
     const exampleBlockEl = containerEl.createDiv();
     exampleBlockEl.dataset.deckExampleBlock = "true";
-    exampleBlockEl.style.display = "flex";
-    exampleBlockEl.style.flexDirection = "column";
-    exampleBlockEl.style.gap = "4px";
-    exampleBlockEl.style.marginTop = "2px";
-    exampleBlockEl.style.marginLeft = DECK_HELPER_TEXT_INDENT;
+    addClasses(exampleBlockEl, "ahs-settings-deck-example-block");
 
     const titleEl = exampleBlockEl.createEl("strong", { text: t("settings.deck.examplesTitle") });
-    titleEl.style.fontSize = "var(--font-ui-small)";
+    addClasses(titleEl, "ahs-settings-small-title");
 
     for (const exampleText of [
       t("settings.deck.folderExample"),
@@ -873,40 +805,28 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     ]) {
       const rowEl = exampleBlockEl.createDiv({ text: exampleText });
       rowEl.dataset.deckExampleRow = "true";
-      rowEl.style.color = "var(--text-muted)";
-      rowEl.style.fontSize = "var(--font-ui-small)";
-      rowEl.style.lineHeight = "1.4";
+      addClasses(rowEl, "ahs-settings-helper-text");
     }
   }
 
   private createDeckHelperText(containerEl: HTMLElement, text: string, helperId: string): HTMLElement {
     const helperEl = containerEl.createDiv({ text });
     helperEl.dataset.deckHelperText = helperId;
-    helperEl.style.color = "var(--text-muted)";
-    helperEl.style.fontSize = "var(--font-ui-small)";
-    helperEl.style.lineHeight = "1.4";
-    helperEl.style.marginTop = "2px";
-    helperEl.style.marginLeft = DECK_HELPER_TEXT_INDENT;
+    addClasses(helperEl, "ahs-settings-helper-text");
     return helperEl;
   }
 
   private createDeckPriorityFooter(containerEl: HTMLElement): void {
     const footerEl = this.createDeckHelperText(containerEl, t("settings.deck.priorityDesc"), "priority");
     footerEl.dataset.deckPriorityFooter = "true";
-    footerEl.style.marginTop = "12px";
+    addClasses(footerEl, "ahs-settings-helper-text-priority");
   }
 
   private createDeckSection(containerEl: HTMLElement, sectionId: string, title: string): HTMLElement {
     const sectionEl = containerEl.createDiv();
     sectionEl.dataset.deckSection = sectionId;
-    sectionEl.style.display = "flex";
-    sectionEl.style.flexDirection = "column";
-    sectionEl.style.gap = "8px";
-    sectionEl.style.marginTop = "16px";
-
-    const titleEl = sectionEl.createEl("h4", { text: title });
-    titleEl.dataset.deckSectionTitle = sectionId;
-    titleEl.style.margin = "0";
+    addClasses(sectionEl, "ahs-settings-section");
+    this.createSectionHeading(sectionEl, "deckSectionTitle", sectionId, title);
 
     return sectionEl;
   }
@@ -1688,7 +1608,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       });
   }
 
-  private async refreshFolderTree(): Promise<void> {
+  private refreshFolderTree(): void {
     this.expandedFolderPaths.clear();
     this.ensureFolderTreeLoaded(true);
     this.renderCard("scope");
@@ -1714,37 +1634,19 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private renderFolderNode(containerEl: HTMLElement, node: FolderTreeSelectionNode, scopeMode: ScopeMode, depth: number): void {
     const row = containerEl.createDiv();
     row.dataset.folderRow = node.path;
-    row.style.display = "grid";
-    row.style.gridTemplateColumns = "24px 24px minmax(0, 1fr)";
-    row.style.alignItems = "center";
-    row.style.columnGap = "0px";
-    row.style.minHeight = "28px";
-    row.style.marginLeft = `${depth * 18}px`;
-    row.style.width = "100%";
-    row.style.boxSizing = "border-box";
+    addClasses(row, "ahs-settings-folder-row");
+    row.style.setProperty("--ahs-folder-depth-indent", `${depth * 18}px`);
 
     const hasChildren = node.children.length > 0;
     const expanded = hasChildren && this.expandedFolderPaths.has(node.path);
     const toggleControl = row.createEl(hasChildren ? "button" : "span");
     toggleControl.dataset.folderToggle = node.path;
     toggleControl.textContent = hasChildren ? (expanded ? "▾" : "▸") : "";
-    toggleControl.style.width = "24px";
-    toggleControl.style.height = "24px";
-    toggleControl.style.display = "inline-flex";
-    toggleControl.style.alignItems = "center";
-    toggleControl.style.justifyContent = "center";
-    toggleControl.style.padding = "0";
-    toggleControl.style.margin = "0";
-    toggleControl.style.border = "0";
-    toggleControl.style.background = "transparent";
-    toggleControl.style.boxShadow = "none";
-    toggleControl.style.fontSize = "2em";
-    toggleControl.style.lineHeight = "1";
-    toggleControl.style.color = "var(--text-muted)";
+    addClasses(toggleControl, "ahs-settings-folder-toggle");
     if (hasChildren) {
+      addClasses(toggleControl, "ahs-settings-folder-toggle-button");
       toggleControl.setAttr("aria-label", expanded ? t("settings.scope.collapseFolder", { name: node.name }) : t("settings.scope.expandFolder", { name: node.name }));
       toggleControl.setAttr("title", expanded ? t("settings.scope.collapseFolder", { name: node.name }) : t("settings.scope.expandFolder", { name: node.name }));
-      toggleControl.style.cursor = "pointer";
       toggleControl.addEventListener("click", () => {
         if (this.expandedFolderPaths.has(node.path)) {
           this.expandedFolderPaths.delete(node.path);
@@ -1754,25 +1656,24 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
         this.renderCard("scope");
       });
+    } else {
+      addClasses(toggleControl, "ahs-settings-folder-toggle-spacer");
     }
 
-    const checkbox = row.createEl("input") as HTMLInputElement;
+    const checkbox = row.createEl("input");
     checkbox.type = "checkbox";
     checkbox.checked = node.checked;
     checkbox.indeterminate = node.indeterminate;
     checkbox.dataset.folderPath = node.path;
-    checkbox.style.margin = "0";
-    checkbox.style.justifySelf = "center";
+    addClasses(checkbox, "ahs-settings-folder-checkbox");
     checkbox.addEventListener("change", () => {
       void this.updateFolderSelection(scopeMode, node.path, checkbox.checked);
     });
 
-    const labelEl = row.createEl("span", { text: node.name });
+    const labelEl = row.createSpan({ text: node.name });
     labelEl.dataset.folderPathLabel = node.path;
-    labelEl.style.minWidth = "0";
-    labelEl.style.overflow = "hidden";
-    labelEl.style.textOverflow = "ellipsis";
-    labelEl.style.whiteSpace = "nowrap";
+    addClasses(labelEl, "ahs-settings-folder-label");
+    this.applyFluidEllipsis(labelEl);
 
     if (!hasChildren || !expanded) {
       return;
@@ -1780,9 +1681,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     const childrenContainer = containerEl.createDiv();
     childrenContainer.dataset.folderChildren = node.path;
-    childrenContainer.style.display = "flex";
-    childrenContainer.style.flexDirection = "column";
-    childrenContainer.style.gap = "2px";
+    addClasses(childrenContainer, "ahs-settings-folder-children");
     for (const child of node.children) {
       this.renderFolderNode(childrenContainer, child, scopeMode, depth + 1);
     }
@@ -1811,33 +1710,23 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
   private createInlineControlGroup(containerEl: HTMLElement, label: string): HTMLElement {
     const groupEl = containerEl.createEl("label");
-    groupEl.style.display = "inline-flex";
-    groupEl.style.alignItems = "center";
-    groupEl.style.gap = "6px";
-    groupEl.style.flexWrap = "nowrap";
+    addClasses(groupEl, "ahs-settings-inline-control-group");
 
-    const labelEl = groupEl.createEl("span", { text: label });
-    labelEl.style.whiteSpace = "nowrap";
+    const labelEl = groupEl.createSpan({ text: label });
+    addClasses(labelEl, "ahs-settings-inline-control-label");
 
     return groupEl;
   }
 
   private createGridControlSlot(containerEl: HTMLElement, label: string): HTMLElement {
     const groupEl = containerEl.createEl("label");
-    groupEl.style.display = "flex";
-    groupEl.style.alignItems = "center";
-    groupEl.style.gap = "8px";
-    groupEl.style.minWidth = "0";
-    groupEl.style.overflow = "visible";
+    addClasses(groupEl, "ahs-settings-grid-control-slot");
 
-    const labelEl = groupEl.createEl("span", { text: label });
-    labelEl.style.whiteSpace = "nowrap";
-    labelEl.style.flex = "0 0 auto";
+    const labelEl = groupEl.createSpan({ text: label });
+    addClasses(labelEl, "ahs-settings-grid-control-label");
 
     const slotEl = groupEl.createDiv();
-    slotEl.style.flex = "1 1 0";
-    slotEl.style.minWidth = "0";
-    slotEl.style.overflow = "visible";
+    addClasses(slotEl, "ahs-settings-grid-control-content");
 
     return slotEl;
   }
@@ -1845,25 +1734,30 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private applyFluidEllipsis(element: HTMLElement): void {
     const tagName = (element.tagName || (element as unknown as { tag?: string }).tag || "").toLowerCase();
     const isFieldControl = tagName === "select" || tagName === "input";
-    element.style.boxSizing = "border-box";
-    element.style.width = isFieldControl ? "calc(100% - 2px)" : "100%";
-    element.style.maxWidth = isFieldControl ? "calc(100% - 2px)" : "100%";
-    element.style.minWidth = "0";
-    element.style.margin = isFieldControl ? "1px" : "0";
-    element.style.overflow = isFieldControl ? "visible" : "hidden";
-    element.style.textOverflow = "ellipsis";
-    element.style.whiteSpace = "nowrap";
+    addClasses(element, "ahs-settings-fluid-ellipsis");
+    if (isFieldControl) {
+      addClasses(element, "ahs-settings-fluid-control");
+    }
+  }
+
+  private createSectionHeading(containerEl: HTMLElement, datasetKey: string, sectionId: string, title: string): void {
+    const headingContainer = containerEl.createDiv();
+    const headingSetting = new Setting(headingContainer).setName(title).setHeading();
+    headingSetting.settingEl.dataset[datasetKey] = sectionId;
+    headingSetting.nameEl.dataset[datasetKey] = sectionId;
+    addClasses(headingSetting.settingEl, "ahs-settings-section-heading");
   }
 
   private scheduleDebouncedTextSave(key: string, value: string, saveAction: (draftValue: string) => Promise<void>): void {
+    const activeWindow = window.activeWindow;
     this.textDraftValues.set(key, value);
 
     const pendingTimer = this.debouncedTextSaves.get(key);
     if (pendingTimer) {
-      globalThis.clearTimeout(pendingTimer.timer);
+      activeWindow.clearTimeout(pendingTimer.timer);
     }
 
-    const timer = globalThis.setTimeout(() => {
+    const timer = activeWindow.setTimeout(() => {
       void this.flushDebouncedTextSave(key);
     }, TEXT_SAVE_DEBOUNCE_MS);
 
@@ -1871,12 +1765,13 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private async flushDebouncedTextSave(key: string): Promise<void> {
+    const activeWindow = window.activeWindow;
     const pendingSave = this.debouncedTextSaves.get(key);
     if (!pendingSave) {
       return;
     }
 
-    globalThis.clearTimeout(pendingSave.timer);
+    activeWindow.clearTimeout(pendingSave.timer);
     this.debouncedTextSaves.delete(key);
     await pendingSave.saveAction(this.textDraftValues.get(key) ?? "");
   }
@@ -1891,7 +1786,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private createSelect(containerEl: HTMLElement, datasetKey: string): HTMLSelectElement {
-    const selectEl = containerEl.createEl("select") as HTMLSelectElement;
+    const selectEl = containerEl.createEl("select");
     selectEl.dataset.selectKey = datasetKey;
     return selectEl;
   }
@@ -1901,7 +1796,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private appendOption(selectEl: HTMLSelectElement, value: string, label: string): void {
-    const optionEl = selectEl.createEl("option", { text: label }) as HTMLOptionElement;
+    const optionEl = selectEl.createEl("option", { text: label });
     optionEl.value = value;
   }
 

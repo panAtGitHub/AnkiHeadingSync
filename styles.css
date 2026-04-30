@@ -1,1 +1,293 @@
-/* Intentionally empty: settings controls use native Obsidian component styles. */
+.anki-heading-sync-settings .ahs-is-hidden {
+	display: none;
+}
+
+.anki-heading-sync-settings .ahs-settings-page-header {
+	position: sticky;
+	top: 0;
+	z-index: 300;
+	width: 100%;
+	box-sizing: border-box;
+	padding-top: 12px;
+	padding-bottom: calc(12px + var(--ahs-settings-sticky-card-gap, 8px));
+	margin-bottom: 0;
+	overflow: visible;
+	background: var(--modal-background, var(--background-primary));
+	background-color: var(--modal-background, var(--background-primary));
+	box-shadow: none;
+}
+
+.anki-heading-sync-settings .ahs-settings-page-header-mask {
+	position: absolute;
+	top: -128px;
+	left: -24px;
+	right: -24px;
+	bottom: 0;
+	z-index: 0;
+	pointer-events: none;
+	background: var(--modal-background, var(--background-primary));
+	background-color: var(--modal-background, var(--background-primary));
+}
+
+.anki-heading-sync-settings .ahs-settings-page-title-setting {
+	position: relative;
+	z-index: 1;
+	margin: 0;
+	padding: 0;
+}
+
+.anki-heading-sync-settings .ahs-settings-page-title {
+	margin: 0;
+}
+
+.anki-heading-sync-settings .ahs-settings-card-toggle {
+	position: sticky;
+	top: var(--ahs-settings-page-header-height, 64px);
+	z-index: 200;
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+	padding: 10px 14px;
+	margin-bottom: 8px;
+	border: 2px solid var(--background-modifier-border);
+	border-radius: 0;
+	background: var(--modal-background, var(--background-primary));
+	background-color: var(--modal-background, var(--background-primary));
+	box-shadow: none;
+	font-size: 1.5em;
+	font-weight: 600;
+	text-align: left;
+}
+
+.anki-heading-sync-settings .ahs-settings-action-row {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 8px;
+}
+
+.anki-heading-sync-settings .ahs-settings-card-list {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.anki-heading-sync-settings .ahs-settings-card-type-block {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+}
+
+.anki-heading-sync-settings .ahs-settings-card-type-header {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.anki-heading-sync-settings .ahs-settings-card-type-title {
+	font-size: var(--font-ui-medium);
+}
+
+.anki-heading-sync-settings .ahs-settings-recognition-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px 14px;
+}
+
+.anki-heading-sync-settings .ahs-settings-heading-select {
+	width: 88px;
+}
+
+.anki-heading-sync-settings .ahs-settings-marker-input {
+	width: 220px;
+}
+
+.anki-heading-sync-settings .ahs-settings-muted-text {
+	margin: 0;
+	color: var(--text-muted);
+}
+
+.anki-heading-sync-settings .ahs-settings-grid-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.75fr) minmax(220px, 0.95fr);
+	align-items: center;
+	column-gap: 16px;
+	row-gap: 8px;
+	overflow: visible;
+	width: 100%;
+}
+
+.anki-heading-sync-settings .ahs-settings-qa-group-pair-row {
+	display: grid;
+	grid-column: 1 / -1;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) max-content;
+	align-items: center;
+	column-gap: 16px;
+	row-gap: 8px;
+	width: 100%;
+}
+
+.anki-heading-sync-settings .ahs-settings-grid-full {
+	grid-column: 1 / -1;
+}
+
+.anki-heading-sync-settings .ahs-settings-nowrap-start {
+	justify-self: start;
+	white-space: nowrap;
+}
+
+.anki-heading-sync-settings .ahs-settings-warnings {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.anki-heading-sync-settings .ahs-settings-inline-check {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.anki-heading-sync-settings .ahs-settings-section {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 16px;
+}
+
+.anki-heading-sync-settings .ahs-settings-warning-text {
+	color: var(--text-warning);
+	font-weight: 600;
+}
+
+.anki-heading-sync-settings .ahs-settings-folder-tree,
+.anki-heading-sync-settings .ahs-settings-folder-children {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.anki-heading-sync-settings .ahs-settings-deck-example-block {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-top: 2px;
+	margin-left: 32px;
+}
+
+.anki-heading-sync-settings .ahs-settings-small-title {
+	font-size: var(--font-ui-small);
+}
+
+.anki-heading-sync-settings .ahs-settings-helper-text {
+	margin-top: 2px;
+	margin-left: 32px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	line-height: 1.4;
+}
+
+.anki-heading-sync-settings .ahs-settings-helper-text-priority {
+	margin-top: 12px;
+}
+
+.anki-heading-sync-settings .ahs-settings-folder-row {
+	display: grid;
+	grid-template-columns: 24px 24px minmax(0, 1fr);
+	align-items: center;
+	column-gap: 0;
+	width: 100%;
+	min-height: 28px;
+	box-sizing: border-box;
+	margin-left: var(--ahs-folder-depth-indent, 0px);
+}
+
+.anki-heading-sync-settings .ahs-settings-folder-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	margin: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: 2em;
+	line-height: 1;
+}
+
+.anki-heading-sync-settings .ahs-settings-folder-toggle-button {
+	cursor: pointer;
+}
+
+.anki-heading-sync-settings .ahs-settings-folder-checkbox {
+	justify-self: center;
+	margin: 0;
+}
+
+.anki-heading-sync-settings .ahs-settings-folder-label {
+	min-width: 0;
+}
+
+.anki-heading-sync-settings .ahs-settings-inline-control-group {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: nowrap;
+}
+
+.anki-heading-sync-settings .ahs-settings-inline-control-label {
+	white-space: nowrap;
+}
+
+.anki-heading-sync-settings .ahs-settings-grid-control-slot {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	overflow: visible;
+}
+
+.anki-heading-sync-settings .ahs-settings-grid-control-label {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+
+.anki-heading-sync-settings .ahs-settings-grid-control-content {
+	flex: 1 1 0;
+	min-width: 0;
+	overflow: visible;
+}
+
+.anki-heading-sync-settings .ahs-settings-fluid-ellipsis {
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.anki-heading-sync-settings .ahs-settings-fluid-ellipsis:not(select):not(input) {
+	box-sizing: border-box;
+	margin: 0;
+	overflow: hidden;
+}
+
+.anki-heading-sync-settings select.ahs-settings-fluid-control,
+.anki-heading-sync-settings input.ahs-settings-fluid-control {
+	box-sizing: border-box;
+	width: calc(100% - 2px);
+	max-width: calc(100% - 2px);
+	min-width: 0;
+	margin: 1px;
+	overflow: visible;
+}

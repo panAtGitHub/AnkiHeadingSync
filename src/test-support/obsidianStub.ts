@@ -1,5 +1,5 @@
-export async function requestUrl(): Promise<never> {
-  throw new Error("obsidian.requestUrl stub was called without a test mock.");
+export function requestUrl(): Promise<never> {
+  return Promise.reject(new Error("obsidian.requestUrl stub was called without a test mock."));
 }
 
 export function getAllTags(cache: {

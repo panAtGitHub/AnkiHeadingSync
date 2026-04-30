@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const {
   FakeButtonComponent,
@@ -17,6 +17,12 @@ const {
 
     createEl(tag: string, options?: { text?: string }): HoistedFakeElement {
       const child = new HoistedFakeElement(tag, options?.text ?? "");
+      this.children.push(child);
+      return child;
+    }
+
+    createSpan(options?: { text?: string }): HoistedFakeElement {
+      const child = new HoistedFakeElement("span", options?.text ?? "");
       this.children.push(child);
       return child;
     }
@@ -167,6 +173,15 @@ type FakeButtonComponentInstance = InstanceType<typeof FakeButtonComponent>;
 type FakeContainerElInstance = InstanceType<typeof FakeModal>["contentEl"];
 type FakeToggleComponentInstance = InstanceType<typeof FakeToggleComponent>;
 
+function setNavigatorLanguage(language: string): void {
+  vi.stubGlobal("navigator", { language });
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
 function getFakeContentEl(modal: EmptyDeckSelectionModal): FakeContainerElInstance {
   return modal.contentEl as unknown as FakeContainerElInstance;
 }
@@ -188,8 +203,8 @@ function getFooterCountText(contentEl: FakeContainerElInstance): string | undefi
 }
 
 describe("EmptyDeckSelectionModal", () => {
-  it("renders the modal text in English when Obsidian language is not zh", async () => {
-    getLanguageMock.mockReturnValue("en");
+  it("renders the modal text in English when Obsidian language is not zh", () => {
+    setNavigatorLanguage("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B", "Deck C"]);
 
     void modal.openAndGetSelection();
@@ -208,8 +223,8 @@ describe("EmptyDeckSelectionModal", () => {
     expect(getFooterCountText(contentEl)).toBe("Selected 0 / 3 empty decks");
   });
 
-  it("starts with zero selected count and a disabled delete button", async () => {
-    getLanguageMock.mockReturnValue("en");
+  it("starts with zero selected count and a disabled delete button", () => {
+    setNavigatorLanguage("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B", "Deck C"]);
 
     void modal.openAndGetSelection();
@@ -221,7 +236,7 @@ describe("EmptyDeckSelectionModal", () => {
   });
 
   it("selects every candidate when the select-all button is clicked", async () => {
-    getLanguageMock.mockReturnValue("en");
+    setNavigatorLanguage("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B", "Deck C"]);
 
     const selectionPromise = modal.openAndGetSelection();
@@ -244,7 +259,7 @@ describe("EmptyDeckSelectionModal", () => {
   });
 
   it("clears every candidate when the clear-all button is clicked", async () => {
-    getLanguageMock.mockReturnValue("en");
+    setNavigatorLanguage("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B", "Deck C"]);
 
     void modal.openAndGetSelection();
@@ -262,7 +277,7 @@ describe("EmptyDeckSelectionModal", () => {
   });
 
   it("inverts selected candidates when the invert button is clicked", async () => {
-    getLanguageMock.mockReturnValue("en");
+    setNavigatorLanguage("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B", "Deck C"]);
 
     void modal.openAndGetSelection();
@@ -281,7 +296,7 @@ describe("EmptyDeckSelectionModal", () => {
   });
 
   it("enables and disables the delete button as manual selection changes", async () => {
-    getLanguageMock.mockReturnValue("en");
+    setNavigatorLanguage("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A"]);
 
     void modal.openAndGetSelection();
@@ -299,7 +314,7 @@ describe("EmptyDeckSelectionModal", () => {
   });
 
   it("returns null when cancel is clicked", async () => {
-    getLanguageMock.mockReturnValue("zh");
+    setNavigatorLanguage("zh");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B"]);
 
     const selectionPromise = modal.openAndGetSelection();
@@ -311,7 +326,7 @@ describe("EmptyDeckSelectionModal", () => {
   });
 
   it("renders selection text in Simplified Chinese when Obsidian language is zh", async () => {
-    getLanguageMock.mockReturnValue("zh");
+    setNavigatorLanguage("zh");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B"]);
 
     void modal.openAndGetSelection();
