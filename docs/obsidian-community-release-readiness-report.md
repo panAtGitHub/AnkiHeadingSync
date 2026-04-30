@@ -35,7 +35,7 @@ Repository evidence was verified against these files and modules:
 - The GitHub repository currently shows no published releases, so the first submission release still needs to be created.
 - No exact `anki-heading-sync` ID match and no exact `Anki Heading Sync` name match were found in the current upstream Obsidian community-plugins.json.
 - manifest.json contains the expected release-facing fields: `id`, `name`, `version`, `minAppVersion`, `description`, `author`, `authorUrl`, and `isDesktopOnly`.
-- versions.json currently maps `1.0.0` to `1.5.0`, which matches manifest.json version and minAppVersion.
+- versions.json currently maps `1.0.1` to `1.8.7`, which matches manifest.json version and minAppVersion.
 - package.json defines the release-relevant commands: `lint`, `test`, `build`, and `build:obsidian`.
 - package-lock.json is present, and no yarn.lock was found.
 - LICENSE is present and uses MIT.
@@ -87,7 +87,7 @@ Based on the current Obsidian docs, the repository must satisfy these release co
 
 ## 4. What still needs fixing
 
-- A GitHub release for version `1.0.0` still needs to be created manually, with assets attached.
+- A GitHub release for version `1.0.1` still needs to be created manually, with assets attached.
 - Manual QA in real Obsidian and real Anki is still required before submission.
 - The actual submission PR to obsidianmd/obsidian-releases still needs to be opened.
 
@@ -137,7 +137,7 @@ Run these checks in a real desktop Obsidian vault with real Anki running:
 - Run `npm test`.
 - Run `npm run build`.
 - Verify dist/plugin contains `main.js`, `manifest.json`, and `styles.css` when present.
-- Create a GitHub release tag exactly matching `manifest.json.version`, currently `1.0.0`.
+- Create a GitHub release tag exactly matching `manifest.json.version`, currently `1.0.1`.
 - Upload these assets to the release:
   - main.js
   - manifest.json
@@ -180,5 +180,5 @@ Repository-level release preparation is close to complete, but submission should
 
 - local lint, test, and build validation remain green on the release branch
 - manual QA is completed in real Obsidian and real Anki
-- the GitHub release for version `1.0.0` exists with the correct assets
+- the GitHub release for version `1.0.1` exists with the correct assets
 - the submission PR to obsidianmd/obsidian-releases is opened with the correct metadata

@@ -173,12 +173,11 @@ type FakeButtonComponentInstance = InstanceType<typeof FakeButtonComponent>;
 type FakeContainerElInstance = InstanceType<typeof FakeModal>["contentEl"];
 type FakeToggleComponentInstance = InstanceType<typeof FakeToggleComponent>;
 
-function setNavigatorLanguage(language: string): void {
-  vi.stubGlobal("navigator", { language });
+function setObsidianLanguage(language: string): void {
+  getLanguageMock.mockReturnValue(language);
 }
 
 afterEach(() => {
-  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -204,7 +203,7 @@ function getFooterCountText(contentEl: FakeContainerElInstance): string | undefi
 
 describe("EmptyDeckSelectionModal", () => {
   it("renders the modal text in English when Obsidian language is not zh", () => {
-    setNavigatorLanguage("en");
+    setObsidianLanguage("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B", "Deck C"]);
 
     void modal.openAndGetSelection();
@@ -224,7 +223,7 @@ describe("EmptyDeckSelectionModal", () => {
   });
 
   it("starts with zero selected count and a disabled delete button", () => {
-    setNavigatorLanguage("en");
+    setObsidianLanguage("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B", "Deck C"]);
 
     void modal.openAndGetSelection();
@@ -236,7 +235,7 @@ describe("EmptyDeckSelectionModal", () => {
   });
 
   it("selects every candidate when the select-all button is clicked", async () => {
-    setNavigatorLanguage("en");
+    setObsidianLanguage("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B", "Deck C"]);
 
     const selectionPromise = modal.openAndGetSelection();
@@ -259,7 +258,7 @@ describe("EmptyDeckSelectionModal", () => {
   });
 
   it("clears every candidate when the clear-all button is clicked", async () => {
-    setNavigatorLanguage("en");
+    setObsidianLanguage("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B", "Deck C"]);
 
     void modal.openAndGetSelection();
@@ -277,7 +276,7 @@ describe("EmptyDeckSelectionModal", () => {
   });
 
   it("inverts selected candidates when the invert button is clicked", async () => {
-    setNavigatorLanguage("en");
+    setObsidianLanguage("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B", "Deck C"]);
 
     void modal.openAndGetSelection();
@@ -296,7 +295,7 @@ describe("EmptyDeckSelectionModal", () => {
   });
 
   it("enables and disables the delete button as manual selection changes", async () => {
-    setNavigatorLanguage("en");
+    setObsidianLanguage("en");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A"]);
 
     void modal.openAndGetSelection();
@@ -314,7 +313,7 @@ describe("EmptyDeckSelectionModal", () => {
   });
 
   it("returns null when cancel is clicked", async () => {
-    setNavigatorLanguage("zh");
+    setObsidianLanguage("zh");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B"]);
 
     const selectionPromise = modal.openAndGetSelection();
@@ -326,7 +325,7 @@ describe("EmptyDeckSelectionModal", () => {
   });
 
   it("renders selection text in Simplified Chinese when Obsidian language is zh", async () => {
-    setNavigatorLanguage("zh");
+    setObsidianLanguage("zh");
     const modal = new EmptyDeckSelectionModal({} as never, ["Deck A", "Deck B"]);
 
     void modal.openAndGetSelection();

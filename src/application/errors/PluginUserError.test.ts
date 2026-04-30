@@ -1,19 +1,26 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const { getLanguageMock } = vi.hoisted(() => ({
+  getLanguageMock: vi.fn(() => "en"),
+}));
+
+vi.mock("obsidian", () => ({
+  getLanguage: getLanguageMock,
+}));
+
 import { PluginUserError, renderPluginFileFailure, renderPluginFileFailuresInline, renderUnknownUserFacingError, renderUserFacingMessage, renderUserMessage } from "./PluginUserError";
 
-function setNavigatorLanguage(language: string): void {
-  vi.stubGlobal("navigator", { language });
+function setObsidianLanguage(language: string): void {
+  getLanguageMock.mockReturnValue(language);
 }
 
 describe("PluginUserError", () => {
   afterEach(() => {
-    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
   it("renders plugin-owned errors in English", () => {
-    setNavigatorLanguage("en");
+    setObsidianLanguage("en");
 
     const error = new PluginUserError("errors.currentFileOutOfScope", { filePath: "notes/example.md" });
 
@@ -21,7 +28,7 @@ describe("PluginUserError", () => {
   });
 
   it("renders plugin-owned errors in Simplified Chinese", () => {
-    setNavigatorLanguage("zh");
+    setObsidianLanguage("zh");
 
     const error = new PluginUserError("errors.currentFileOutOfScope", { filePath: "notes/example.md" });
 
@@ -29,19 +36,19 @@ describe("PluginUserError", () => {
   });
 
   it("renders scope-not-configured errors in English and Chinese", () => {
-    setNavigatorLanguage("en");
+    setObsidianLanguage("en");
     expect(renderUserMessage(new PluginUserError("errors.runScopeNotConfigured"))).toBe(
       "Run scope is not configured. In include mode, select at least one folder before syncing.",
     );
 
-    setNavigatorLanguage("zh");
+    setObsidianLanguage("zh");
     expect(renderUserMessage(new PluginUserError("errors.runScopeNotConfigured"))).toBe(
       "运行范围尚未配置。当前是 include 模式，请至少选择一个文件夹后再同步。",
     );
   });
 
   it("renders write-back failure summaries with localized detail lines", () => {
-    setNavigatorLanguage("zh");
+    setObsidianLanguage("zh");
 
     const error = new PluginUserError(
       "errors.writeBack.summary",
@@ -62,7 +69,7 @@ describe("PluginUserError", () => {
   });
 
   it("renders raw and keyed user-facing messages plus inline failure lists", () => {
-    setNavigatorLanguage("en");
+    setObsidianLanguage("en");
 
     expect(renderUserFacingMessage({ key: "notice.failedSavePluginSettings" })).toBe("Failed to save plugin settings.");
     expect(renderUserFacingMessage({ rawMessage: "raw failure" })).toBe("raw failure");
@@ -74,13 +81,13 @@ describe("PluginUserError", () => {
   });
 
   it("falls back to raw error messages for unknown errors", () => {
-    setNavigatorLanguage("zh");
+    setObsidianLanguage("zh");
 
     expect(renderUnknownUserFacingError(new Error("socket closed"), "notice.vaultSyncFailed")).toBe("socket closed");
   });
 
   it("falls back to a translated default when the value is not an Error", () => {
-    setNavigatorLanguage("en");
+    setObsidianLanguage("en");
 
     expect(renderUnknownUserFacingError(null, "notice.vaultSyncFailed")).toBe("Vault sync failed.");
   });

@@ -26,7 +26,7 @@ Anki Heading Sync 是一个 Obsidian 桌面端插件，用来批量地制作 Ank
 
 ### 使用要求
 
-- Obsidian 桌面端 1.5.0 或更高版本
+- Obsidian 桌面端 1.8.7 或更高版本
 - Anki 桌面端
 - Anki 中已安装并启用 AnkiConnect
 
@@ -148,7 +148,7 @@ Currently, the plugin mainly supports four card types:
 
 ### Requirements
 
-- Obsidian desktop 1.5.0 or newer
+- Obsidian desktop 1.8.7 or newer
 - Anki desktop
 - AnkiConnect enabled in Anki
 
