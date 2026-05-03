@@ -707,20 +707,30 @@ type TestActiveWindow = {
 type TestWindow = {
   activeWindow: TestActiveWindow;
   ResizeObserver: typeof ResizeObserver;
+  readonly setTimeout: typeof setTimeout;
+  readonly clearTimeout: typeof clearTimeout;
 };
 
 function createTestWindow(): TestWindow {
+  let testWindow: TestWindow;
+
   const activeWindow: TestActiveWindow = {
-    // eslint-disable-next-line obsidianmd/prefer-active-window-timers
-    setTimeout: (callback, delay) => setTimeout(callback, delay),
-    // eslint-disable-next-line obsidianmd/prefer-active-window-timers
-    clearTimeout: (timer) => clearTimeout(timer),
+    setTimeout: (callback, delay) => testWindow.setTimeout(callback, delay),
+    clearTimeout: (timer) => testWindow.clearTimeout(timer),
   };
 
-  return {
+  testWindow = {
+    get setTimeout(): typeof setTimeout {
+      return setTimeout;
+    },
+    get clearTimeout(): typeof clearTimeout {
+      return clearTimeout;
+    },
     activeWindow,
     ResizeObserver: FakeResizeObserver as unknown as typeof ResizeObserver,
   };
+
+  return testWindow;
 }
 
 describe("PluginSettingTab", () => {
