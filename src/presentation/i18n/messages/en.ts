@@ -18,11 +18,11 @@ export const en = {
     },
     qaHeadingLevel: {
       name: "Heading level for question-and-answer cards",
-      desc: "Use heading level 4 by default.",
+      desc: "Default question-and-answer heading level is 4.",
     },
     clozeHeadingLevel: {
       name: "Cloze heading level",
-      desc: "Use heading level 5 by default.",
+      desc: "Default cloze heading level is 5.",
     },
     cardAnswerCutoffMode: {
       name: "Card answer cutoff mode",
@@ -413,7 +413,7 @@ export const en = {
       noteFieldMappingsQaGroupAcceptedWarningsArray: "Question-and-answer group field mapping acceptedWarnings must be an array.",
       noteFieldMappingsQaGroupAcceptedWarningsStrings: "Question-and-answer group field mapping acceptedWarnings can only contain strings.",
       noteFieldMappingsQaGroupDerivationObject: "Question-and-answer group field mapping derivation must be an object.",
-      noteFieldMappingsQaGroupDerivationMode: "Question-and-answer group field mapping derivation.mode must be first-pair.",
+      noteFieldMappingsQaGroupDerivationMode: "Question-and-answer group field mapping derivation mode must be first-pair.",
       noteFieldMappingsQaGroupDerivationFirstQuestionField: "Question-and-answer group field mapping derivation.firstQuestionField must be a string.",
       noteFieldMappingsQaGroupDerivationFirstAnswerField: "Question-and-answer group field mapping derivation.firstAnswerField must be a string.",
     },

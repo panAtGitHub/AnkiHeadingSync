@@ -700,15 +700,15 @@ function isCardExpanded(tab: AnkiHeadingSyncSettingTab, cardId: string): boolean
 }
 
 type TestActiveWindow = {
-  setTimeout: (callback: () => void, delay?: number) => ReturnType<typeof setTimeout>;
-  clearTimeout: (timer: ReturnType<typeof setTimeout>) => void;
+  setTimeout: Window["setTimeout"];
+  clearTimeout: Window["clearTimeout"];
 };
 
 type TestWindow = {
   activeWindow: TestActiveWindow;
   ResizeObserver: typeof ResizeObserver;
-  readonly setTimeout: typeof setTimeout;
-  readonly clearTimeout: typeof clearTimeout;
+  readonly setTimeout: Window["setTimeout"];
+  readonly clearTimeout: Window["clearTimeout"];
 };
 
 function createTestWindow(): TestWindow {
@@ -720,10 +720,10 @@ function createTestWindow(): TestWindow {
   };
 
   testWindow = {
-    get setTimeout(): typeof setTimeout {
+    get setTimeout(): Window["setTimeout"] {
       return setTimeout;
     },
-    get clearTimeout(): typeof clearTimeout {
+    get clearTimeout(): Window["clearTimeout"] {
       return clearTimeout;
     },
     activeWindow,
