@@ -700,37 +700,90 @@ function isCardExpanded(tab: AnkiHeadingSyncSettingTab, cardId: string): boolean
 }
 
 type TestActiveWindow = {
-  setTimeout: Window["setTimeout"];
-  clearTimeout: Window["clearTimeout"];
+  setTimeout: (callback: () => void, delay?: number) => number;
+  clearTimeout: (timer: number) => void;
 };
 
 type TestWindow = {
   activeWindow: TestActiveWindow;
   ResizeObserver: typeof ResizeObserver;
-  readonly setTimeout: Window["setTimeout"];
-  readonly clearTimeout: Window["clearTimeout"];
 };
 
+type ScheduledTestTimer = {
+  callback: () => void;
+  dueAt: number;
+};
+
+type TestTimerController = {
+  setTimeout: (callback: () => void, delay?: number) => number;
+  clearTimeout: (timer: number) => void;
+  advanceBy: (duration: number) => void;
+};
+
+let testTimerController: TestTimerController | undefined;
+
+function createTestTimerController(): TestTimerController {
+  let currentTime = 0;
+  let nextTimer = 1;
+  const timers = new Map<number, ScheduledTestTimer>();
+
+  return {
+    setTimeout(callback, delay = 0): number {
+      const timer = nextTimer;
+      nextTimer += 1;
+      timers.set(timer, {
+        callback,
+        dueAt: currentTime + delay,
+      });
+      return timer;
+    },
+    clearTimeout(timer): void {
+      timers.delete(timer);
+    },
+    advanceBy(duration): void {
+      const targetTime = currentTime + duration;
+
+      while (true) {
+        const nextDueTimer = [...timers.entries()]
+          .filter(([, scheduledTimer]) => scheduledTimer.dueAt <= targetTime)
+          .sort(([, left], [, right]) => left.dueAt - right.dueAt)[0];
+
+        if (!nextDueTimer) {
+          break;
+        }
+
+        const [timer, scheduledTimer] = nextDueTimer;
+        timers.delete(timer);
+        currentTime = scheduledTimer.dueAt;
+        scheduledTimer.callback();
+      }
+
+      currentTime = targetTime;
+    },
+  };
+}
+
+function advanceTestTimersByTime(duration: number): void {
+  if (!testTimerController) {
+    throw new Error("Test timer controller is not initialized.");
+  }
+
+  testTimerController.advanceBy(duration);
+}
+
 function createTestWindow(): TestWindow {
-  let testWindow: TestWindow;
+  const timerController = createTestTimerController();
+  testTimerController = timerController;
 
   const activeWindow: TestActiveWindow = {
-    setTimeout: (callback, delay) => testWindow.setTimeout(callback, delay),
-    clearTimeout: (timer) => testWindow.clearTimeout(timer),
+    setTimeout: (callback, delay) => timerController.setTimeout(callback, delay),
+    clearTimeout: (timer) => timerController.clearTimeout(timer),
   };
 
-  testWindow = {
-    get setTimeout(): Window["setTimeout"] {
-      return setTimeout;
-    },
-    get clearTimeout(): Window["clearTimeout"] {
-      return clearTimeout;
-    },
+  return {
     activeWindow,
     ResizeObserver: FakeResizeObserver as unknown as typeof ResizeObserver,
   };
-
-  return testWindow;
 }
 
 describe("PluginSettingTab", () => {
@@ -746,6 +799,7 @@ describe("PluginSettingTab", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    testTimerController = undefined;
   });
 
   it("renders five cards collapsed by default", () => {
@@ -1053,7 +1107,6 @@ describe("PluginSettingTab", () => {
   });
 
   it("debounces text input saves instead of saving every keystroke", async () => {
-    vi.useFakeTimers();
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
@@ -1068,18 +1121,17 @@ describe("PluginSettingTab", () => {
 
     expect(plugin.updateCalls).toHaveLength(0);
 
-    vi.advanceTimersByTime(499);
+    advanceTestTimersByTime(499);
     await flushPromises();
     expect(plugin.updateCalls).toHaveLength(0);
 
-    vi.advanceTimersByTime(1);
+    advanceTestTimersByTime(1);
     await flushPromises();
     expect(plugin.settings.cardTypeConfigs.cloze.extraMarker).toBe("#cloze-ab");
     expect(plugin.updateCalls).toHaveLength(1);
   });
 
   it("flushes pending text saves when the settings tab hides", async () => {
-    vi.useFakeTimers();
     const plugin = new FakePlugin();
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
@@ -1098,7 +1150,7 @@ describe("PluginSettingTab", () => {
     expect(plugin.settings.cardTypeConfigs.cloze.extraMarker).toBe("#cloze-hidden");
     expect(plugin.updateCalls).toHaveLength(1);
 
-    vi.runOnlyPendingTimers();
+    advanceTestTimersByTime(500);
     await flushPromises();
 
     expect(plugin.updateCalls).toHaveLength(1);
@@ -1115,13 +1167,11 @@ describe("PluginSettingTab", () => {
     clozeHeading.value = "4";
     await clozeHeading.trigger("change");
 
-    vi.useFakeTimers();
     const clozeMarker = queryByDataset(tab.containerEl, "cardTypeMarker", "cloze");
     clozeMarker.value = "";
     await clozeMarker.trigger("input");
-    vi.advanceTimersByTime(500);
+    advanceTestTimersByTime(500);
     await flushPromises();
-    vi.useRealTimers();
 
     expect(plugin.settings.cardTypeConfigs.cloze.headingLevel).toBe(4);
     expect(plugin.settings.cardTypeConfigs.cloze.extraMarker).toBe("#anki-cloze");
