@@ -1631,10 +1631,14 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       const nextAlternateFolderDeckModeFolders = checked
         ? this.plugin.settings.alternateFolderDeckModeFolders
         : this.plugin.settings.alternateFolderDeckModeFolders.filter((path) => !isPathInsideFolder(path, folderPath));
+      const nextStandaloneParentDeckFolders = checked
+        ? this.plugin.settings.standaloneParentDeckFolders
+        : this.plugin.settings.standaloneParentDeckFolders.filter((path) => !isPathInsideFolder(path, folderPath));
 
       await this.plugin.updateSettings({
         includeFolders: nextSelection,
         alternateFolderDeckModeFolders: nextAlternateFolderDeckModeFolders,
+        standaloneParentDeckFolders: nextStandaloneParentDeckFolders,
       });
     } else {
       await this.plugin.updateSettings({ excludeFolders: nextSelection });
@@ -1652,6 +1656,19 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
 
     await this.plugin.updateSettings({
       alternateFolderDeckModeFolders: nextAlternateFolderDeckModeFolders,
+    });
+    this.renderCard("scope");
+  }
+
+  private async updateStandaloneParentDeckFolder(folderPath: string, checked: boolean): Promise<void> {
+    const nextStandaloneParentDeckFolders = checked
+      ? (this.plugin.settings.standaloneParentDeckFolders.includes(folderPath)
+          ? [...this.plugin.settings.standaloneParentDeckFolders]
+          : [...this.plugin.settings.standaloneParentDeckFolders, folderPath])
+      : this.plugin.settings.standaloneParentDeckFolders.filter((path) => path !== folderPath);
+
+    await this.plugin.updateSettings({
+      standaloneParentDeckFolders: nextStandaloneParentDeckFolders,
     });
     this.renderCard("scope");
   }
@@ -1730,6 +1747,32 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         hintEl.dataset.folderDeckModeOverrideHint = node.path;
         addClasses(hintEl, "ahs-settings-folder-override-hint");
       }
+
+      if (depth > 0) {
+        const standaloneParentDeckCheckbox = inlineLabelEl.createEl("input");
+        const standaloneParentDeckLabel = t("settings.scope.standaloneParentDeck.ariaLabel", { name: node.name });
+        const standaloneParentDeckTitle = this.getStandaloneParentDeckTitle();
+        const standaloneParentDeckChecked = this.plugin.settings.standaloneParentDeckFolders.includes(node.path);
+
+        standaloneParentDeckCheckbox.type = "checkbox";
+        standaloneParentDeckCheckbox.checked = standaloneParentDeckChecked;
+        standaloneParentDeckCheckbox.dataset.folderStandaloneParentDeck = node.path;
+        standaloneParentDeckCheckbox.setAttr("aria-label", standaloneParentDeckLabel);
+        standaloneParentDeckCheckbox.setAttr("title", standaloneParentDeckTitle);
+        addClasses(standaloneParentDeckCheckbox, "ahs-settings-folder-override-checkbox");
+        standaloneParentDeckCheckbox.addEventListener("click", (event?: Event) => {
+          event?.stopPropagation();
+        });
+        standaloneParentDeckCheckbox.addEventListener("change", () => {
+          void this.updateStandaloneParentDeckFolder(node.path, standaloneParentDeckCheckbox.checked);
+        });
+
+        if (standaloneParentDeckChecked) {
+          const hintEl = inlineLabelEl.createSpan({ text: this.getStandaloneParentDeckHint() });
+          hintEl.dataset.folderStandaloneParentDeckHint = node.path;
+          addClasses(hintEl, "ahs-settings-folder-override-hint");
+        }
+      }
     }
 
     if (!hasChildren || !expanded) {
@@ -1754,11 +1797,23 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     }
 
     this.scopeNeedsSelectedAncestorExpansion = false;
-    for (const folderPath of this.getSelectedFoldersForScopeMode(scopeMode)) {
+    for (const folderPath of this.getFoldersForAncestorExpansion(scopeMode)) {
       for (const ancestorPath of getAncestorFolderPaths(folderPath)) {
         this.expandedFolderPaths.add(ancestorPath);
       }
     }
+  }
+
+  private getFoldersForAncestorExpansion(scopeMode: ScopeMode): string[] {
+    if (scopeMode !== "include") {
+      return this.getSelectedFoldersForScopeMode(scopeMode);
+    }
+
+    return Array.from(new Set([
+      ...this.plugin.settings.includeFolders,
+      ...this.plugin.settings.alternateFolderDeckModeFolders,
+      ...this.plugin.settings.standaloneParentDeckFolders,
+    ]));
   }
 
   private getSelectedFoldersForScopeMode(scopeMode: ScopeMode): string[] {
@@ -1779,6 +1834,14 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     }
 
     return t("settings.scope.folderDeckModeOverride.title.folder");
+  }
+
+  private getStandaloneParentDeckHint(): string {
+    return t("settings.scope.standaloneParentDeck.hint");
+  }
+
+  private getStandaloneParentDeckTitle(): string {
+    return t("settings.scope.standaloneParentDeck.title");
   }
 
   private createInlineControlGroup(containerEl: HTMLElement, label: string): HTMLElement {

@@ -207,6 +207,11 @@ export const en = {
           folderAndFile: "Global mode is folder-only; enable this to use folder-and-file deck names for this folder",
         },
       },
+      standaloneParentDeck: {
+        ariaLabel: "Use {{name}} as a standalone parent deck root",
+        hint: "This folder is used as a standalone parent deck",
+        title: "Enable this to treat this folder as a standalone parent deck root in Anki",
+      },
     },
     cards: {
       cardTypes: {
@@ -390,6 +395,8 @@ export const en = {
       excludeFoldersStrings: "Exclude folders must only contain strings.",
       alternateFolderDeckModeFoldersArray: "Alternate folder deck mode folders must be an array.",
       alternateFolderDeckModeFoldersStrings: "Alternate folder deck mode folders must only contain strings.",
+      standaloneParentDeckFoldersArray: "Standalone parent deck folders must be an array.",
+      standaloneParentDeckFoldersStrings: "Standalone parent deck folders must only contain strings.",
       ankiConnectUrlRequired: "AnkiConnect URL is required.",
       ankiNoteTypeCacheArray: "Anki note type cache must be an array.",
       ankiNoteTypeCacheStrings: "Anki note type cache can only contain strings.",

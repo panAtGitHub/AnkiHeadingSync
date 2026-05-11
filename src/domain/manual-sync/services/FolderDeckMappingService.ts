@@ -11,7 +11,12 @@ export interface FolderDeckMappingResult {
 export class FolderDeckMappingService {
   constructor(private readonly deckNormalizationService = new DeckNormalizationService()) {}
 
-  mapFilePathToDeck(filePath: string, mode: FolderDeckMode, alternateFolderDeckModeFolders: string[] = []): FolderDeckMappingResult {
+  mapFilePathToDeck(
+    filePath: string,
+    mode: FolderDeckMode,
+    alternateFolderDeckModeFolders: string[] = [],
+    standaloneParentDeckFolders: string[] = [],
+  ): FolderDeckMappingResult {
     const effectiveMode = resolveEffectiveFolderDeckMode(filePath, mode, alternateFolderDeckModeFolders);
 
     if (effectiveMode === "off") {
@@ -29,7 +34,7 @@ export class FolderDeckMappingService {
       return { warnings: [] };
     }
 
-    const segments = folderPath.split("/").filter(Boolean);
+    const segments = resolveDeckSegments(folderPath, standaloneParentDeckFolders);
     if (effectiveMode === "folder-and-file") {
       const fileName = normalizedFilePath.slice(lastSlash + 1).replace(/\.[^.]+$/, "").trim();
       if (fileName) {
@@ -73,6 +78,35 @@ function resolveEffectiveFolderDeckMode(filePath: string, mode: FolderDeckMode, 
 
 function normalizeFolderPath(folderPath: string): string {
   return folderPath.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
+function resolveDeckSegments(folderPath: string, standaloneParentDeckFolders: string[]): string[] {
+  const allSegments = folderPath.split("/").filter(Boolean);
+  const standaloneParentDeckFolder = resolveStandaloneParentDeckFolder(folderPath, standaloneParentDeckFolders);
+  if (!standaloneParentDeckFolder) {
+    return allSegments;
+  }
+
+  const standaloneSegments = standaloneParentDeckFolder.split("/").filter(Boolean);
+  const startIndex = Math.max(standaloneSegments.length - 1, 0);
+  return allSegments.slice(startIndex);
+}
+
+function resolveStandaloneParentDeckFolder(folderPath: string, standaloneParentDeckFolders: string[]): string | undefined {
+  let matchedFolder: string | undefined;
+
+  for (const folder of standaloneParentDeckFolders) {
+    const normalizedFolderPath = normalizeFolderPath(folder);
+    if (!normalizedFolderPath || !isPathInsideFolder(folderPath, normalizedFolderPath)) {
+      continue;
+    }
+
+    if (!matchedFolder || normalizedFolderPath.length > matchedFolder.length) {
+      matchedFolder = normalizedFolderPath;
+    }
+  }
+
+  return matchedFolder;
 }
 
 function normalizeFilePath(filePath: string): string {

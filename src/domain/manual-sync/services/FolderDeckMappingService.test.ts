@@ -40,6 +40,32 @@ describe("FolderDeckMappingService", () => {
     expect(service.mapFilePathToDeck("notes/sub/topic.md", "off", ["notes/sub"])).toEqual({ warnings: [] });
   });
 
+  it("starts deck paths from a standalone parent deck folder", () => {
+    const service = new FolderDeckMappingService();
+
+    expect(service.mapFilePathToDeck("3Resources/Books/BookA/第1章.md", "folder", [], ["3Resources/Books"])).toEqual({
+      deck: "Books::BookA",
+      warnings: [],
+    });
+    expect(service.mapFilePathToDeck("3Resources/Books/BookA/第1章.md", "folder-and-file", [], ["3Resources/Books"])).toEqual({
+      deck: "Books::BookA::第1章",
+      warnings: [],
+    });
+    expect(service.mapFilePathToDeck("3Resources/Books/a.md", "folder", [], ["3Resources/Books"])).toEqual({
+      deck: "Books",
+      warnings: [],
+    });
+  });
+
+  it("prefers the deepest standalone parent deck folder", () => {
+    const service = new FolderDeckMappingService();
+
+    expect(service.mapFilePathToDeck("3Resources/Books/Sub/a.md", "folder-and-file", [], ["3Resources", "3Resources/Books"])).toEqual({
+      deck: "Books::Sub::a",
+      warnings: [],
+    });
+  });
+
   it("returns empty for root-level files", () => {
     const service = new FolderDeckMappingService();
 

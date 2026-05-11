@@ -1733,17 +1733,24 @@ describe("PluginSettingTab", () => {
     await flushPromises();
 
     const overrideCheckbox = queryByDataset(tab.containerEl, "folderDeckModeOverride", "notes/sub");
+    const standaloneParentDeckCheckbox = queryByDataset(tab.containerEl, "folderStandaloneParentDeck", "notes/sub");
     const childLabel = queryByDataset(tab.containerEl, "folderPathLabel", "notes/sub");
     const overrideAttributes = overrideCheckbox as unknown as { title?: string; "aria-label"?: string };
+    const standaloneParentDeckAttributes = standaloneParentDeckCheckbox as unknown as { title?: string; "aria-label"?: string };
     const labelParent = (childLabel as unknown as { parent?: { children?: unknown[] } }).parent;
     const overrideParent = (overrideCheckbox as unknown as { parent?: { children?: unknown[] } }).parent;
     expect(overrideCheckbox.classList.contains("ahs-settings-folder-override-checkbox")).toBe(true);
+    expect(standaloneParentDeckCheckbox.classList.contains("ahs-settings-folder-override-checkbox")).toBe(true);
     expect(overrideAttributes.title).toBe("当前全局为「文件夹」，勾选后此文件夹改用「文件夹及文件名」作为牌组名");
     expect(overrideAttributes["aria-label"]).toBe("切换 sub 的文件夹牌组映射模式");
+    expect(standaloneParentDeckAttributes.title).toBe("勾选后，此文件夹在 Anki 中会作为单独的父牌组起点");
+    expect(standaloneParentDeckAttributes["aria-label"]).toBe("将 sub 指定为单独的父牌组");
     expect(overrideParent).toBe(labelParent);
     expect(labelParent?.children?.[0]).toBe(childLabel);
     expect(labelParent?.children?.[1]).toBe(overrideCheckbox);
+    expect(labelParent?.children?.[2]).toBe(standaloneParentDeckCheckbox);
     expect(() => queryByDataset(tab.containerEl, "folderDeckModeOverrideHint", "notes/sub")).toThrow();
+    expect(() => queryByDataset(tab.containerEl, "folderStandaloneParentDeckHint", "notes/sub")).toThrow();
   });
 
   it("toggling a folder deck mode override only updates alternateFolderDeckModeFolders and shows the hint", async () => {
@@ -1771,6 +1778,7 @@ describe("PluginSettingTab", () => {
     });
     const childLabel = queryByDataset(tab.containerEl, "folderPathLabel", "notes/sub");
     const rerenderedOverrideCheckbox = queryByDataset(tab.containerEl, "folderDeckModeOverride", "notes/sub");
+    const standaloneParentDeckCheckbox = queryByDataset(tab.containerEl, "folderStandaloneParentDeck", "notes/sub");
     const hint = queryByDataset(tab.containerEl, "folderDeckModeOverrideHint", "notes/sub");
     const inlineParent = (childLabel as unknown as { parent?: { children?: unknown[] } }).parent;
     expect(hint.classList.contains("ahs-settings-folder-override-hint")).toBe(true);
@@ -1778,7 +1786,67 @@ describe("PluginSettingTab", () => {
     expect(inlineParent?.children?.[0]).toBe(childLabel);
     expect(inlineParent?.children?.[1]).toBe(rerenderedOverrideCheckbox);
     expect(inlineParent?.children?.[2]).toBe(hint);
+    expect(inlineParent?.children?.[3]).toBe(standaloneParentDeckCheckbox);
     expect(hint.textContent).toContain("文件夹及文件名");
+  });
+
+  it("renders standalone parent deck controls for inherited checked non-root rows and hides them for top-level rows", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      scopeMode: "include",
+      includeFolders: ["notes"],
+      folderDeckMode: "folder",
+    });
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
+    await flushPromises();
+
+    expect(() => queryByDataset(tab.containerEl, "folderStandaloneParentDeck", "notes")).toThrow();
+
+    await queryByDataset(tab.containerEl, "folderToggle", "notes").trigger("click");
+
+    expect(queryByDataset(tab.containerEl, "folderStandaloneParentDeck", "notes/sub")).toBeDefined();
+  });
+
+  it("toggling a standalone parent deck only updates standaloneParentDeckFolders and shows the hint", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      scopeMode: "include",
+      includeFolders: ["notes/sub"],
+      folderDeckMode: "folder",
+    });
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
+    await flushPromises();
+
+    const standaloneParentDeckCheckbox = queryByDataset(tab.containerEl, "folderStandaloneParentDeck", "notes/sub");
+    standaloneParentDeckCheckbox.checked = true;
+    await standaloneParentDeckCheckbox.trigger("change");
+
+    expect(plugin.settings.includeFolders).toEqual(["notes/sub"]);
+    expect(plugin.settings.alternateFolderDeckModeFolders).toEqual([]);
+    expect(plugin.settings.standaloneParentDeckFolders).toEqual(["notes/sub"]);
+    expect(plugin.updateCalls).toContainEqual({
+      standaloneParentDeckFolders: ["notes/sub"],
+    });
+    const childLabel = queryByDataset(tab.containerEl, "folderPathLabel", "notes/sub");
+    const rerenderedOverrideCheckbox = queryByDataset(tab.containerEl, "folderDeckModeOverride", "notes/sub");
+    const rerenderedStandaloneParentDeckCheckbox = queryByDataset(tab.containerEl, "folderStandaloneParentDeck", "notes/sub");
+    const hint = queryByDataset(tab.containerEl, "folderStandaloneParentDeckHint", "notes/sub");
+    const inlineParent = (childLabel as unknown as { parent?: { children?: unknown[] } }).parent;
+    expect(hint.classList.contains("ahs-settings-folder-override-hint")).toBe(true);
+    expect((hint as unknown as { parent?: unknown }).parent).toBe(inlineParent);
+    expect(inlineParent?.children?.[0]).toBe(childLabel);
+    expect(inlineParent?.children?.[1]).toBe(rerenderedOverrideCheckbox);
+    expect(inlineParent?.children?.[2]).toBe(rerenderedStandaloneParentDeckCheckbox);
+    expect(inlineParent?.children?.[3]).toBe(hint);
+    expect(hint.textContent).toContain("单独的父牌组");
   });
 
   it("cleans folder deck mode overrides for an unchecked include folder and its descendants", async () => {
@@ -1789,6 +1857,7 @@ describe("PluginSettingTab", () => {
       includeFolders: ["notes"],
       folderDeckMode: "folder",
       alternateFolderDeckModeFolders: ["notes", "notes/sub"],
+      standaloneParentDeckFolders: ["notes", "notes/sub"],
     });
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
@@ -1802,6 +1871,25 @@ describe("PluginSettingTab", () => {
 
     expect(plugin.settings.includeFolders).toEqual([]);
     expect(plugin.settings.alternateFolderDeckModeFolders).toEqual([]);
+    expect(plugin.settings.standaloneParentDeckFolders).toEqual([]);
+  });
+
+  it("auto expands ancestors for saved standalone parent deck folders", async () => {
+    const plugin = new FakePlugin();
+    plugin.settings = normalizePluginSettings({
+      ...plugin.settings,
+      scopeMode: "include",
+      includeFolders: ["notes"],
+      folderDeckMode: "folder",
+      standaloneParentDeckFolders: ["notes/sub"],
+    });
+    const tab = new AnkiHeadingSyncSettingTab(plugin as never);
+
+    tab.display();
+    await queryByDataset(tab.containerEl, "settingsCardToggle", "scope").trigger("click");
+    await flushPromises();
+
+    expect(queryByDataset(tab.containerEl, "folderPathLabel", "notes/sub")).toBeDefined();
   });
 
   it("hides folder deck mode override controls when folder mapping is off", async () => {
@@ -1812,6 +1900,7 @@ describe("PluginSettingTab", () => {
       includeFolders: ["notes/sub"],
       folderDeckMode: "off",
       alternateFolderDeckModeFolders: ["notes/sub"],
+      standaloneParentDeckFolders: ["notes/sub"],
     });
     const tab = new AnkiHeadingSyncSettingTab(plugin as never);
 
@@ -1821,6 +1910,8 @@ describe("PluginSettingTab", () => {
 
     expect(() => queryByDataset(tab.containerEl, "folderDeckModeOverride", "notes/sub")).toThrow();
     expect(plugin.settings.alternateFolderDeckModeFolders).toEqual(["notes/sub"]);
+    expect(() => queryByDataset(tab.containerEl, "folderStandaloneParentDeck", "notes/sub")).toThrow();
+    expect(plugin.settings.standaloneParentDeckFolders).toEqual(["notes/sub"]);
   });
 
   it("shows an explicit warning when include mode has no selected folders", async () => {

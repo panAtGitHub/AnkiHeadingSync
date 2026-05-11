@@ -77,6 +77,20 @@ describe("DataJsonPluginConfigRepository", () => {
     expect(reloaded.alternateFolderDeckModeFolders).toEqual(["notes", "notes/sub"]);
   });
 
+  it("persists standalone parent deck folders across save and reload", async () => {
+    const store = new InMemoryPluginDataStore();
+    const repository = new DataJsonPluginConfigRepository(store);
+
+    await repository.save({
+      ...DEFAULT_SETTINGS,
+      standaloneParentDeckFolders: ["notes/sub", "notes/other"],
+    });
+
+    const reloaded = await repository.load();
+
+    expect(reloaded.standaloneParentDeckFolders).toEqual(["notes/sub", "notes/other"]);
+  });
+
   it("normalizes blank backlink labels on load and save", async () => {
     const store = new InMemoryPluginDataStore({
       settings: {

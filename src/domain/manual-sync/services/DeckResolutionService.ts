@@ -11,7 +11,10 @@ export class DeckResolutionService {
     private readonly deckNormalizationService = new DeckNormalizationService(),
   ) {}
 
-  resolve(card: IndexedCard, settings: Pick<PluginSettings, "defaultDeck" | "folderDeckMode" | "alternateFolderDeckModeFolders">): DeckResolutionResult {
+  resolve(
+    card: IndexedCard,
+    settings: Pick<PluginSettings, "defaultDeck" | "folderDeckMode" | "alternateFolderDeckModeFolders" | "standaloneParentDeckFolders">,
+  ): DeckResolutionResult {
     if (card.deckHint) {
       return {
         resolvedDeck: {
@@ -26,6 +29,7 @@ export class DeckResolutionService {
       card.filePath,
       settings.folderDeckMode,
       settings.alternateFolderDeckModeFolders,
+      settings.standaloneParentDeckFolders,
     );
     if (folderMapping.deck) {
       return {

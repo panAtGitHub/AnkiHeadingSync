@@ -205,6 +205,11 @@ export const zh = {
           folderAndFile: "当前全局为「文件夹」，勾选后此文件夹改用「文件夹及文件名」作为牌组名",
         },
       },
+      standaloneParentDeck: {
+        ariaLabel: "将 {{name}} 指定为单独的父牌组",
+        hint: "本文件夹指定为「单独的父牌组」",
+        title: "勾选后，此文件夹在 Anki 中会作为单独的父牌组起点",
+      },
     },
     cards: {
       cardTypes: {
@@ -388,6 +393,8 @@ export const zh = {
       excludeFoldersStrings: "排除文件夹列表中只能包含字符串。",
       alternateFolderDeckModeFoldersArray: "文件夹牌组模式覆盖列表必须是数组。",
       alternateFolderDeckModeFoldersStrings: "文件夹牌组模式覆盖列表中只能包含字符串。",
+      standaloneParentDeckFoldersArray: "单独父牌组文件夹列表必须是数组。",
+      standaloneParentDeckFoldersStrings: "单独父牌组文件夹列表中只能包含字符串。",
       ankiConnectUrlRequired: "AnkiConnect URL 不能为空。",
       ankiNoteTypeCacheArray: "Anki 笔记模板缓存必须是数组。",
       ankiNoteTypeCacheStrings: "Anki 笔记模板缓存中只能包含字符串。",

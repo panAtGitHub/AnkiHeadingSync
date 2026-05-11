@@ -90,15 +90,30 @@ describe("DeckResolutionService", () => {
       source: "folder",
     });
   });
+
+  it("starts folder mapping from a standalone parent deck folder when configured", () => {
+    const service = new DeckResolutionService();
+
+    const result = service.resolve(createIndexedCard({ filePath: "3Resources/Books/BookA/第1章.md" }), createDeckSettings({
+      folderDeckMode: "folder",
+      standaloneParentDeckFolders: ["3Resources/Books"],
+    }));
+
+    expect(result.resolvedDeck).toEqual({
+      value: "Books::BookA",
+      source: "folder",
+    });
+  });
 });
 
 function createDeckSettings(
-  overrides: Partial<Pick<PluginSettings, "defaultDeck" | "folderDeckMode" | "alternateFolderDeckModeFolders">> = {},
-): Pick<PluginSettings, "defaultDeck" | "folderDeckMode" | "alternateFolderDeckModeFolders"> {
+  overrides: Partial<Pick<PluginSettings, "defaultDeck" | "folderDeckMode" | "alternateFolderDeckModeFolders" | "standaloneParentDeckFolders">> = {},
+): Pick<PluginSettings, "defaultDeck" | "folderDeckMode" | "alternateFolderDeckModeFolders" | "standaloneParentDeckFolders"> {
   return {
     defaultDeck: "Default",
     folderDeckMode: "folder-and-file",
     alternateFolderDeckModeFolders: [],
+    standaloneParentDeckFolders: [],
     ...overrides,
   };
 }

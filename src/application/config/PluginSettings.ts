@@ -61,6 +61,7 @@ export interface PluginSettings {
   includeFolders: string[];
   excludeFolders: string[];
   alternateFolderDeckModeFolders: string[];
+  standaloneParentDeckFolders: string[];
   addObsidianBacklink: boolean;
   obsidianBacklinkLabel: string;
   obsidianBacklinkPlacement: ObsidianBacklinkPlacement;
@@ -91,6 +92,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   includeFolders: [],
   excludeFolders: [],
   alternateFolderDeckModeFolders: [],
+  standaloneParentDeckFolders: [],
   addObsidianBacklink: true,
   obsidianBacklinkLabel: DEFAULT_OBSIDIAN_BACKLINK_LABEL,
   obsidianBacklinkPlacement: "answer-last-line",
@@ -147,6 +149,7 @@ export function mergePluginSettings(settings?: Partial<PluginSettings> | null): 
     includeFolders: partialSettings.includeFolders ?? DEFAULT_SETTINGS.includeFolders,
     excludeFolders: partialSettings.excludeFolders ?? DEFAULT_SETTINGS.excludeFolders,
     alternateFolderDeckModeFolders: partialSettings.alternateFolderDeckModeFolders ?? DEFAULT_SETTINGS.alternateFolderDeckModeFolders,
+    standaloneParentDeckFolders: partialSettings.standaloneParentDeckFolders ?? DEFAULT_SETTINGS.standaloneParentDeckFolders,
   });
 }
 
@@ -208,6 +211,7 @@ export function validatePluginSettings(settings: PluginSettings): void {
   validateFolderList(settings.includeFolders, "include");
   validateFolderList(settings.excludeFolders, "exclude");
   validateFolderList(settings.alternateFolderDeckModeFolders, "alternateFolderDeckMode");
+  validateFolderList(settings.standaloneParentDeckFolders, "standaloneParentDeck");
 
   if (!settings.ankiConnectUrl.trim()) {
     throw new PluginUserError("errors.settings.ankiConnectUrlRequired");
@@ -260,30 +264,32 @@ function validateAnkiModelFieldCache(ankiModelFieldCache: AnkiModelFieldCache): 
   }
 }
 
-function validateFolderList(folderList: string[], label: "include" | "exclude" | "alternateFolderDeckMode"): void {
+function validateFolderList(folderList: string[], label: "include" | "exclude" | "alternateFolderDeckMode" | "standaloneParentDeck"): void {
   if (!Array.isArray(folderList)) {
-    if (label === "include") {
-      throw new PluginUserError("errors.settings.includeFoldersArray");
+    switch (label) {
+      case "include":
+        throw new PluginUserError("errors.settings.includeFoldersArray");
+      case "exclude":
+        throw new PluginUserError("errors.settings.excludeFoldersArray");
+      case "alternateFolderDeckMode":
+        throw new PluginUserError("errors.settings.alternateFolderDeckModeFoldersArray");
+      case "standaloneParentDeck":
+        throw new PluginUserError("errors.settings.standaloneParentDeckFoldersArray");
     }
-
-    if (label === "exclude") {
-      throw new PluginUserError("errors.settings.excludeFoldersArray");
-    }
-
-    throw new PluginUserError("errors.settings.alternateFolderDeckModeFoldersArray");
   }
 
   for (const folder of folderList) {
     if (typeof folder !== "string") {
-      if (label === "include") {
-        throw new PluginUserError("errors.settings.includeFoldersStrings");
+      switch (label) {
+        case "include":
+          throw new PluginUserError("errors.settings.includeFoldersStrings");
+        case "exclude":
+          throw new PluginUserError("errors.settings.excludeFoldersStrings");
+        case "alternateFolderDeckMode":
+          throw new PluginUserError("errors.settings.alternateFolderDeckModeFoldersStrings");
+        case "standaloneParentDeck":
+          throw new PluginUserError("errors.settings.standaloneParentDeckFoldersStrings");
       }
-
-      if (label === "exclude") {
-        throw new PluginUserError("errors.settings.excludeFoldersStrings");
-      }
-
-      throw new PluginUserError("errors.settings.alternateFolderDeckModeFoldersStrings");
     }
   }
 }
