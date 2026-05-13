@@ -118,8 +118,7 @@
 	display: grid;
 	grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.75fr) minmax(220px, 0.95fr);
 	align-items: center;
-	column-gap: 16px;
-	row-gap: 8px;
+	gap: 8px 16px;
 	overflow: visible;
 	width: 100%;
 }
@@ -129,8 +128,7 @@
 	grid-column: 1 / -1;
 	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) max-content;
 	align-items: center;
-	column-gap: 16px;
-	row-gap: 8px;
+	gap: 8px 16px;
 	width: 100%;
 }
 
@@ -202,7 +200,7 @@
 	display: grid;
 	grid-template-columns: 24px 24px minmax(0, 1fr);
 	align-items: center;
-	column-gap: 0;
+	gap: 0;
 	width: 100%;
 	min-height: 28px;
 	box-sizing: border-box;
