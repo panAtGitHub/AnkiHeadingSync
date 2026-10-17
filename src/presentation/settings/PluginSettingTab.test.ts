@@ -704,7 +704,7 @@ type TestActiveWindow = {
   clearTimeout: (timer: number) => void;
 };
 
-type TestWindow = {
+type TestWindow = TestActiveWindow & {
   activeWindow: TestActiveWindow;
   ResizeObserver: typeof ResizeObserver;
 };
@@ -781,6 +781,7 @@ function createTestWindow(): TestWindow {
   };
 
   return {
+    ...activeWindow,
     activeWindow,
     ResizeObserver: FakeResizeObserver as unknown as typeof ResizeObserver,
   };

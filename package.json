@@ -1,6 +1,6 @@
 {
   "name": "obsidian-anki-heading-sync",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Focused heading-based Markdown to Anki sync plugin.",
   "author": "Dusk",
   "main": "dist/plugin/main.js",

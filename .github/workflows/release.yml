@@ -1,0 +1,47 @@
+name: Build, attest, and publish release
+
+on:
+  push:
+    tags:
+      - '1.*'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Validate release version
+        run: node -e 'const fs=require("fs"); const m=require("./manifest.json"); const p=require("./package.json"); if(process.env.GITHUB_REF_NAME!==m.version || m.version!==p.version || require("./versions.json")[m.version]!==m.minAppVersion) process.exit(1);'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - name: Restore unchanged example assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download 1.0.5 --pattern 'dead-sea-example.md' --pattern 'dead-sea-example.apkg' --dir dist
+          sha256sum --check scripts/example-checksums.sha256
+      - name: Attest runtime plugin files
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: |
+            dist/plugin/main.js
+            dist/plugin/manifest.json
+            dist/plugin/styles.css
+      - name: Publish the verified assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Anki Heading Sync $GITHUB_REF_NAME" --notes-file "docs/release-$GITHUB_REF_NAME.md" dist/plugin/main.js dist/plugin/manifest.json dist/plugin/styles.css dist/dead-sea-example.md dist/dead-sea-example.apkg

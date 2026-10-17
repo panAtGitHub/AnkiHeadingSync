@@ -1885,15 +1885,14 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private scheduleDebouncedTextSave(key: string, value: string, saveAction: (draftValue: string) => Promise<void>): void {
-    const activeWindow = window.activeWindow;
     this.textDraftValues.set(key, value);
 
     const pendingTimer = this.debouncedTextSaves.get(key);
     if (pendingTimer) {
-      activeWindow.clearTimeout(pendingTimer.timer);
+      window.clearTimeout(pendingTimer.timer);
     }
 
-    const timer = activeWindow.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       void this.flushDebouncedTextSave(key);
     }, TEXT_SAVE_DEBOUNCE_MS);
 
@@ -1901,13 +1900,12 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   }
 
   private async flushDebouncedTextSave(key: string): Promise<void> {
-    const activeWindow = window.activeWindow;
     const pendingSave = this.debouncedTextSaves.get(key);
     if (!pendingSave) {
       return;
     }
 
-    activeWindow.clearTimeout(pendingSave.timer);
+    window.clearTimeout(pendingSave.timer);
     this.debouncedTextSaves.delete(key);
     await pendingSave.saveAction(this.textDraftValues.get(key) ?? "");
   }
