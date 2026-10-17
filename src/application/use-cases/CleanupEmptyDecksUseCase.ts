@@ -7,11 +7,11 @@ export class CleanupEmptyDecksUseCase {
 
   async listCandidates(): Promise<string[]> {
     const deckNames = await this.ankiGateway.listDeckNames();
-    const leafDeckNames = collectLeafDeckNames(deckNames);
-    const stats = await this.ankiGateway.getDeckStats(leafDeckNames);
+    const stats = await this.ankiGateway.getDeckStats(deckNames);
+    const counts = new Map(stats.map((stat) => [stat.deckName, stat.noteCount]));
 
     return stats
-      .filter((stat) => stat.noteCount === 0)
+      .filter((stat) => deckNames.filter((name) => isInDeckTree(name, stat.deckName)).every((name) => counts.get(name) === 0))
       .map((stat) => stat.deckName)
       .sort((left, right) => left.localeCompare(right));
   }
@@ -28,19 +28,27 @@ export class CleanupEmptyDecksUseCase {
       };
     }
 
-    const [currentDeckNames, currentDeckStats] = await Promise.all([
-      this.ankiGateway.listDeckNames(),
-      this.ankiGateway.getDeckStats(uniqueSelectedDeckNames),
-    ]);
-
-    const currentLeafDeckNameSet = new Set(collectLeafDeckNames(currentDeckNames));
-    const currentDeckStatsByName = new Map(currentDeckStats.map((stat) => [stat.deckName, stat.noteCount]));
-    const deletableDeckNames = uniqueSelectedDeckNames.filter((deckName) => currentLeafDeckNameSet.has(deckName) && currentDeckStatsByName.get(deckName) === 0);
-    const skippedDeckNames = uniqueSelectedDeckNames.filter((deckName) => !currentLeafDeckNameSet.has(deckName) || currentDeckStatsByName.get(deckName) !== 0);
+    const candidateSet = new Set(candidateDeckNames);
+    const skippedDeckNames: string[] = [];
     const deletedDeckNames: string[] = [];
 
-    for (const deckName of deletableDeckNames) {
+    // Delete children first. A remaining child (unselected, new, or failed) blocks
+    // its parent, because Anki's deleteDecks also deletes descendants.
+    const orderedNames = [...uniqueSelectedDeckNames].sort((left, right) => right.split("::").length - left.split("::").length);
+    for (const deckName of orderedNames) {
       try {
+        const currentNames = await this.ankiGateway.listDeckNames();
+        const treeNames = currentNames.filter((name) => isInDeckTree(name, deckName));
+        if (!candidateSet.has(deckName) || !currentNames.includes(deckName)
+          || treeNames.some((name) => name !== deckName)) {
+          skippedDeckNames.push(deckName);
+          continue;
+        }
+        const stats = await this.ankiGateway.getDeckStats(treeNames);
+        if (stats.find((stat) => stat.deckName === deckName)?.noteCount !== 0) {
+          skippedDeckNames.push(deckName);
+          continue;
+        }
         await this.ankiGateway.deleteDecks([deckName]);
         deletedDeckNames.push(deckName);
       } catch {
@@ -58,6 +66,6 @@ export class CleanupEmptyDecksUseCase {
   }
 }
 
-function collectLeafDeckNames(deckNames: string[]): string[] {
-  return deckNames.filter((deckName) => !deckNames.some((candidate) => candidate !== deckName && candidate.startsWith(`${deckName}::`)));
+function isInDeckTree(name: string, root: string): boolean {
+  return name === root || name.startsWith(`${root}::`);
 }

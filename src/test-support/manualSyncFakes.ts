@@ -335,6 +335,13 @@ export class FakeManualSyncAnkiGateway implements AnkiGroupGateway {
 
   deleteDecks(deckNames: string[]): Promise<void> {
     this.deletedDecks.push(deckNames);
+    const isDeleted = (name: string): boolean => deckNames.some((root) => name === root || name.startsWith(`${root}::`));
+    if (this.listedDeckNames) {
+      this.listedDeckNames = this.listedDeckNames.filter((name) => !isDeleted(name));
+    }
+    for (const name of this.deckStatsByName.keys()) {
+      if (isDeleted(name)) this.deckStatsByName.delete(name);
+    }
     return Promise.resolve();
   }
 

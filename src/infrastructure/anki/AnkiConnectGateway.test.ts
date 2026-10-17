@@ -364,6 +364,28 @@ describe("AnkiConnectGateway", () => {
     });
   });
 
+  it("isolates unavailable deck counts and preserves valid empty stats", async () => {
+    requestUrlMock.mockResolvedValueOnce({ json: { error: null, result: { System: 1, Empty: 2 } } })
+      .mockResolvedValueOnce({ json: { error: "Deck counts unavailable.", result: null } })
+      .mockResolvedValueOnce({ json: { error: "Deck counts unavailable.", result: null } })
+      .mockResolvedValueOnce({ json: { error: null, result: { "2": { total_in_deck: 0 } } } });
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    expect(await gateway.getDeckStats(["System", "Empty"])).toEqual([
+      { deckName: "System", noteCount: undefined },
+      { deckName: "Empty", noteCount: 0 },
+    ]);
+    expect(getRequestBody(2)).toMatchObject({ params: { decks: ["System"] } });
+    expect(getRequestBody(3)).toMatchObject({ params: { decks: ["Empty"] } });
+  });
+
+  it("propagates connection errors instead of treating all decks as unknown", async () => {
+    requestUrlMock.mockResolvedValueOnce({ json: { error: null, result: { Empty: 2 } } })
+      .mockRejectedValueOnce(new Error("Connection refused"));
+    const gateway = new AnkiConnectGateway(() => "http://127.0.0.1:8765");
+    await expect(gateway.getDeckStats(["Empty"])).rejects.toThrow("Connection refused");
+    expect(requestUrlMock).toHaveBeenCalledTimes(2);
+  });
+
   it("does not treat missing requested deck stats as empty", async () => {
     requestUrlMock
       .mockResolvedValueOnce({

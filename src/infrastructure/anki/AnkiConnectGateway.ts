@@ -150,14 +150,30 @@ export class AnkiConnectGateway implements AnkiGroupGateway {
     }
 
     const deckNamesAndIds = await this.invoke<Record<string, number>>("deckNamesAndIds", {});
-    const rawStats = await this.invoke<unknown>("getDeckStats", {
-      decks: deckNames,
-    });
+    const rawStats = await this.readDeckStats(deckNames);
 
     return deckNames.map((deckName) => ({
       deckName,
       noteCount: extractDeckNoteCount(rawStats, deckNamesAndIds[deckName]),
     }));
+  }
+
+  private async readDeckStats(deckNames: string[]): Promise<unknown> {
+    try {
+      return await this.invoke<unknown>("getDeckStats", { decks: deckNames });
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== "Deck counts unavailable.") {
+        throw error;
+      }
+      // Isolate unavailable deck counts without treating them as zero.
+      if (deckNames.length === 1) {
+        return {};
+      }
+      const middle = Math.floor(deckNames.length / 2);
+      const left = await this.readDeckStats(deckNames.slice(0, middle));
+      const right = await this.readDeckStats(deckNames.slice(middle));
+      return { ...(left as Record<string, unknown>), ...(right as Record<string, unknown>) };
+    }
   }
 
   async getNoteSummaries(noteIds: number[]): Promise<AnkiNoteSummary[]> {

@@ -1,4 +1,4 @@
-import { Plugin } from "obsidian";
+import { addIcon, Plugin } from "obsidian";
 
 import { DEFAULT_SETTINGS, normalizePluginSettings, type PluginSettings } from "@/application/config/PluginSettings";
 import type { NoteModelDetails } from "@/application/dto/NoteModelDetails";
@@ -58,6 +58,14 @@ export default class AnkiHeadingSyncPlugin extends Plugin {
     this.cleanupEmptyDecksUseCase = new CleanupEmptyDecksUseCase(this.ankiGateway);
 
     registerCommands(this);
+    addIcon("anki-heading-sync-vault", `<svg viewBox="0 0 24 24" width="100" height="100" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12.5 20H5.7a2.2 2.2 0 0 1-2.2-2.2V4.2A2.2 2.2 0 0 1 5.7 2h9.1A2.2 2.2 0 0 1 17 4.2v9.1"/>
+      <path d="m10.25 5.4 1.1 2.45 2.65.3-1.95 1.8.5 2.6-2.3-1.3-2.3 1.3.5-2.6-1.95-1.8 2.65-.3Z"/>
+      <path d="M14 16.7a3.7 3.7 0 0 1 6.3-1.15L21.5 17M21.5 14.5V17H19M21 20.3a3.7 3.7 0 0 1-6.3 1.15L13.5 20M13.5 22.5V20H16"/>
+    </svg>`);
+    this.addRibbonIcon("anki-heading-sync-vault", t("commands.syncVaultToAnki"), () => {
+      void this.runSyncVault();
+    });
     this.addSettingTab(new AnkiHeadingSyncSettingTab(this));
   }
 

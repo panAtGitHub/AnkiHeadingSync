@@ -1,10 +1,63 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { FakeManualSyncAnkiGateway } from "@/test-support/manualSyncFakes";
 
 import { CleanupEmptyDecksUseCase } from "./CleanupEmptyDecksUseCase";
 
 describe("CleanupEmptyDecksUseCase", () => {
+  it("preserves ancestors when deleting a child fails", async () => {
+    const gateway = new FakeManualSyncAnkiGateway();
+    gateway.listedDeckNames = ["Root", "Root::Child"];
+    for (const name of gateway.listedDeckNames) gateway.deckStatsByName.set(name, { deckName: name, noteCount: 0 });
+    const useCase = new CleanupEmptyDecksUseCase(gateway);
+    const candidates = await useCase.listCandidates();
+    const deletion = vi.spyOn(gateway, "deleteDecks").mockRejectedValue(new Error("Deletion failed"));
+    const result = await useCase.execute(candidates, candidates);
+    expect(result.deletedCount).toBe(0);
+    expect(result.skippedDeckNames).toEqual(["Root::Child", "Root"]);
+    expect(deletion).toHaveBeenCalledExactlyOnceWith(["Root::Child"]);
+  });
+
+  it("rechecks a parent after children are deleted and preserves newly added cards", async () => {
+    const gateway = new FakeManualSyncAnkiGateway();
+    gateway.listedDeckNames = ["Root", "Root::Child"];
+    for (const name of gateway.listedDeckNames) gateway.deckStatsByName.set(name, { deckName: name, noteCount: 0 });
+    const useCase = new CleanupEmptyDecksUseCase(gateway);
+    const candidates = await useCase.listCandidates();
+    const originalDelete = gateway.deleteDecks.bind(gateway);
+    vi.spyOn(gateway, "deleteDecks").mockImplementation(async (names) => {
+      await originalDelete(names);
+      gateway.deckStatsByName.set("Root", { deckName: "Root", noteCount: 1 });
+    });
+    const result = await useCase.execute(candidates, candidates);
+    expect(result.deletedDeckNames).toEqual(["Root::Child"]);
+    expect(result.skippedDeckNames).toEqual(["Root"]);
+  });
+
+  it("preserves parents when a child is unselected, unknown, or newly added", async () => {
+    for (const scenario of ["unselected", "unknown", "new"] as const) {
+      const gateway = new FakeManualSyncAnkiGateway();
+      gateway.listedDeckNames = ["Root", "Root::Child"];
+      gateway.deckStatsByName.set("Root", { deckName: "Root", noteCount: 0 });
+      gateway.deckStatsByName.set("Root::Child", { deckName: "Root::Child", noteCount: 0 });
+      const useCase = new CleanupEmptyDecksUseCase(gateway);
+      const candidates = await useCase.listCandidates();
+      if (scenario === "unknown") gateway.deckStatsByName.delete("Root::Child");
+      if (scenario === "new") gateway.listedDeckNames.push("Root::New");
+      const result = await useCase.execute(scenario === "unselected" ? ["Root"] : candidates, candidates);
+      expect(result.deletedDeckNames).not.toContain("Root");
+      expect(result.skippedDeckNames).toContain("Root");
+    }
+  });
+
+  it("does not list a parent with unknown descendant stats", async () => {
+    const gateway = new FakeManualSyncAnkiGateway();
+    gateway.listedDeckNames = ["Root", "Root::Unknown", "Root::Empty"];
+    gateway.deckStatsByName.set("Root", { deckName: "Root", noteCount: 0 });
+    gateway.deckStatsByName.set("Root::Empty", { deckName: "Root::Empty", noteCount: 0 });
+    expect(await new CleanupEmptyDecksUseCase(gateway).listCandidates()).toEqual(["Root::Empty"]);
+  });
+
   it("detects empty decks from Anki stats", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     ankiGateway.listedDeckNames = ["Busy", "Empty", "Another::Empty"];
@@ -83,7 +136,7 @@ describe("CleanupEmptyDecksUseCase", () => {
     expect(candidates).toEqual(["Empty A", "Empty B"]);
   });
 
-  it("excludes parent decks and keeps only empty leaf decks", async () => {
+  it("excludes empty parents with non-empty descendants", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     ankiGateway.listedDeckNames = [
       "999, 试验卡片",
@@ -105,23 +158,25 @@ describe("CleanupEmptyDecksUseCase", () => {
     ]);
   });
 
-  it("does not delete a parent deck even if its direct count is zero", async () => {
+  it("deletes a complete empty hierarchy in one run, children first", async () => {
     const ankiGateway = new FakeManualSyncAnkiGateway();
     ankiGateway.listedDeckNames = [
       "Parent",
       "Parent::Empty",
+      "Parent::Empty::Leaf",
     ];
     ankiGateway.deckStatsByName.set("Parent", { deckName: "Parent", noteCount: 0 });
     ankiGateway.deckStatsByName.set("Parent::Empty", { deckName: "Parent::Empty", noteCount: 0 });
+    ankiGateway.deckStatsByName.set("Parent::Empty::Leaf", { deckName: "Parent::Empty::Leaf", noteCount: 0 });
     const useCase = new CleanupEmptyDecksUseCase(ankiGateway);
 
     const candidates = await useCase.listCandidates();
-    const result = await useCase.execute(["Parent", "Parent::Empty"], candidates);
+    const result = await useCase.execute(candidates, candidates);
 
-    expect(candidates).toEqual(["Parent::Empty"]);
-    expect(result.deletedDeckNames).toEqual(["Parent::Empty"]);
-    expect(result.skippedDeckNames).toEqual(["Parent"]);
-    expect(ankiGateway.deletedDecks).toEqual([["Parent::Empty"]]);
+    expect(candidates).toEqual(["Parent", "Parent::Empty", "Parent::Empty::Leaf"]);
+    expect(result.deletedDeckNames).toEqual(["Parent::Empty::Leaf", "Parent::Empty", "Parent"]);
+    expect(result.skippedDeckNames).toEqual([]);
+    expect(ankiGateway.deletedDecks).toEqual([["Parent::Empty::Leaf"], ["Parent::Empty"], ["Parent"]]);
   });
 
   it("excludes intermediate parent decks in deeper hierarchies", async () => {

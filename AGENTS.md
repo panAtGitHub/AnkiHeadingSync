@@ -2,7 +2,13 @@
 
 ## Obsidian Plugin Sync Target
 
-When syncing this plugin into the user's Obsidian vault, use this exact plugin directory:
+After plugin changes, build and sync the runtime files for local debugging with `npm run build:obsidian`.
+
+On the current Windows machine, use this exact plugin directory:
+
+`C:\iWork\obsidian\.obsidian\plugins\anki-heading-sync`
+
+On macOS, use this exact plugin directory:
 
 `/Users/panxiaorong/Library/Mobile Documents/iCloud~md~obsidian/Documents/obsidian/.obsidian/plugins/Anki Heading Sync`
 

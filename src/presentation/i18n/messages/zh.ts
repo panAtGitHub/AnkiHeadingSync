@@ -317,7 +317,7 @@ export const zh = {
   modal: {
     emptyDeck: {
       title: "清理空牌组",
-      description: "勾选要删除的空牌组。只有删除时仍为空的牌组会被真正删除。",
+      description: "勾选要删除的空牌组。全选可一次清理整个空层级；父牌组仅在所有子牌组已删除且自身仍为空时删除。",
       selectAll: "全选全部",
       clearAll: "全部不选",
       invert: "反选",

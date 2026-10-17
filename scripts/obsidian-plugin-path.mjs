@@ -1,7 +1,9 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const DEFAULT_PLUGIN_DIR = join(
+const DEFAULT_PLUGIN_DIR = process.platform === "win32"
+  ? "C:\\iWork\\obsidian\\.obsidian\\plugins\\anki-heading-sync"
+  : join(
   homedir(),
   "Library",
   "Mobile Documents",

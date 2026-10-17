@@ -1,16 +1,20 @@
 # Build Workflow
 
-`npm run build` deploys the production plugin package directly into the local Obsidian plugin directory:
+`npm run build` builds the production plugin package into `dist/plugin/` and updates the repository's `main.js`.
 
-- `/Users/panxiaorong/Library/Mobile Documents/iCloud~md~obsidian/Documents/obsidian/.obsidian/plugins/Anki Heading Sync`
+After plugin changes, run `npm run build:obsidian` to build and copy the runtime files into the local Obsidian vault for debugging.
 
-The build only overwrites plugin package files:
+Default plugin directories:
+
+- Windows: `C:\iWork\obsidian\.obsidian\plugins\anki-heading-sync`
+- macOS: `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/obsidian/.obsidian/plugins/Anki Heading Sync`
+
+Set `OBSIDIAN_PLUGIN_DIR` to override the target with a full plugin directory path.
+
+The sync only copies these files from `dist/plugin/`:
 
 - `main.js`
 - `manifest.json`
-- `versions.json`
-- `README.md`
+- `styles.css` (when present)
 
-The build does not delete or overwrite `data.json`.
-
-This path is intentionally hard-coded for this machine and is not a portable multi-machine build configuration.
+The sync does not delete or overwrite `data.json`. Reload the plugin or restart Obsidian after syncing to load the updated code.

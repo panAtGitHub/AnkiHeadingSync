@@ -319,7 +319,7 @@ export const en = {
   modal: {
     emptyDeck: {
       title: "Clean up empty decks",
-      description: "Select the empty decks to delete. A deck is deleted only if it is still empty at deletion time.",
+      description: "Select the empty decks to delete. Select all to clean up entire empty hierarchies in one run. Parents are deleted only after all children are removed and they are still empty.",
       selectAll: "Select all",
       clearAll: "Clear all",
       invert: "Invert selection",

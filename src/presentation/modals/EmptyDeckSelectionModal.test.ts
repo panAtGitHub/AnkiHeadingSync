@@ -211,7 +211,7 @@ describe("EmptyDeckSelectionModal", () => {
     const buttons = getFooterButtons(contentEl);
 
     expect(contentEl.elements.map((element) => element.textContent)).toContain("Clean up empty decks");
-    expect(contentEl.elements.map((element) => element.textContent)).toContain("Select the empty decks to delete. A deck is deleted only if it is still empty at deletion time.");
+    expect(contentEl.elements.map((element) => element.textContent)).toContain("Select the empty decks to delete. Select all to clean up entire empty hierarchies in one run. Parents are deleted only after all children are removed and they are still empty.");
     expect(buttons.map((button) => button.text)).toEqual([
       "Select all",
       "Clear all",
@@ -333,7 +333,7 @@ describe("EmptyDeckSelectionModal", () => {
     const toggle = getDeckToggles(contentEl)[0];
 
     expect(contentEl.elements.map((element) => element.textContent)).toContain("清理空牌组");
-    expect(contentEl.elements.map((element) => element.textContent)).toContain("勾选要删除的空牌组。只有删除时仍为空的牌组会被真正删除。");
+    expect(contentEl.elements.map((element) => element.textContent)).toContain("勾选要删除的空牌组。全选可一次清理整个空层级；父牌组仅在所有子牌组已删除且自身仍为空时删除。");
     expect(getFooterCountText(contentEl)).toBe("已选 0 / 共 2 个空牌组");
 
     await toggle?.triggerChange(true);
