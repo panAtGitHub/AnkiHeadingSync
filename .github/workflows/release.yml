@@ -44,4 +44,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Anki Heading Sync $GITHUB_REF_NAME" --notes-file "docs/release-$GITHUB_REF_NAME.md" dist/plugin/main.js dist/plugin/manifest.json dist/plugin/styles.css dist/dead-sea-example.md dist/dead-sea-example.apkg
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file "docs/release-$GITHUB_REF_NAME.md" dist/plugin/main.js dist/plugin/manifest.json dist/plugin/styles.css dist/dead-sea-example.md dist/dead-sea-example.apkg

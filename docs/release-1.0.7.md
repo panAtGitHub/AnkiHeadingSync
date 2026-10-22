@@ -1,5 +1,3 @@
-# Anki Heading Sync 1.0.7
-
 - Preserve the settings pane position when controls refresh or save.
 - Refresh the folder list in place while keeping its selection and expansion state.
 - Align card type controls and give native form controls consistent borders and sizing.
