@@ -102,15 +102,49 @@
 }
 
 .anki-heading-sync-settings .ahs-settings-heading-select {
-	width: 88px;
+	width: 118px;
+	text-align: left;
+	text-align-last: left;
 }
 
 .anki-heading-sync-settings .ahs-settings-marker-input {
 	width: 220px;
+	box-sizing: border-box;
 }
 
 .anki-heading-sync-settings .ahs-settings-muted-text {
 	margin: 0;
+	color: var(--text-muted);
+}
+
+.anki-heading-sync-settings .ahs-settings-form-select,
+.anki-heading-sync-settings .ahs-settings-marker-input {
+	box-sizing: border-box;
+	height: var(--input-height, 36px);
+	min-height: var(--input-height, 36px);
+}
+
+.anki-heading-sync-settings .ahs-settings-form-select {
+	padding: 6px 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	background-color: var(--background-modifier-form-field, var(--background-primary));
+	color: var(--text-normal);
+	text-align: left;
+	text-align-last: left;
+}
+
+.anki-heading-sync-settings .ahs-settings-form-select:hover:not(:disabled) {
+	border-color: var(--background-modifier-border-hover);
+}
+
+.anki-heading-sync-settings .ahs-settings-form-select:focus-visible {
+	border-color: var(--background-modifier-border-focus, var(--interactive-accent));
+	outline: 2px solid var(--background-modifier-border-focus, var(--interactive-accent));
+	outline-offset: 1px;
+}
+
+.anki-heading-sync-settings .ahs-settings-form-select:disabled {
 	color: var(--text-muted);
 }
 
@@ -126,10 +160,20 @@
 .anki-heading-sync-settings .ahs-settings-qa-group-pair-row {
 	display: grid;
 	grid-column: 1 / -1;
-	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) max-content;
+	grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.75fr) minmax(220px, 0.95fr);
 	align-items: center;
 	gap: 8px 16px;
 	width: 100%;
+}
+
+.anki-heading-sync-settings .ahs-settings-qa-group-answer-slot {
+	grid-column: 2 / -1;
+}
+
+.anki-heading-sync-settings .ahs-settings-qa-group-slot-summary {
+	flex: 0 0 auto;
+	color: var(--text-muted);
+	white-space: nowrap;
 }
 
 .anki-heading-sync-settings .ahs-settings-grid-full {
@@ -305,8 +349,13 @@
 	overflow: visible;
 }
 
+.anki-heading-sync-settings .ahs-settings-cloze-main-field-slot {
+	gap: 6px;
+}
+
 .anki-heading-sync-settings .ahs-settings-grid-control-label {
 	flex: 0 0 auto;
+	text-align: left;
 	white-space: nowrap;
 }
 
@@ -336,12 +385,25 @@
 	max-width: 100%;
 }
 
-.anki-heading-sync-settings select.ahs-settings-fluid-control,
+.anki-heading-sync-settings select.ahs-settings-fluid-control {
+	box-sizing: border-box;
+	width: 180px;
+	max-width: 100%;
+	min-width: 0;
+	margin: 1px;
+	text-align: left;
+}
+
+.anki-heading-sync-settings .ahs-settings-cloze-main-field-slot select.ahs-settings-fluid-control {
+	width: 220px;
+	max-width: none;
+	margin: 0;
+}
+
 .anki-heading-sync-settings input.ahs-settings-fluid-control {
 	box-sizing: border-box;
 	width: calc(100% - 2px);
 	max-width: calc(100% - 2px);
 	min-width: 0;
 	margin: 1px;
-	overflow: visible;
 }

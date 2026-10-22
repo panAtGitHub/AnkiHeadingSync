@@ -12,7 +12,7 @@ const DEFAULT_PLUGIN_DIR = process.platform === "win32"
   "obsidian",
   ".obsidian",
   "plugins",
-  "Anki Heading Sync",
+  "anki-heading-sync",
 );
 
 export const OBSIDIAN_PLUGIN_DIR = process.env.OBSIDIAN_PLUGIN_DIR?.trim() || DEFAULT_PLUGIN_DIR;

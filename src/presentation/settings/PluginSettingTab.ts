@@ -205,37 +205,44 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       return;
     }
 
-    const expanded = this.expandedCardIds.has(cardId);
-    shell.headerEl.textContent = `${expanded ? "▾" : "▸"} ${this.getCardTitle(cardId)}`;
-    shell.headerEl.setAttr("aria-expanded", String(expanded));
-    setClassEnabled(shell.bodyEl, SETTINGS_CARD_BODY_HIDDEN_CLASS, !expanded);
-    shell.bodyEl.empty();
+    const previousScrollTop = this.containerEl.scrollTop;
 
-    if (!expanded) {
-      return;
+    try {
+      const expanded = this.expandedCardIds.has(cardId);
+      shell.headerEl.textContent = `${expanded ? "▾" : "▸"} ${this.getCardTitle(cardId)}`;
+      shell.headerEl.setAttr("aria-expanded", String(expanded));
+      setClassEnabled(shell.bodyEl, SETTINGS_CARD_BODY_HIDDEN_CLASS, !expanded);
+      shell.bodyEl.empty();
+
+      if (!expanded) {
+        return;
+      }
+
+      if (cardId === "card-types") {
+        this.renderCardTypesCard(shell.bodyEl);
+        return;
+      }
+
+      if (cardId === "sync-content") {
+        this.renderSyncContentCard(shell.bodyEl);
+        return;
+      }
+
+      if (cardId === "scope") {
+        this.renderScopeCard(shell.bodyEl);
+        return;
+      }
+
+      if (cardId === "deck") {
+        this.renderDeckCard(shell.bodyEl);
+        return;
+      }
+
+      this.renderCommandsCard(shell.bodyEl);
+    } finally {
+      // Rebuilding a card detaches its focused control; preserve the settings pane position.
+      this.containerEl.scrollTop = previousScrollTop;
     }
-
-    if (cardId === "card-types") {
-      this.renderCardTypesCard(shell.bodyEl);
-      return;
-    }
-
-    if (cardId === "sync-content") {
-      this.renderSyncContentCard(shell.bodyEl);
-      return;
-    }
-
-    if (cardId === "scope") {
-      this.renderScopeCard(shell.bodyEl);
-      return;
-    }
-
-    if (cardId === "deck") {
-      this.renderDeckCard(shell.bodyEl);
-      return;
-    }
-
-    this.renderCommandsCard(shell.bodyEl);
   }
 
   private observePageHeaderHeight(pageHeaderEl: HTMLElement): void {
@@ -360,6 +367,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const noteTypeSelect = this.createSelect(noteTypeGroup, `card-type-note-type:${configId}`);
     noteTypeSelect.dataset.cardTypeNoteType = configId;
     this.applyFluidEllipsis(noteTypeSelect);
+    this.appendOption(noteTypeSelect, "", t("settings.cards.cardTypes.noteTypePlaceholder"));
     for (const noteModel of this.getSelectableNoteModels(config.noteType)) {
       this.appendOption(noteTypeSelect, noteModel, noteModel);
     }
@@ -381,9 +389,18 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const mapping = this.getCurrentMappingForConfig(configId);
     if (configId === "cloze") {
       const mainFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.mainField"));
+      const mainFieldSlot = mainFieldGroup.parentElement;
+      if (mainFieldSlot) {
+        addClasses(mainFieldSlot, "ahs-settings-cloze-main-field-slot");
+        const markerInput = containerEl.parentElement?.querySelector<HTMLInputElement>(`[data-card-type-marker="${configId}"]`);
+        if (markerInput) {
+          this.alignGridControlLabelToInlineControl(mainFieldSlot, markerInput);
+        }
+      }
       const mainFieldSelect = this.createFieldSelect(mainFieldGroup, `card-type-question-field:${configId}`);
       const clozeMapping = mapping && "mainField" in mapping ? mapping : undefined;
       mainFieldSelect.dataset.cardTypeQuestionField = configId;
+      addClasses(mainFieldSelect, "ahs-settings-cloze-main-field-select");
       this.applyFluidEllipsis(mainFieldSelect);
       this.populateFieldSelect(mainFieldSelect, clozeMapping?.loadedFieldNames ?? [], clozeMapping?.mainField);
       mainFieldSelect.addEventListener("change", () => {
@@ -417,8 +434,8 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     const qaGroupState = this.getQaGroupFieldState(configId);
     const selectedFields = qaGroupState.mapping ? this.getQaGroupSelectedFields(qaGroupState.mapping) : undefined;
 
-    const titleFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.qaGroupTitleField"));
     if (qaGroupState.mapping) {
+      const titleFieldGroup = this.createGridControlSlot(containerEl, t("settings.cards.cardTypes.labels.qaGroupTitleField"));
       const titleFieldSelect = this.createFieldSelect(titleFieldGroup, `card-type-qa-group-title-field:${configId}`);
       titleFieldSelect.dataset.qaGroupTitleField = configId;
       this.applyFluidEllipsis(titleFieldSelect);
@@ -432,6 +449,12 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       firstQuestionFieldSelect.dataset.qaGroupFirstQuestionField = configId;
       this.applyFluidEllipsis(firstQuestionFieldSelect);
       this.populateFieldSelect(firstQuestionFieldSelect, qaGroupState.mapping.loadedFieldNames, selectedFields?.firstQuestionField);
+      const noteTypeSlot = containerEl.querySelector<HTMLSelectElement>(`[data-card-type-note-type="${configId}"]`)
+        ?.parentElement?.parentElement;
+      const firstQuestionSlot = firstQuestionFieldGroup.parentElement;
+      if (noteTypeSlot && firstQuestionSlot) {
+        this.alignGridControlLabelWidths(noteTypeSlot, firstQuestionSlot);
+      }
 
       const firstAnswerFieldGroup = this.createGridControlSlot(qaGroupPairRow, t("settings.cards.cardTypes.labels.qaGroupFirstAnswerField"));
       const firstAnswerFieldSelect = this.createFieldSelect(firstAnswerFieldGroup, `card-type-qa-group-first-answer-field:${configId}`);
@@ -451,39 +474,24 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       firstQuestionFieldSelect.addEventListener("change", saveSelection);
       firstAnswerFieldSelect.addEventListener("change", saveSelection);
 
-      const slotSummaryEl = qaGroupPairRow.createSpan({
+      const firstAnswerSlot = firstAnswerFieldGroup.parentElement;
+      if (firstAnswerSlot) {
+        addClasses(firstAnswerSlot, "ahs-settings-qa-group-answer-slot");
+      }
+
+      const slotSummaryEl = (firstAnswerSlot ?? qaGroupPairRow).createSpan({
         text: t("settings.cards.cardTypes.qaGroup.configuredSlots", {
           count: qaGroupState.mapping.slots.length,
         }),
       });
       slotSummaryEl.dataset.qaGroupSlotSummary = configId;
-      addClasses(slotSummaryEl, "ahs-settings-nowrap-start");
-      this.applyFluidEllipsis(slotSummaryEl);
-    } else {
-      titleFieldGroup.createSpan({
-        text: selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel"),
-      }).dataset.qaGroupTitleField = configId;
-
-      const qaGroupPairRow = containerEl.createDiv();
-      qaGroupPairRow.dataset.qaGroupPairRow = configId;
-      addClasses(qaGroupPairRow, "ahs-settings-qa-group-pair-row");
-
-      const firstQuestionFieldGroup = this.createGridControlSlot(qaGroupPairRow, t("settings.cards.cardTypes.labels.qaGroupFirstQuestionField"));
-      firstQuestionFieldGroup.createSpan({
-        text: selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel"),
-      }).dataset.qaGroupFirstQuestionField = configId;
-
-      const firstAnswerFieldGroup = this.createGridControlSlot(qaGroupPairRow, t("settings.cards.cardTypes.labels.qaGroupFirstAnswerField"));
-      firstAnswerFieldGroup.createSpan({
-        text: selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel"),
-      }).dataset.qaGroupFirstAnswerField = configId;
-
-      const slotSummaryEl = qaGroupPairRow.createSpan({
-        text: selectedModelName.length > 0 ? t("settings.cards.cardTypes.qaGroup.unavailable") : t("settings.cards.cardTypes.qaGroup.noModel"),
+      addClasses(slotSummaryEl, "ahs-settings-qa-group-slot-summary");
+    } else if (selectedModelName.length > 0) {
+      const unavailableEl = containerEl.createDiv({
+        text: t("settings.cards.cardTypes.qaGroup.unavailable"),
       });
-      slotSummaryEl.dataset.qaGroupSlotSummary = configId;
-      addClasses(slotSummaryEl, "ahs-settings-nowrap-start");
-      this.applyFluidEllipsis(slotSummaryEl);
+      unavailableEl.dataset.qaGroupUnavailable = configId;
+      addClasses(unavailableEl, "ahs-settings-grid-full", "ahs-settings-muted-text");
     }
 
     if (qaGroupState.error) {
@@ -528,6 +536,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.cardAnswerCutoffMode.name"))
       .setDesc(t("settings.cardAnswerCutoffMode.desc"))
       .addDropdown((dropdown) => {
+        addClasses(dropdown.selectEl, "ahs-settings-form-select");
         dropdown.addOption("heading-block", t("settings.cardAnswerCutoffMode.options.headingBlock"));
         dropdown.addOption("double-blank-lines", t("settings.cardAnswerCutoffMode.options.doubleBlankLines"));
         dropdown.setValue(this.plugin.settings.cardAnswerCutoffMode).onChange((value) => {
@@ -567,6 +576,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.syncOptions.obsidianBacklinkPlacement.name"))
       .setDesc(t("settings.syncOptions.obsidianBacklinkPlacement.desc"))
       .addDropdown((dropdown) => {
+        addClasses(dropdown.selectEl, "ahs-settings-form-select");
         dropdown.addOption("question-last-line", t("settings.syncOptions.obsidianBacklinkPlacement.options.questionLastLine"));
         dropdown.addOption("answer-first-line", t("settings.syncOptions.obsidianBacklinkPlacement.options.answerFirstLine"));
         dropdown.addOption("answer-last-line", t("settings.syncOptions.obsidianBacklinkPlacement.options.answerLastLine"));
@@ -619,6 +629,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.scope.name"))
       .setDesc(getScopeModeSummary(this.plugin.settings.scopeMode))
       .addDropdown((dropdown) => {
+        addClasses(dropdown.selectEl, "ahs-settings-form-select");
         dropdown
           .addOption("all", t("settings.scope.option.all"))
           .addOption("include", t("settings.scope.option.include"))
@@ -656,22 +667,15 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     this.ensureFolderTreeLoaded();
     containerEl.createEl("p", { text: getScopeModeTreeDescription(this.plugin.settings.scopeMode) });
 
-    if (this.folderTreeLoadPromise || this.folderTree.length === 0) {
-      containerEl.createEl("p", { text: renderUserFacingMessage(this.folderTreeStatus) });
-      return;
-    }
+    const statusText = renderUserFacingMessage(this.folderTreeStatus);
+    const statusEl = containerEl.createEl("p", { text: statusText });
+    statusEl.dataset.scopeFolderStatus = "true";
+    setClassEnabled(statusEl, "ahs-is-hidden", statusText.length === 0);
 
-    this.expandSelectedFolderAncestorsIfNeeded(this.plugin.settings.scopeMode);
-
-    const selectedFolders = this.getSelectedFoldersForScopeMode(this.plugin.settings.scopeMode);
-    const selectionTree = buildFolderTreeSelection(this.folderTree, selectedFolders);
     const treeContainer = containerEl.createDiv();
     treeContainer.dataset.scopeTree = "true";
     addClasses(treeContainer, "ahs-settings-folder-tree");
-
-    for (const node of selectionTree) {
-      this.renderFolderNode(treeContainer, node, this.plugin.settings.scopeMode, 0);
-    }
+    this.renderScopeFolderTree(treeContainer);
   }
 
   private renderDeckCard(containerEl: HTMLElement): void {
@@ -680,6 +684,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .setName(t("settings.deck.folderDeckMode.name"))
       .setDesc(t("settings.deck.folderDeckMode.desc"))
       .addDropdown((dropdown) => {
+        addClasses(dropdown.selectEl, "ahs-settings-form-select");
         this.populateFolderDeckModeDropdown(dropdown, this.plugin.settings.folderDeckMode);
         dropdown.onChange((value) => {
           if (value !== "off" && value !== "folder" && value !== "folder-and-file") {
@@ -746,6 +751,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
         .setName(t("settings.deck.insertLocation.name"))
         .setDesc(t("settings.deck.insertLocation.desc"))
         .addDropdown((dropdown) => {
+          addClasses(dropdown.selectEl, "ahs-settings-form-select");
           this.populateFileDeckInsertLocationDropdown(dropdown, this.plugin.settings.fileDeckInsertLocation);
           dropdown.onChange((value) => {
             if (value !== "yaml" && value !== "body") {
@@ -1582,7 +1588,6 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private ensureFolderTreeLoaded(forceReload = false): void {
     if (forceReload) {
       this.hasLoadedFolderTree = false;
-      this.folderTree = [];
     }
 
     if (this.hasLoadedFolderTree || this.folderTreeLoadPromise) {
@@ -1595,23 +1600,79 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
       .then((folderTree) => {
         this.folderTree = folderTree;
         this.folderTreeStatus = folderTree.length > 0 ? { rawMessage: "" } : { key: "settings.scope.empty" };
-        this.requestSelectedFolderAncestorExpansion();
+        if (!forceReload) {
+          this.requestSelectedFolderAncestorExpansion();
+        }
       })
       .catch((error) => {
-        this.folderTree = [];
+        if (!forceReload) {
+          this.folderTree = [];
+        }
         this.folderTreeStatus = toUserFacingMessage(error, "settings.scope.failedLoad");
       })
       .finally(() => {
         this.hasLoadedFolderTree = true;
         this.folderTreeLoadPromise = null;
+        if (forceReload) {
+          this.updateScopeFolderTreeInPlace();
+          return;
+        }
+
         this.renderCard("scope");
       });
   }
 
   private refreshFolderTree(): void {
-    this.expandedFolderPaths.clear();
+    const refreshButton = this.cardShells.get("scope")?.bodyEl.querySelector<HTMLButtonElement>("[data-scope-refresh-folders]");
+    if (refreshButton) {
+      refreshButton.disabled = true;
+    }
+
     this.ensureFolderTreeLoaded(true);
-    this.renderCard("scope");
+  }
+
+  private renderScopeFolderTree(containerEl: HTMLElement): void {
+    containerEl.empty();
+    if (this.folderTree.length === 0 || this.plugin.settings.scopeMode === "all") {
+      return;
+    }
+
+    this.expandSelectedFolderAncestorsIfNeeded(this.plugin.settings.scopeMode);
+    const selectionTree = buildFolderTreeSelection(
+      this.folderTree,
+      this.getSelectedFoldersForScopeMode(this.plugin.settings.scopeMode),
+    );
+    for (const node of selectionTree) {
+      this.renderFolderNode(containerEl, node, this.plugin.settings.scopeMode, 0);
+    }
+  }
+
+  private updateScopeFolderTreeInPlace(): void {
+    if (!this.expandedCardIds.has("scope")) {
+      return;
+    }
+
+    const scopeBodyEl = this.cardShells.get("scope")?.bodyEl;
+    if (!scopeBodyEl) {
+      return;
+    }
+
+    const refreshButton = scopeBodyEl.querySelector<HTMLButtonElement>("[data-scope-refresh-folders]");
+    if (refreshButton) {
+      refreshButton.disabled = false;
+    }
+
+    const statusEl = scopeBodyEl.querySelector<HTMLElement>("[data-scope-folder-status]");
+    if (statusEl) {
+      const statusText = renderUserFacingMessage(this.folderTreeStatus);
+      statusEl.textContent = statusText;
+      setClassEnabled(statusEl, "ahs-is-hidden", statusText.length === 0);
+    }
+
+    const treeContainer = scopeBodyEl.querySelector<HTMLElement>("[data-scope-tree]");
+    if (treeContainer) {
+      this.renderScopeFolderTree(treeContainer);
+    }
   }
 
   private async updateScopeMode(scopeMode: ScopeMode): Promise<void> {
@@ -1647,7 +1708,13 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     this.renderCard("scope");
   }
 
-  private async updateAlternateFolderDeckModeFolder(folderPath: string, checked: boolean): Promise<void> {
+  private async updateAlternateFolderDeckModeFolder(
+    folderPath: string,
+    checked: boolean,
+    checkbox: HTMLInputElement,
+    inlineLabelEl: HTMLElement,
+    standaloneParentDeckCheckbox?: HTMLElement,
+  ): Promise<void> {
     const nextAlternateFolderDeckModeFolders = checked
       ? (this.plugin.settings.alternateFolderDeckModeFolders.includes(folderPath)
           ? [...this.plugin.settings.alternateFolderDeckModeFolders]
@@ -1657,10 +1724,24 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     await this.plugin.updateSettings({
       alternateFolderDeckModeFolders: nextAlternateFolderDeckModeFolders,
     });
-    this.renderCard("scope");
+    const savedChecked = this.plugin.settings.alternateFolderDeckModeFolders.includes(folderPath);
+    checkbox.checked = savedChecked;
+    this.updateFolderHint(
+      inlineLabelEl,
+      "folderDeckModeOverrideHint",
+      folderPath,
+      savedChecked,
+      this.getFolderDeckModeOverrideHint(),
+      standaloneParentDeckCheckbox,
+    );
   }
 
-  private async updateStandaloneParentDeckFolder(folderPath: string, checked: boolean): Promise<void> {
+  private async updateStandaloneParentDeckFolder(
+    folderPath: string,
+    checked: boolean,
+    checkbox: HTMLInputElement,
+    inlineLabelEl: HTMLElement,
+  ): Promise<void> {
     const nextStandaloneParentDeckFolders = checked
       ? (this.plugin.settings.standaloneParentDeckFolders.includes(folderPath)
           ? [...this.plugin.settings.standaloneParentDeckFolders]
@@ -1670,7 +1751,53 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     await this.plugin.updateSettings({
       standaloneParentDeckFolders: nextStandaloneParentDeckFolders,
     });
-    this.renderCard("scope");
+    const savedChecked = this.plugin.settings.standaloneParentDeckFolders.includes(folderPath);
+    checkbox.checked = savedChecked;
+    this.updateFolderHint(
+      inlineLabelEl,
+      "folderStandaloneParentDeckHint",
+      folderPath,
+      savedChecked,
+      this.getStandaloneParentDeckHint(),
+    );
+  }
+
+  private updateFolderHint(
+    inlineLabelEl: HTMLElement,
+    datasetKey: "folderDeckModeOverrideHint" | "folderStandaloneParentDeckHint",
+    folderPath: string,
+    checked: boolean,
+    hintText: string,
+    beforeEl?: HTMLElement,
+  ): void {
+    const anchorDatasetKey = `${datasetKey}Anchor`;
+    let hintEl = Array.from(inlineLabelEl.children).find(
+      (child) => (child as HTMLElement).dataset[anchorDatasetKey] === folderPath,
+    ) as HTMLSpanElement | undefined;
+
+    if (!hintEl) {
+      if (!checked) {
+        return;
+      }
+
+      hintEl = inlineLabelEl.createSpan();
+      hintEl.dataset[anchorDatasetKey] = folderPath;
+      addClasses(hintEl, "ahs-settings-folder-override-hint");
+      if (beforeEl) {
+        inlineLabelEl.insertBefore(hintEl, beforeEl);
+      }
+    }
+
+    if (checked) {
+      hintEl.dataset[datasetKey] = folderPath;
+      hintEl.textContent = hintText;
+      setClassEnabled(hintEl, "ahs-is-hidden", false);
+      return;
+    }
+
+    delete hintEl.dataset[datasetKey];
+    hintEl.textContent = "";
+    setClassEnabled(hintEl, "ahs-is-hidden", true);
   }
 
   private renderFolderNode(containerEl: HTMLElement, node: FolderTreeSelectionNode, scopeMode: ScopeMode, depth: number): void {
@@ -1688,7 +1815,6 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     if (hasChildren) {
       addClasses(toggleControl, "ahs-settings-folder-toggle-button");
       toggleControl.setAttr("aria-label", expanded ? t("settings.scope.collapseFolder", { name: node.name }) : t("settings.scope.expandFolder", { name: node.name }));
-      toggleControl.setAttr("title", expanded ? t("settings.scope.collapseFolder", { name: node.name }) : t("settings.scope.expandFolder", { name: node.name }));
       toggleControl.addEventListener("click", () => {
         if (this.expandedFolderPaths.has(node.path)) {
           this.expandedFolderPaths.delete(node.path);
@@ -1723,53 +1849,69 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     addClasses(labelEl, "ahs-settings-folder-label");
     this.applyFluidEllipsis(labelEl);
 
+    let standaloneParentDeckCheckbox: HTMLInputElement | undefined;
+
     if (scopeMode === "include" && node.checked && this.plugin.settings.folderDeckMode !== "off") {
       const overrideCheckbox = inlineLabelEl.createEl("input");
       const overrideLabel = t("settings.scope.folderDeckModeOverride.ariaLabel", { name: node.name });
-      const overrideTitle = this.getFolderDeckModeOverrideTitle();
+      const overrideDescription = this.getFolderDeckModeOverrideDescription();
       const overrideChecked = this.plugin.settings.alternateFolderDeckModeFolders.includes(node.path);
 
       overrideCheckbox.type = "checkbox";
       overrideCheckbox.checked = overrideChecked;
       overrideCheckbox.dataset.folderDeckModeOverride = node.path;
       overrideCheckbox.setAttr("aria-label", overrideLabel);
-      overrideCheckbox.setAttr("title", overrideTitle);
+      overrideCheckbox.setAttr("aria-description", overrideDescription);
       addClasses(overrideCheckbox, "ahs-settings-folder-override-checkbox");
       overrideCheckbox.addEventListener("click", (event?: Event) => {
         event?.stopPropagation();
       });
       overrideCheckbox.addEventListener("change", () => {
-        void this.updateAlternateFolderDeckModeFolder(node.path, overrideCheckbox.checked);
+        void this.updateAlternateFolderDeckModeFolder(
+          node.path,
+          overrideCheckbox.checked,
+          overrideCheckbox,
+          inlineLabelEl,
+          standaloneParentDeckCheckbox,
+        );
       });
 
       if (overrideChecked) {
         const hintEl = inlineLabelEl.createSpan({ text: this.getFolderDeckModeOverrideHint() });
         hintEl.dataset.folderDeckModeOverrideHint = node.path;
+        hintEl.dataset.folderDeckModeOverrideHintAnchor = node.path;
         addClasses(hintEl, "ahs-settings-folder-override-hint");
       }
 
       if (depth > 0) {
-        const standaloneParentDeckCheckbox = inlineLabelEl.createEl("input");
+        const currentStandaloneParentDeckCheckbox = inlineLabelEl.createEl("input");
+        standaloneParentDeckCheckbox = currentStandaloneParentDeckCheckbox;
         const standaloneParentDeckLabel = t("settings.scope.standaloneParentDeck.ariaLabel", { name: node.name });
-        const standaloneParentDeckTitle = this.getStandaloneParentDeckTitle();
+        const standaloneParentDeckDescription = this.getStandaloneParentDeckDescription();
         const standaloneParentDeckChecked = this.plugin.settings.standaloneParentDeckFolders.includes(node.path);
 
-        standaloneParentDeckCheckbox.type = "checkbox";
-        standaloneParentDeckCheckbox.checked = standaloneParentDeckChecked;
-        standaloneParentDeckCheckbox.dataset.folderStandaloneParentDeck = node.path;
-        standaloneParentDeckCheckbox.setAttr("aria-label", standaloneParentDeckLabel);
-        standaloneParentDeckCheckbox.setAttr("title", standaloneParentDeckTitle);
-        addClasses(standaloneParentDeckCheckbox, "ahs-settings-folder-override-checkbox");
-        standaloneParentDeckCheckbox.addEventListener("click", (event?: Event) => {
+        currentStandaloneParentDeckCheckbox.type = "checkbox";
+        currentStandaloneParentDeckCheckbox.checked = standaloneParentDeckChecked;
+        currentStandaloneParentDeckCheckbox.dataset.folderStandaloneParentDeck = node.path;
+        currentStandaloneParentDeckCheckbox.setAttr("aria-label", standaloneParentDeckLabel);
+        currentStandaloneParentDeckCheckbox.setAttr("aria-description", standaloneParentDeckDescription);
+        addClasses(currentStandaloneParentDeckCheckbox, "ahs-settings-folder-override-checkbox");
+        currentStandaloneParentDeckCheckbox.addEventListener("click", (event?: Event) => {
           event?.stopPropagation();
         });
-        standaloneParentDeckCheckbox.addEventListener("change", () => {
-          void this.updateStandaloneParentDeckFolder(node.path, standaloneParentDeckCheckbox.checked);
+        currentStandaloneParentDeckCheckbox.addEventListener("change", () => {
+          void this.updateStandaloneParentDeckFolder(
+            node.path,
+            currentStandaloneParentDeckCheckbox.checked,
+            currentStandaloneParentDeckCheckbox,
+            inlineLabelEl,
+          );
         });
 
         if (standaloneParentDeckChecked) {
           const hintEl = inlineLabelEl.createSpan({ text: this.getStandaloneParentDeckHint() });
           hintEl.dataset.folderStandaloneParentDeckHint = node.path;
+          hintEl.dataset.folderStandaloneParentDeckHintAnchor = node.path;
           addClasses(hintEl, "ahs-settings-folder-override-hint");
         }
       }
@@ -1828,20 +1970,20 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     return t("settings.scope.folderDeckModeOverride.hint.folder");
   }
 
-  private getFolderDeckModeOverrideTitle(): string {
+  private getFolderDeckModeOverrideDescription(): string {
     if (this.plugin.settings.folderDeckMode === "folder") {
-      return t("settings.scope.folderDeckModeOverride.title.folderAndFile");
+      return t("settings.scope.folderDeckModeOverride.description.folderAndFile");
     }
 
-    return t("settings.scope.folderDeckModeOverride.title.folder");
+    return t("settings.scope.folderDeckModeOverride.description.folder");
   }
 
   private getStandaloneParentDeckHint(): string {
     return t("settings.scope.standaloneParentDeck.hint");
   }
 
-  private getStandaloneParentDeckTitle(): string {
-    return t("settings.scope.standaloneParentDeck.title");
+  private getStandaloneParentDeckDescription(): string {
+    return t("settings.scope.standaloneParentDeck.description");
   }
 
   private createInlineControlGroup(containerEl: HTMLElement, label: string): HTMLElement {
@@ -1865,6 +2007,43 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
     addClasses(slotEl, "ahs-settings-grid-control-content");
 
     return slotEl;
+  }
+
+  private alignGridControlLabelWidths(...slotElements: HTMLElement[]): void {
+    const labels = slotElements
+      .map((slotEl) => slotEl.querySelector<HTMLElement>(".ahs-settings-grid-control-label"))
+      .filter((labelEl): labelEl is HTMLElement => labelEl !== null);
+
+    if (labels.length < 2) {
+      return;
+    }
+
+    const sharedWidth = Math.ceil(Math.max(...labels.map((labelEl) => labelEl.getBoundingClientRect().width)));
+    if (sharedWidth <= 0) {
+      return;
+    }
+
+    for (const labelEl of labels) {
+      this.setGridControlLabelWidth(labelEl, sharedWidth);
+    }
+  }
+
+  private alignGridControlLabelToInlineControl(gridSlotEl: HTMLElement, inlineControlEl: HTMLElement): void {
+    const gridLabelEl = gridSlotEl.querySelector<HTMLElement>(".ahs-settings-grid-control-label");
+    const inlineLabelEl = inlineControlEl.parentElement?.querySelector<HTMLElement>(".ahs-settings-inline-control-label");
+    if (!gridLabelEl || !inlineLabelEl) {
+      return;
+    }
+
+    const labelWidth = Math.ceil(inlineLabelEl.getBoundingClientRect().width);
+    if (labelWidth > 0) {
+      this.setGridControlLabelWidth(gridLabelEl, labelWidth);
+    }
+  }
+
+  private setGridControlLabelWidth(labelEl: HTMLElement, width: number): void {
+    labelEl.style.flex = `0 0 ${width}px`;
+    labelEl.style.width = `${width}px`;
   }
 
   private applyFluidEllipsis(element: HTMLElement): void {
@@ -1922,6 +2101,7 @@ export class AnkiHeadingSyncSettingTab extends PluginSettingTab {
   private createSelect(containerEl: HTMLElement, datasetKey: string): HTMLSelectElement {
     const selectEl = containerEl.createEl("select");
     selectEl.dataset.selectKey = datasetKey;
+    addClasses(selectEl, "ahs-settings-form-select");
     return selectEl;
   }
 

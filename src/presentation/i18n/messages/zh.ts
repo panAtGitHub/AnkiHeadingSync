@@ -24,10 +24,10 @@ export const zh = {
     },
     cardAnswerCutoffMode: {
       name: "卡片正文截止模式",
-      desc: "有效同步标记始终优先。没有有效标记时，选择继续到整个标题块末尾，或在首个 2+ 连续空行前截止。",
+      desc: "有效同步标记始终优先。没有有效标记时，可以同步整个标题块，或在首组连续空行前截止（至少两行）。",
       options: {
-        headingBlock: "heading-block：整个标题块",
-        doubleBlankLines: "double-blank-lines：在首个 2+ 连续空行前截止",
+        headingBlock: "整个标题块",
+        doubleBlankLines: "首组连续空行前截止（至少两行）",
       },
     },
     qaGroup: {
@@ -200,7 +200,7 @@ export const zh = {
           folder: "本文件夹单独采用「文件夹」作为牌组名",
           folderAndFile: "本文件夹单独采用「文件夹及文件名」作为牌组名",
         },
-        title: {
+        description: {
           folder: "当前全局为「文件夹及文件名」，勾选后此文件夹改用「文件夹」作为牌组名",
           folderAndFile: "当前全局为「文件夹」，勾选后此文件夹改用「文件夹及文件名」作为牌组名",
         },
@@ -208,7 +208,7 @@ export const zh = {
       standaloneParentDeck: {
         ariaLabel: "将 {{name}} 指定为单独的父牌组",
         hint: "本文件夹指定为「单独的父牌组」",
-        title: "勾选后，此文件夹在 Anki 中会作为单独的父牌组起点",
+        description: "勾选后，此文件夹在 Anki 中会作为单独的父牌组起点",
       },
     },
     cards: {
@@ -230,6 +230,7 @@ export const zh = {
         loadedFieldsStatus: "已刷新 {{count}} 个当前所选模板的字段。",
         failedLoad: "从 Anki 读取模板或字段失败。",
         failedSave: "保存卡片类型设置失败。",
+        noteTypePlaceholder: "请选择 Anki 笔记模板",
         loadAnki: {
           button: "手动读取 Anki 里的模板配置",
           loading: "正在读取 Anki 模板和字段...",
@@ -259,7 +260,6 @@ export const zh = {
           qaGroupWarnings: "警告：",
         },
         qaGroup: {
-          noModel: "请先选择 Anki 笔记模板",
           unavailable: "请先手动读取字段",
           detectedSlots: "已配置{{count}}组",
           configuredSlots: "已配置{{count}}组",
@@ -372,7 +372,7 @@ export const zh = {
       cardTypeEnabledBoolean: "每种卡片类型的启用状态必须是布尔值。",
       cardTypeExtraMarkerString: "每种卡片类型的额外标记必须是字符串。",
       cardTypeDefaultConflict: "同一个 H{{headingLevel}} 只能有一个启用的默认卡片类型。",
-      cardAnswerCutoffModeInvalid: "卡片正文截止模式只能是 heading-block 或 double-blank-lines。",
+      cardAnswerCutoffModeInvalid: "卡片正文截止模式无效，请选择“整个标题块”或“首组连续空行前截止（至少两行）”。",
       qaNoteTypeRequired: "QA 笔记类型不能为空。",
       qaGroupMarkerRequired: "QA Group 标记不能为空。",
       qaGroupMarkerInvalid: "QA Group 标记必须是类似 #anki-list 的 hashtag 样式 token。",

@@ -26,10 +26,10 @@ export const en = {
     },
     cardAnswerCutoffMode: {
       name: "Card answer cutoff mode",
-      desc: "A valid sync marker always wins. Without a valid marker, either keep the whole heading block or stop before the first 2+ consecutive blank lines.",
+      desc: "A valid sync marker always wins. Without a valid marker, either keep the whole heading block or stop before the first run of two or more blank lines.",
       options: {
-        headingBlock: "Heading-block: whole heading block",
-        doubleBlankLines: "Double-blank-lines: stop before the first 2+ blank lines",
+        headingBlock: "Entire heading block",
+        doubleBlankLines: "Stop before consecutive blank lines (two or more)",
       },
     },
     qaGroup: {
@@ -202,7 +202,7 @@ export const en = {
           folder: "This folder uses the folder-only deck name by itself",
           folderAndFile: "This folder uses the folder-and-file deck name by itself",
         },
-        title: {
+        description: {
           folder: "Global mode is folder-and-file; enable this to use folder-only deck names for this folder",
           folderAndFile: "Global mode is folder-only; enable this to use folder-and-file deck names for this folder",
         },
@@ -210,7 +210,7 @@ export const en = {
       standaloneParentDeck: {
         ariaLabel: "Use {{name}} as a standalone parent deck root",
         hint: "This folder is used as a standalone parent deck",
-        title: "Enable this to treat this folder as a standalone parent deck root in Anki",
+        description: "Enable this to treat this folder as a standalone parent deck root in Anki",
       },
     },
     cards: {
@@ -232,6 +232,7 @@ export const en = {
         loadedFieldsStatus: "Refreshed fields for {{count}} selected note types.",
         failedLoad: "Failed to load note types or fields from Anki.",
         failedSave: "Failed to save card type settings.",
+        noteTypePlaceholder: "Select an Anki note type",
         loadAnki: {
           button: "Read Anki note types and fields manually",
           loading: "Loading Anki note types and fields...",
@@ -261,7 +262,6 @@ export const en = {
           qaGroupWarnings: "Warnings:",
         },
         qaGroup: {
-          noModel: "Select an Anki note type first",
           unavailable: "Read fields from Anki first",
           detectedSlots: "Configured {{count}} pair(s)",
           configuredSlots: "Configured {{count}} pair(s)",
@@ -374,7 +374,7 @@ export const en = {
       cardTypeEnabledBoolean: "Each card type enabled flag must be a boolean.",
       cardTypeExtraMarkerString: "Each card type extra marker must be a string.",
       cardTypeDefaultConflict: "Only one enabled default card type is allowed at heading H{{headingLevel}}.",
-      cardAnswerCutoffModeInvalid: "Card answer cutoff mode must be heading-block or double-blank-lines.",
+      cardAnswerCutoffModeInvalid: "Choose either the entire heading block or the first run of two or more blank lines.",
       qaNoteTypeRequired: "A question-and-answer note type is required.",
       qaGroupMarkerRequired: "A question-and-answer group marker is required.",
       qaGroupMarkerInvalid: "The question-and-answer group marker must be a hashtag-style token.",

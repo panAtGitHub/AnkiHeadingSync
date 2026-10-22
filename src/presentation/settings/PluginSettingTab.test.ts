@@ -110,6 +110,22 @@ const {
       return this.createChild("span", options);
     }
 
+    insertBefore<T extends HoistedFakeElement>(newChild: T, referenceChild: HoistedFakeElement | null): T {
+      const childIndex = this.children.indexOf(newChild);
+      if (childIndex !== -1) {
+        this.children.splice(childIndex, 1);
+      }
+
+      const referenceIndex = referenceChild ? this.children.indexOf(referenceChild) : -1;
+      if (referenceIndex === -1) {
+        this.children.push(newChild);
+      } else {
+        this.children.splice(referenceIndex, 0, newChild);
+      }
+
+      return newChild;
+    }
+
     addEventListener(eventName: string, callback: () => void | Promise<void>): void {
       const callbacks = this.listeners.get(eventName) ?? [];
       callbacks.push(callback);
@@ -1736,15 +1752,15 @@ describe("PluginSettingTab", () => {
     const overrideCheckbox = queryByDataset(tab.containerEl, "folderDeckModeOverride", "notes/sub");
     const standaloneParentDeckCheckbox = queryByDataset(tab.containerEl, "folderStandaloneParentDeck", "notes/sub");
     const childLabel = queryByDataset(tab.containerEl, "folderPathLabel", "notes/sub");
-    const overrideAttributes = overrideCheckbox as unknown as { title?: string; "aria-label"?: string };
-    const standaloneParentDeckAttributes = standaloneParentDeckCheckbox as unknown as { title?: string; "aria-label"?: string };
+    const overrideAttributes = overrideCheckbox as unknown as { "aria-description"?: string; "aria-label"?: string };
+    const standaloneParentDeckAttributes = standaloneParentDeckCheckbox as unknown as { "aria-description"?: string; "aria-label"?: string };
     const labelParent = (childLabel as unknown as { parent?: { children?: unknown[] } }).parent;
     const overrideParent = (overrideCheckbox as unknown as { parent?: { children?: unknown[] } }).parent;
     expect(overrideCheckbox.classList.contains("ahs-settings-folder-override-checkbox")).toBe(true);
     expect(standaloneParentDeckCheckbox.classList.contains("ahs-settings-folder-override-checkbox")).toBe(true);
-    expect(overrideAttributes.title).toBe("当前全局为「文件夹」，勾选后此文件夹改用「文件夹及文件名」作为牌组名");
+    expect(overrideAttributes["aria-description"]).toBe("当前全局为「文件夹」，勾选后此文件夹改用「文件夹及文件名」作为牌组名");
     expect(overrideAttributes["aria-label"]).toBe("切换 sub 的文件夹牌组映射模式");
-    expect(standaloneParentDeckAttributes.title).toBe("勾选后，此文件夹在 Anki 中会作为单独的父牌组起点");
+    expect(standaloneParentDeckAttributes["aria-description"]).toBe("勾选后，此文件夹在 Anki 中会作为单独的父牌组起点");
     expect(standaloneParentDeckAttributes["aria-label"]).toBe("将 sub 指定为单独的父牌组");
     expect(overrideParent).toBe(labelParent);
     expect(labelParent?.children?.[0]).toBe(childLabel);
