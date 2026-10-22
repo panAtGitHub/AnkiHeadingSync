@@ -87,6 +87,10 @@ const {
       public readonly parent: HoistedFakeElement | null = null,
     ) {}
 
+    get parentElement(): HoistedFakeElement | null {
+      return this.parent;
+    }
+
     private createChild(tag: string, options?: { text?: string }): HoistedFakeElement {
       const child = new HoistedFakeElement(this.root, tag, this);
       if (options?.text) {
@@ -124,6 +128,37 @@ const {
       }
 
       return newChild;
+    }
+
+    querySelector<T extends HoistedFakeElement = HoistedFakeElement>(selector: string): T | null {
+      const className = selector.startsWith(".") ? selector.slice(1) : undefined;
+      const attributeMatch = selector.match(/^\[data-([a-z-]+)(?:="([^"]*)")?\]$/);
+      const datasetKey = attributeMatch?.[1].replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+
+      const matches = (element: HoistedFakeElement): boolean => {
+        if (className) {
+          return element.classList.contains(className);
+        }
+        if (!datasetKey) {
+          return false;
+        }
+
+        const value = element.dataset[datasetKey];
+        return attributeMatch?.[2] === undefined ? value !== undefined : value === attributeMatch[2];
+      };
+
+      for (const child of this.children) {
+        if (matches(child)) {
+          return child as T;
+        }
+
+        const descendant = child.querySelector<T>(selector);
+        if (descendant) {
+          return descendant;
+        }
+      }
+
+      return null;
     }
 
     addEventListener(eventName: string, callback: () => void | Promise<void>): void {
@@ -240,6 +275,8 @@ const {
     public value = "";
     private onChangeHandler?: (value: string) => void | Promise<void>;
 
+    constructor(public readonly selectEl: HoistedFakeElement) {}
+
     addOption(value: string, label: string): this {
       this.options.push({ value, label });
       return this;
@@ -247,6 +284,7 @@ const {
 
     setValue(value: string): this {
       this.value = value;
+      this.selectEl.value = value;
       return this;
     }
 
@@ -367,7 +405,7 @@ const {
     }
 
     addDropdown(callback: (dropdown: HoistedFakeDropdownComponent) => void): this {
-      const dropdown = new HoistedFakeDropdownComponent();
+      const dropdown = new HoistedFakeDropdownComponent(this.controlEl.createEl("select"));
       this.controls.push(dropdown);
       callback(dropdown);
       return this;
@@ -1284,7 +1322,7 @@ describe("PluginSettingTab", () => {
     await flushPromises();
 
     const basicNoteTypeSelect = queryByDataset(cachedTab.containerEl, "cardTypeNoteType", "basic");
-    expect(collectOptionValues(basicNoteTypeSelect)).toEqual(["Basic", "Cached Basic", "Cached Cloze"]);
+    expect(collectOptionValues(basicNoteTypeSelect)).toEqual(["", "Basic", "Cached Basic", "Cached Cloze"]);
     const basicQuestionFieldSelect = queryByDataset(cachedTab.containerEl, "cardTypeQuestionField", "basic");
     const basicAnswerFieldSelect = queryByDataset(cachedTab.containerEl, "cardTypeAnswerField", "basic");
     expect(collectOptionValues(basicQuestionFieldSelect)).toEqual(["", "Front", "Back", "Hint"]);
@@ -1368,7 +1406,7 @@ describe("PluginSettingTab", () => {
     expect(plugin.listNoteModelsCalls).toBe(1);
     expect(plugin.getModelFieldNamesByModelNamesCalls).toBe(0);
     expect(collectTexts(tab.containerEl).some((text) => text.includes("后台检查最新模板列表失败"))).toBe(true);
-    expect(collectOptionValues(queryByDataset(tab.containerEl, "cardTypeNoteType", "basic"))).toEqual(["Basic", "Cached Basic"]);
+    expect(collectOptionValues(queryByDataset(tab.containerEl, "cardTypeNoteType", "basic"))).toEqual(["", "Basic", "Cached Basic"]);
   });
 
   it("manual refresh overrides the stale-cache warning with the latest loaded summary", async () => {
